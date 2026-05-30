@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { Bell, LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
+import { signOut, useSession } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -17,6 +18,10 @@ import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { currentUser } from "@/lib/mock-data"
 
 export function Navbar() {
+  const { data: session } = useSession()
+  const displayName = session?.user?.name ?? currentUser.name
+  const username = (session?.user as any)?.username ?? currentUser.username
+
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
       <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
@@ -53,21 +58,22 @@ export function Navbar() {
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuLabel>
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">{currentUser.name}</span>
-                <span className="text-xs text-muted-foreground">@{currentUser.username}</span>
+                <span className="text-sm font-medium text-foreground">{displayName}</span>
+                <span className="text-xs text-muted-foreground">@{username}</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              render={<Link href={`/profile/${currentUser.username}`} />}
-            >
+            <DropdownMenuItem render={<Link href={`/profile/${username}`} />}>
               <UserIcon className="size-4" /> Profile
             </DropdownMenuItem>
             <DropdownMenuItem render={<Link href="/settings" />}>
               <Settings className="size-4" /> Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" render={<Link href="/login" />}>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => signOut({ callbackUrl: "/login" })}
+            >
               <LogOut className="size-4" /> Log out
             </DropdownMenuItem>
           </DropdownMenuContent>
