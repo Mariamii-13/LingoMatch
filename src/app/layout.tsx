@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 
 import { ThemeProvider } from "@/components/shared/theme-provider"
+import NextAuthSessionProvider from "@/components/shared/session-provider"
 import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({
@@ -24,10 +25,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full font-sans">
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          {children}
-          <Toaster />
-        </ThemeProvider>
+        <NextAuthSessionProvider>
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+            {children}
+            <Toaster />
+          </ThemeProvider>
+        </NextAuthSessionProvider>
       </body>
     </html>
   )

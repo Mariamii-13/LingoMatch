@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
+import { connectDB } from '@/lib/db'
+import User from '@/lib/models/User'
+import { RegisterSchema } from '@/lib/validations/auth'
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const parsed = RegisterSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message ?? 'Invalid input' },
+        { status: 400 }
+      )
+    }
+    const { displayName, email, username, password } = parsed.data
+
+    await connectDB()
+
+    const existingEmail = await User.findOne({ email: email.toLowerCase() })
+    if (existingEmail) {
+      return NextResponse.json({ error: 'Email already in use' }, { status: 409 })
+    }
+
+    const existingUsername = await User.findOne({ username: username.toLowerCase() })
+    if (existingUsername) {
+      return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12)
+
+    const user = await User.create({
+      displayName,
+      email: email.toLowerCase(),
+      username: username.toLowerCase(),
+      passwordHash,
+    })
+
+    return NextResponse.json(
+      { message: 'Account created successfully', userId: user._id.toString() },
+      { status: 201 }
+    )
+  } catch (error) {
+    console.error('Register error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
