@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { signIn } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -63,7 +64,13 @@ export default function RegisterPage() {
         </p>
       </div>
 
-      <Button variant="outline" className="w-full" type="button" disabled={loading}>
+      <Button
+        variant="outline"
+        className="w-full"
+        type="button"
+        disabled={loading}
+        onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+      >
         <GoogleIcon /> Sign up with Google
       </Button>
 

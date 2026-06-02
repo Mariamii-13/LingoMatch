@@ -58,7 +58,13 @@ function LoginForm() {
         </div>
       )}
 
-      <Button variant="outline" className="w-full" type="button" disabled={loading}>
+      <Button
+        variant="outline"
+        className="w-full"
+        type="button"
+        disabled={loading}
+        onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+      >
         <GoogleIcon /> Sign in with Google
       </Button>
 
