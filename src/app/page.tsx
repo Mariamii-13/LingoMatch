@@ -46,7 +46,7 @@ export default function LandingPage() {
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Mic className="size-4" />
             </span>
-            <span className="text-lg font-semibold">SpeakFirst</span>
+            <span className="text-lg font-semibold">LingoMatch</span>
           </Link>
           <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground md:flex">
             <a href="#features" className="hover:text-foreground">Features</a>
@@ -335,7 +335,7 @@ export default function LandingPage() {
                 <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Mic className="size-4" />
                 </span>
-                <span className="text-lg font-semibold">SpeakFirst</span>
+                <span className="text-lg font-semibold">LingoMatch</span>
               </Link>
               <p className="mt-4 max-w-xs text-sm text-muted-foreground">
                 Speak any language. Connect anywhere. Voice-first language learning.
@@ -362,7 +362,7 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="mt-10 border-t pt-6 text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} SpeakFirst. All rights reserved.
+            © {new Date().getFullYear()} LingoMatch. All rights reserved.
           </div>
         </div>
       </footer>

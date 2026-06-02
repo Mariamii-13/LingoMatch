@@ -12,7 +12,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "SpeakFirst — Speak Any Language. Connect Anywhere.",
+  title: "LingoMatch — Speak Any Language. Connect Anywhere.",
   description:
     "Practice languages through real voice conversations. AI matches you with your perfect partner.",
 }

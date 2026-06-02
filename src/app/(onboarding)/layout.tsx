@@ -31,7 +31,7 @@ export default function OnboardingLayout({
             <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
               <Mic className="size-4" />
             </span>
-            <span className="font-semibold">SpeakFirst</span>
+            <span className="font-semibold">LingoMatch</span>
           </Link>
           <span className="text-sm text-muted-foreground">
             Step {activeIndex + 1} of {steps.length}

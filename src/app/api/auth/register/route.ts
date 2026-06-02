@@ -9,8 +9,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const parsed = RegisterSchema.safeParse(body)
     if (!parsed.success) {
+      const issue = parsed.error.issues[0]
       return NextResponse.json(
-        { error: parsed.error.issues[0]?.message ?? 'Invalid input' },
+        { error: issue?.message ?? 'Invalid input' },
         { status: 400 }
       )
     }

@@ -28,7 +28,7 @@ export function Navbar() {
         <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <Mic className="size-4" />
         </span>
-        <span className="text-base font-semibold">SpeakFirst</span>
+        <span className="text-base font-semibold">LingoMatch</span>
       </Link>
 
       <div className="hidden lg:block" />

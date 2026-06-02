@@ -13,7 +13,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <Mic className="size-5" />
         </span>
-        <span className="text-xl font-semibold">SpeakFirst</span>
+        <span className="text-xl font-semibold">LingoMatch</span>
       </Link>
 
       <div className="w-full max-w-sm">{children}</div>

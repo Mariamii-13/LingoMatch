@@ -36,7 +36,7 @@ export function Sidebar() {
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <Mic className="size-4" />
         </span>
-        <span className="hidden text-base font-semibold lg:inline">SpeakFirst</span>
+        <span className="hidden text-base font-semibold lg:inline">LingoMatch</span>
       </div>
 
       <nav className="flex-1 space-y-1 p-2 lg:p-3">

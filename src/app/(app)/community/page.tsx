@@ -120,7 +120,7 @@ export default function CommunityPage() {
             <DialogHeader>
               <DialogTitle>Submit feedback</DialogTitle>
               <DialogDescription>
-                Tell us what would make SpeakFirst better.
+                Tell us what would make LingoMatch better.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
