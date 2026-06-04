@@ -10,11 +10,11 @@ import {
   Users,
 } from "lucide-react"
 
+import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
-  currentUser,
   dashboardStats,
   friendActivity,
   scheduledSessions,
@@ -27,11 +27,14 @@ const statCards = [
 ]
 
 export default function DashboardPage() {
+  const { data: session } = useSession()
+  const firstName = (session?.user?.name ?? "there").split(" ")[0]
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold sm:text-3xl">
-          Good morning, {currentUser.name.split(" ")[0]} 👋
+          Good morning, {firstName} 👋
         </h1>
         <p className="mt-1 text-muted-foreground">
           Ready for your next conversation?

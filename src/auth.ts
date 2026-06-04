@@ -82,6 +82,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } else if (!existing.googleId) {
           await User.findByIdAndUpdate(existing._id, {
             googleId: account.providerAccountId,
+            displayName: user.name,
+            avatar: user.image ?? existing.avatar,
           })
         }
       }
@@ -93,6 +95,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const dbUser = await User.findOne({ email: token.email })
         if (dbUser) {
           token.id = dbUser._id.toString()
+          token.name = dbUser.displayName
           token.username = dbUser.username
           token.plan = dbUser.plan
           token.role = dbUser.role
@@ -112,6 +115,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string
+        session.user.name = token.name as string
         ;(session.user as { username?: string }).username = token.username as string
         ;(session.user as { plan?: string }).plan = token.plan as string
         ;(session.user as { role?: string }).role = token.role as string
