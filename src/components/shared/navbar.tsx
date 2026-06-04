@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
+import { LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
@@ -15,12 +15,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
-import { currentUser } from "@/lib/mock-data"
+import { NotificationsPopover } from "@/components/shared/notifications-popover"
 
 export function Navbar() {
   const { data: session } = useSession()
-  const displayName = session?.user?.name ?? currentUser.name
-  const username = (session?.user as any)?.username ?? currentUser.username
+  const displayName = session?.user?.name ?? ""
+  const username = (session?.user as any)?.username ?? ""
+  const initials = displayName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) || "?"
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
@@ -36,10 +37,7 @@ export function Navbar() {
       <div className="flex items-center gap-1 sm:gap-2">
         <ThemeToggle />
 
-        <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
-          <Bell className="size-5" />
-          <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" />
-        </Button>
+        <NotificationsPopover />
 
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -48,10 +46,8 @@ export function Navbar() {
             }
           >
             <Avatar>
-              <AvatarFallback
-                className={`bg-gradient-to-br ${currentUser.avatarColor} text-white`}
-              >
-                {currentUser.avatarInitials}
+              <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white">
+                {initials}
               </AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>
