@@ -18,5 +18,9 @@ export function useNotifications() {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
   }
 
-  return { notifications, unreadCount, markRead, markAllRead }
+  function dismiss(id: string) {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+  }
+
+  return { notifications, unreadCount, markRead, markAllRead, dismiss }
 }

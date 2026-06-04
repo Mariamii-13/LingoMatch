@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Popover } from "@base-ui/react/popover"
 import { Bell, Calendar, Flame, MessageCircle, UserCheck, UserPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -28,9 +29,11 @@ const TYPE_COLOR: Record<NotificationType, string> = {
 function NotificationItem({
   notification,
   onRead,
+  onDismiss,
 }: {
   notification: Notification
   onRead: (id: string) => void
+  onDismiss: (id: string) => void
 }) {
   const { id, type, read, timestamp, message, actor } = notification
 
@@ -82,7 +85,7 @@ function NotificationItem({
               className="h-7 px-3 text-xs"
               onClick={(e) => {
                 e.stopPropagation()
-                onRead(id)
+                onDismiss(id)
               }}
             >
               Decline
@@ -109,7 +112,7 @@ function NotificationItem({
 }
 
 export function NotificationsPopover() {
-  const { notifications, unreadCount, markRead, markAllRead } = useNotifications()
+  const { notifications, unreadCount, markRead, markAllRead, dismiss } = useNotifications()
   const [tab, setTab] = useState<"all" | "unread">("all")
 
   const visible = tab === "unread" ? notifications.filter((n) => !n.read) : notifications
@@ -188,16 +191,16 @@ export function NotificationsPopover() {
                 </p>
               ) : (
                 visible.map((n) => (
-                  <NotificationItem key={n.id} notification={n} onRead={markRead} />
+                  <NotificationItem key={n.id} notification={n} onRead={markRead} onDismiss={dismiss} />
                 ))
               )}
             </div>
 
             {/* Footer */}
             <div className="border-t border-border px-4 py-2.5 text-center">
-              <button className="text-sm text-primary font-medium hover:underline">
+              <Link href="/notifications" className="text-sm text-primary font-medium hover:underline">
                 See all notifications →
-              </button>
+              </Link>
             </div>
 
           </Popover.Popup>
