@@ -1,12 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { Popover } from "@base-ui/react/popover"
 import { Bell, Calendar, Flame, MessageCircle, UserCheck, UserPlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useNotifications } from "@/hooks/use-notifications"
-import type { Notification, NotificationType } from "@/lib/mock-data"
+import type { Notification, NotificationType } from "@/types"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 
@@ -74,7 +73,7 @@ function NotificationItem({
               className="h-7 px-3 text-xs"
               onClick={(e) => {
                 e.stopPropagation()
-                onRead(id)
+                onDismiss(id)
               }}
             >
               Accept
@@ -198,9 +197,9 @@ export function NotificationsPopover() {
 
             {/* Footer */}
             <div className="border-t border-border px-4 py-2.5 text-center">
-              <Link href="/notifications" className="text-sm text-primary font-medium hover:underline">
-                See all notifications →
-              </Link>
+              <span className="text-sm text-muted-foreground">
+                See all notifications
+              </span>
             </div>
 
           </Popover.Popup>

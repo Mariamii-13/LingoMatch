@@ -6,6 +6,8 @@ import type {
   ScheduledSession,
   ConversationMode,
   Stats,
+  Notification,
+  NotificationType,
 } from "@/types"
 
 export const conversationModes: ConversationMode[] = [
@@ -660,26 +662,6 @@ export const testimonials: { quote: string; name: string; role: string; initials
     flag: "🇺🇸",
   },
 ]
-
-export type NotificationType =
-  | "friend_request"
-  | "friend_accepted"
-  | "session_reminder"
-  | "streak"
-  | "match"
-
-export interface Notification {
-  id: string
-  type: NotificationType
-  read: boolean
-  timestamp: string
-  message: string
-  actor?: {
-    name: string
-    initials: string
-    avatarColor: string
-  }
-}
 
 export const notifications: Notification[] = [
   {

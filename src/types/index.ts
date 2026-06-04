@@ -91,3 +91,23 @@ export interface Stats {
   streakDays: number
   languagesLearned: number
 }
+
+export type NotificationType =
+  | "friend_request"
+  | "friend_accepted"
+  | "session_reminder"
+  | "streak"
+  | "match"
+
+export interface Notification {
+  id: string
+  type: NotificationType
+  read: boolean
+  timestamp: string
+  message: string
+  actor?: {
+    name: string
+    initials: string
+    avatarColor: string
+  }
+}

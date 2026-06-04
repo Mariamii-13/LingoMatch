@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { notifications as initialNotifications, type Notification } from "@/lib/mock-data"
+import { notifications as initialNotifications } from "@/lib/mock-data"
+import type { Notification } from "@/types"
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications)
