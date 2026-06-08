@@ -4,27 +4,72 @@ import Link from "next/link"
 import {
   ArrowRight,
   Calendar,
+  Flame,
+  Mic,
   Sparkles,
   Users,
 } from "lucide-react"
 
-import { useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { DashboardHero } from "@/components/dashboard/hero"
 import {
+  currentUser,
+  dashboardStats,
   friendActivity,
   scheduledSessions,
 } from "@/lib/mock-data"
 
-export default function DashboardPage() {
-  const { data: session } = useSession()
-  const firstName = (session?.user?.name ?? "there").split(" ")[0]
+const statCards = [
+  { label: "Sessions Today", value: dashboardStats.sessionsToday, icon: Mic },
+  { label: "Friends", value: dashboardStats.friends, icon: Users },
+  { label: "Day Streak", value: `${dashboardStats.streak} 🔥`, icon: Flame },
+]
 
+export default function DashboardPage() {
   return (
     <div className="space-y-8">
-      <DashboardHero firstName={firstName} />
+      <div>
+        <h1 className="text-2xl font-bold sm:text-3xl">
+          Good morning, {currentUser.name.split(" ")[0]} 👋
+        </h1>
+        <p className="mt-1 text-muted-foreground">
+          Ready for your next conversation?
+        </p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        {statCards.map((s) => {
+          const Icon = s.icon
+          return (
+            <div key={s.label} className="rounded-xl border bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">{s.label}</span>
+                <Icon className="size-4 text-primary" />
+              </div>
+              <p className="mt-2 text-2xl font-bold">{s.value}</p>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Find a conversation CTA */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-fuchsia-600 p-6 text-white shadow-lg sm:p-8">
+        <div className="pointer-events-none absolute -right-8 -top-8 size-40 rounded-full bg-white/15 blur-2xl" />
+        <h2 className="relative text-xl font-bold sm:text-2xl">Find a Conversation</h2>
+        <p className="relative mt-1 max-w-md text-white/90">
+          Jump into a live voice chat with a partner matched just for you.
+        </p>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="relative mt-5 h-12 px-6 text-base"
+          render={<Link href="/match" />}
+        >
+          <Mic className="size-5" /> Find a Conversation
+        </Button>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Scheduled */}

@@ -6,8 +6,6 @@ import type {
   ScheduledSession,
   ConversationMode,
   Stats,
-  Notification,
-  NotificationType,
 } from "@/types"
 
 export const conversationModes: ConversationMode[] = [
@@ -660,53 +658,5 @@ export const testimonials: { quote: string; name: string; role: string; initials
     initials: "AO",
     color: "from-emerald-500 to-teal-600",
     flag: "🇺🇸",
-  },
-]
-
-export const notifications: Notification[] = [
-  {
-    id: "notif-1",
-    type: "friend_request",
-    read: false,
-    timestamp: "2 min ago",
-    message: "sent you a friend request",
-    actor: {
-      name: "Kenji M.",
-      initials: "KM",
-      avatarColor: "from-sky-500 to-blue-600",
-    },
-  },
-  {
-    id: "notif-2",
-    type: "session_reminder",
-    read: false,
-    timestamp: "25 min ago",
-    message: "Session reminder with Sofia in 30 minutes",
-  },
-  {
-    id: "notif-3",
-    type: "streak",
-    read: false,
-    timestamp: "1 hr ago",
-    message: "12-day streak! Keep it going 🔥",
-  },
-  {
-    id: "notif-4",
-    type: "friend_accepted",
-    read: true,
-    timestamp: "Yesterday",
-    message: "accepted your friend request",
-    actor: {
-      name: "Lena M.",
-      initials: "LM",
-      avatarColor: "from-amber-400 to-red-500",
-    },
-  },
-  {
-    id: "notif-5",
-    type: "match",
-    read: true,
-    timestamp: "2 days ago",
-    message: "New match available — Japanese speaker nearby",
   },
 ]

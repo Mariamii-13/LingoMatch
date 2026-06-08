@@ -13,10 +13,10 @@ import {
   Zap,
 } from "lucide-react"
 
-import { useSession } from "next-auth/react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { currentUser } from "@/lib/mock-data"
 
 export const navItems: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
@@ -29,11 +29,6 @@ export const navItems: { label: string; href: string; icon: LucideIcon }[] = [
 
 export function Sidebar() {
   const pathname = usePathname()
-  const { data: session } = useSession()
-  const name = session?.user?.name ?? ""
-  const username = (session?.user as any)?.username ?? ""
-  const plan = (session?.user as any)?.plan ?? "free"
-  const initials = name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) || "?"
 
   return (
     <aside className="sticky top-0 hidden h-screen w-16 shrink-0 flex-col border-r bg-sidebar lg:flex lg:w-64">
@@ -69,21 +64,23 @@ export function Sidebar() {
 
       <div className="border-t p-2 lg:p-3">
         <Link
-          href={`/profile/${username}`}
+          href={`/profile/${currentUser.username}`}
           className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent"
         >
           <Avatar>
-            <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white">
-              {initials}
+            <AvatarFallback
+              className={`bg-gradient-to-br ${currentUser.avatarColor} text-white`}
+            >
+              {currentUser.avatarInitials}
             </AvatarFallback>
           </Avatar>
           <div className="hidden min-w-0 flex-1 lg:block">
-            <p className="truncate text-sm font-medium">{name}</p>
+            <p className="truncate text-sm font-medium">{currentUser.name}</p>
             <Badge
-              variant={plan === "premium" ? "default" : "secondary"}
+              variant={currentUser.plan === "premium" ? "default" : "secondary"}
               className="mt-0.5 capitalize"
             >
-              {plan}
+              {currentUser.plan}
             </Badge>
           </div>
         </Link>
