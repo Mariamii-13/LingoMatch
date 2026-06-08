@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   BarChart3,
   FileWarning,
+  Files,
   Flag,
   LayoutDashboard,
   type LucideIcon,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils"
 const adminNav: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Files", href: "/admin/files", icon: Files },
   { label: "Sessions", href: "/admin/sessions", icon: Radio },
   { label: "Reports", href: "/admin/reports", icon: FileWarning },
   { label: "Feedback", href: "/admin/feedback", icon: MessageSquare },

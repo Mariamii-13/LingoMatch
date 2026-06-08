@@ -1,164 +1,184 @@
 "use client"
 
 import Link from "next/link"
-import {
-  ArrowRight,
-  Calendar,
-  Flame,
-  Mic,
-  Sparkles,
-  Users,
-} from "lucide-react"
+import { Calendar, Sparkles, Users } from "lucide-react"
+import { useSession } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
-  currentUser,
   dashboardStats,
   friendActivity,
   scheduledSessions,
 } from "@/lib/mock-data"
 
-const statCards = [
-  { label: "Sessions Today", value: dashboardStats.sessionsToday, icon: Mic },
-  { label: "Friends", value: dashboardStats.friends, icon: Users },
-  { label: "Day Streak", value: `${dashboardStats.streak} 🔥`, icon: Flame },
-]
+const aiInsight = {
+  week: "Week of Jun 2",
+  language: "Spanish focus",
+  speakingHours: "3.2h",
+  sessions: 4,
+  growthPct: "+18%",
+  fluencyPct: 67,
+  tip: "Focus on pronunciation in Spanish conditional tense. Try 3 sessions this week.",
+}
 
 export default function DashboardPage() {
+  const { data: session } = useSession()
+  const firstName = session?.user?.name?.split(" ")[0] ?? "there"
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+
+      {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold sm:text-3xl">
-          Good morning, {currentUser.name.split(" ")[0]} 👋
+          🌤️ Good morning, {firstName}
         </h1>
-        <p className="mt-1 text-muted-foreground">
-          Ready for your next conversation?
-        </p>
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        {statCards.map((s) => {
-          const Icon = s.icon
-          return (
-            <div key={s.label} className="rounded-xl border bg-card p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">{s.label}</span>
-                <Icon className="size-4 text-primary" />
-              </div>
-              <p className="mt-2 text-2xl font-bold">{s.value}</p>
-            </div>
-          )
-        })}
+      <div className="grid grid-cols-3 gap-4">
+        <div className="rounded-xl border bg-card p-4 text-center shadow-sm">
+          <p className="text-2xl font-bold">{dashboardStats.sessionsToday}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Sessions</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4 text-center shadow-sm">
+          <p className="text-2xl font-bold">{dashboardStats.friends}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Friends</p>
+        </div>
+        <div className="rounded-xl border bg-card p-4 text-center shadow-sm">
+          <p className="text-2xl font-bold">🔥 {dashboardStats.streak}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Streak</p>
+        </div>
       </div>
 
-      {/* Find a conversation CTA */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary to-fuchsia-600 p-6 text-white shadow-lg sm:p-8">
-        <div className="pointer-events-none absolute -right-8 -top-8 size-40 rounded-full bg-white/15 blur-2xl" />
-        <h2 className="relative text-xl font-bold sm:text-2xl">Find a Conversation</h2>
-        <p className="relative mt-1 max-w-md text-white/90">
-          Jump into a live voice chat with a partner matched just for you.
-        </p>
+      {/* Find a Conversation CTA */}
+      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-6 py-4 text-white shadow-lg">
+        <span className="text-lg font-bold">Find a Conversation</span>
         <Button
-          size="lg"
           variant="secondary"
-          className="relative mt-5 h-12 px-6 text-base"
+          size="sm"
+          className="shrink-0 bg-white text-violet-700 hover:bg-white/90 font-semibold"
           render={<Link href="/match" />}
         >
-          <Mic className="size-5" /> Find a Conversation
+          Find Now →
         </Button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Scheduled */}
-        <div className="lg:col-span-2 space-y-6">
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 font-semibold">
-                <Calendar className="size-4 text-primary" /> Upcoming Sessions
-              </h3>
-              <Link href="/schedule" className="text-sm text-primary hover:underline">
-                View all
-              </Link>
-            </div>
-            <div className="mt-4 space-y-3">
-              {scheduledSessions.slice(0, 3).map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
-                >
-                  <Avatar>
-                    <AvatarFallback className={`bg-gradient-to-br ${s.partner.avatarColor} text-white`}>
-                      {s.partner.avatarInitials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {s.partner.name} {s.partner.flag}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {s.date} · {s.time} {s.timezone}
-                    </p>
-                  </div>
-                  <Badge variant="secondary">{s.mode}</Badge>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Friend activity */}
-          <section className="rounded-xl border bg-card p-5 shadow-sm">
-            <h3 className="flex items-center gap-2 font-semibold">
-              <Users className="size-4 text-primary" /> Friend Activity
-            </h3>
-            <div className="mt-4 space-y-4">
-              {friendActivity.map((a) => (
-                <div key={a.id} className="flex items-start gap-3">
-                  <Avatar size="sm">
-                    <AvatarFallback className={`bg-gradient-to-br ${a.color} text-white text-xs`}>
-                      {a.initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 text-sm">
-                    <p>
-                      <span className="font-medium">{a.name}</span>{" "}
-                      <span className="text-muted-foreground">{a.action}</span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">{a.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+      {/* AI Weekly Insight — promoted to main column */}
+      <div className="rounded-2xl border border-primary/30 bg-card p-5 shadow-sm">
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <Sparkles className="size-5" />
+          </span>
+          <div>
+            <p className="font-semibold leading-tight">AI Weekly Insight</p>
+            <p className="text-xs text-muted-foreground">
+              {aiInsight.week} · {aiInsight.language}
+            </p>
+          </div>
         </div>
 
-        {/* AI Weekly Insight */}
-        <aside className="space-y-6">
-          <div className="rounded-xl border bg-card p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Sparkles className="size-5" />
-              </span>
-              <h3 className="font-semibold">AI Weekly Insight</h3>
-            </div>
-            <p className="mt-4 text-sm text-muted-foreground">
-              You spoke <span className="font-medium text-foreground">2h 14m</span> this
-              week across <span className="font-medium text-foreground">8 sessions</span> —
-              up 18% from last week. Your Japanese fluency is trending up. 🎉
-            </p>
-            <div className="mt-4 rounded-lg bg-muted p-3 text-sm">
-              <p className="font-medium">Tip for this week</p>
-              <p className="mt-1 text-muted-foreground">
-                Try a Deep Conversation in French to push past beginner phrases.
-              </p>
-            </div>
-            <Button variant="outline" className="mt-4 w-full" render={<Link href="/match" />}>
-              Start practicing <ArrowRight className="size-4" />
-            </Button>
+        {/* Stat mini-cards */}
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="rounded-xl bg-muted/60 p-3 text-center">
+            <p className="text-lg font-bold">{aiInsight.speakingHours}</p>
+            <p className="text-[11px] text-muted-foreground">Speaking</p>
           </div>
-        </aside>
+          <div className="rounded-xl bg-muted/60 p-3 text-center">
+            <p className="text-lg font-bold">{aiInsight.sessions}</p>
+            <p className="text-[11px] text-muted-foreground">Sessions</p>
+          </div>
+          <div className="rounded-xl bg-muted/60 p-3 text-center">
+            <p className="text-lg font-bold text-emerald-400">{aiInsight.growthPct}</p>
+            <p className="text-[11px] text-muted-foreground">vs last wk</p>
+          </div>
+        </div>
+
+        {/* Fluency progress */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Fluency progress</span>
+            <span className="font-semibold">{aiInsight.fluencyPct}%</span>
+          </div>
+          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${aiInsight.fluencyPct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Tip */}
+        <div className="mt-4 rounded-xl bg-muted/50 px-4 py-3 text-sm">
+          💡 <span className="font-medium">Tip:</span>{" "}
+          <span className="text-muted-foreground">{aiInsight.tip}</span>
+        </div>
+      </div>
+
+      {/* Bottom grid: sessions + activity */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Upcoming sessions */}
+        <section className="rounded-xl border bg-card p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-semibold">
+              <Calendar className="size-4 text-primary" /> Upcoming Sessions
+            </h3>
+            <Link href="/schedule" className="text-sm text-primary hover:underline">
+              View all
+            </Link>
+          </div>
+          <div className="mt-4 space-y-3">
+            {scheduledSessions.slice(0, 3).map((s) => (
+              <div
+                key={s.id}
+                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
+              >
+                <Avatar>
+                  <AvatarFallback className={`bg-gradient-to-br ${s.partner.avatarColor} text-white`}>
+                    {s.partner.avatarInitials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {s.partner.name} {s.partner.flag}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.date} · {s.time} {s.timezone}
+                  </p>
+                </div>
+                <Badge variant="secondary">{s.mode}</Badge>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Friend activity */}
+        <section className="rounded-xl border bg-card p-5 shadow-sm">
+          <h3 className="flex items-center gap-2 font-semibold">
+            <Users className="size-4 text-primary" /> Friend Activity
+          </h3>
+          <div className="mt-4 space-y-4">
+            {friendActivity.map((a) => (
+              <div key={a.id} className="flex items-start gap-3">
+                <Avatar size="sm">
+                  <AvatarFallback className={`bg-gradient-to-br ${a.color} text-white text-xs`}>
+                    {a.initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 text-sm">
+                  <p>
+                    <span className="font-medium">{a.name}</span>{" "}
+                    <span className="text-muted-foreground">{a.action}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">{a.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   )

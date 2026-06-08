@@ -2,16 +2,19 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowRight, Lock, Sparkles } from "lucide-react"
+import { ArrowRight, Lock, Sparkles, Upload } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { currentUser } from "@/lib/mock-data"
+
+const MAX_BYTES = 2 * 1024 * 1024 // 2MB
 
 function SettingRow({
   title,
@@ -34,6 +37,91 @@ function SettingRow({
 }
 
 export default function SettingsPage() {
+  const { data: session } = useSession()
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
+  const [avatarUrl, setAvatarUrl] = React.useState("")
+  const [uploading, setUploading] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [displayName, setDisplayName] = React.useState("")
+  const [username, setUsername] = React.useState("")
+  const [email, setEmail] = React.useState("")
+  const [plan, setPlan] = React.useState("free")
+
+  React.useEffect(() => {
+    fetch("/api/user/me")
+      .then((r) => r.json())
+      .then((u) => {
+        setAvatarUrl(u.avatar ?? "")
+        setDisplayName(u.displayName ?? "")
+        setUsername(u.username ?? "")
+        setEmail(u.email ?? "")
+        setPlan(u.plan ?? "free")
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Only image files allowed.")
+      return
+    }
+    if (file.size > MAX_BYTES) {
+      toast.error("File too large. Max 2MB.")
+      return
+    }
+
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/upload/avatar", { method: "POST", body: fd })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? "Upload failed. Please try again.")
+        return
+      }
+      setAvatarUrl(data.url)
+      toast.success("Avatar updated!")
+    } catch {
+      toast.error("Upload failed. Please try again.")
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
+  async function handleSave() {
+    if (!displayName.trim()) {
+      toast.error("Display name cannot be empty.")
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/user/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: displayName.trim(), username: username.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error ?? "Failed to save changes.")
+        return
+      }
+      toast.success("Changes saved!")
+    } catch {
+      toast.error("Failed to save changes.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const initials = displayName
+    ? displayName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
+    : session?.user?.name?.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() ?? "?"
+
   return (
     <div className="space-y-6">
       <div>
@@ -57,27 +145,65 @@ export default function SettingsPage() {
           <div className="rounded-xl border bg-card p-6 shadow-sm">
             <div className="flex items-center gap-4">
               <Avatar size="lg" className="size-16">
-                <AvatarFallback className={`bg-gradient-to-br ${currentUser.avatarColor} text-white text-lg`}>
-                  {currentUser.avatarInitials}
+                {avatarUrl ? (
+                  <AvatarImage src={avatarUrl} alt="Avatar" />
+                ) : null}
+                <AvatarFallback className="bg-gradient-to-br from-violet-500 to-indigo-500 text-white text-lg">
+                  {initials}
                 </AvatarFallback>
               </Avatar>
-              <Button variant="outline" size="sm">Change avatar</Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploading ? (
+                  <>
+                    <span className="mr-2 size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Uploading…
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-1.5 size-3.5" />
+                    Change avatar
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground">JPG, PNG, GIF · max 2MB</p>
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="name">Display name</Label>
-                <Input id="name" defaultValue={currentUser.name} />
+                <Input
+                  id="name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="username">Username</Label>
-                <Input id="username" defaultValue={currentUser.username} />
+                <Input
+                  id="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
               </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" defaultValue="alex@example.com" />
+                <Input id="email" type="email" value={email} readOnly className="opacity-60" />
               </div>
             </div>
-            <Button className="mt-6">Save changes</Button>
+            <Button className="mt-6" disabled={saving} onClick={handleSave}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
           </div>
         </TabsContent>
 
@@ -149,11 +275,11 @@ export default function SettingsPage() {
                 <Sparkles className="size-5 text-primary" />
                 <div>
                   <p className="font-semibold">Current plan</p>
-                  <p className="text-sm text-muted-foreground capitalize">{currentUser.plan}</p>
+                  <p className="text-sm text-muted-foreground capitalize">{plan}</p>
                 </div>
               </div>
-              <Badge variant={currentUser.plan === "premium" ? "default" : "secondary"} className="capitalize">
-                {currentUser.plan}
+              <Badge variant={plan === "premium" ? "default" : "secondary"} className="capitalize">
+                {plan}
               </Badge>
             </div>
 

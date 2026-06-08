@@ -5,7 +5,7 @@ import { Bell, LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,12 +15,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
-import { currentUser } from "@/lib/mock-data"
 
 export function Navbar() {
   const { data: session } = useSession()
-  const displayName = session?.user?.name ?? currentUser.name
-  const username = (session?.user as any)?.username ?? currentUser.username
+  const displayName = session?.user?.name ?? "User"
+  const username = (session?.user as { username?: string })?.username ?? "me"
+  const image = session?.user?.image ?? ""
+  const initials = displayName
+    .split(" ")
+    .map((w: string) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
@@ -48,10 +54,9 @@ export function Navbar() {
             }
           >
             <Avatar>
-              <AvatarFallback
-                className={`bg-gradient-to-br ${currentUser.avatarColor} text-white`}
-              >
-                {currentUser.avatarInitials}
+              {image ? <AvatarImage src={image} alt={displayName} /> : null}
+              <AvatarFallback className="bg-gradient-to-br from-violet-500 to-indigo-500 text-white">
+                {initials}
               </AvatarFallback>
             </Avatar>
           </DropdownMenuTrigger>

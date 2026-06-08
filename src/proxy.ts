@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 export default auth((req) => {
   const { pathname } = req.nextUrl
   const isLoggedIn = !!req.auth
+  const role = (req.auth?.user as { role?: string })?.role
 
   const publicPaths = ['/', '/login', '/register', '/verify-email', '/forgot-password']
   const isPublic = publicPaths.includes(pathname) || pathname.startsWith('/api/auth')
@@ -13,6 +14,10 @@ export default auth((req) => {
   }
 
   if (isLoggedIn && (pathname === '/login' || pathname === '/register')) {
+    return NextResponse.redirect(new URL('/dashboard', req.url))
+  }
+
+  if (pathname.startsWith('/admin') && role !== 'admin') {
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
