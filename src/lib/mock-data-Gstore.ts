@@ -1,0 +1,712 @@
+import type {
+  User,
+  Friend,
+  Session,
+  Feedback,
+  ScheduledSession,
+  ConversationMode,
+  Stats,
+  Notification,
+  NotificationType,
+} from "@/types"
+
+export const conversationModes: ConversationMode[] = [
+  {
+    id: "friendly",
+    name: "Friendly",
+    emoji: "🤝",
+    description: "Relaxed, no-pressure chats to make a new friend across the world.",
+  },
+  {
+    id: "casual",
+    name: "Casual Practice",
+    emoji: "☕",
+    description: "Everyday small talk to keep your skills sharp and natural.",
+  },
+  {
+    id: "deep",
+    name: "Deep Conversations",
+    emoji: "🌌",
+    description: "Meaningful talks about life, ideas, and the things that matter.",
+  },
+  {
+    id: "cultural",
+    name: "Cultural Exchange",
+    emoji: "🌍",
+    description: "Trade traditions, food, music and stories from your home.",
+  },
+  {
+    id: "study",
+    name: "Study Together",
+    emoji: "📚",
+    description: "Focused practice with grammar drills and vocab building.",
+  },
+  {
+    id: "fast",
+    name: "Fast Speaking Practice",
+    emoji: "⚡",
+    description: "High-tempo speaking to push fluency and quick thinking.",
+  },
+  {
+    id: "flirty",
+    name: "Flirty Vibes",
+    emoji: "💘",
+    description: "Playful, light-hearted banter for the confident speaker.",
+  },
+]
+
+export const interestCategories: { category: string; tags: string[] }[] = [
+  { category: "Anime", tags: ["Shonen", "Studio Ghibli", "Manga", "Cosplay", "Slice of Life"] },
+  { category: "Books", tags: ["Fiction", "Fantasy", "Non-fiction", "Poetry", "Sci-Fi"] },
+  { category: "Movies", tags: ["Drama", "Comedy", "Thriller", "Documentary", "Indie"] },
+  { category: "Music", tags: ["Pop", "Rock", "Jazz", "K-Pop", "Classical", "Hip-Hop"] },
+  { category: "Gaming", tags: ["RPG", "FPS", "Strategy", "Indie Games", "Esports"] },
+  { category: "Travel", tags: ["Backpacking", "City Trips", "Beaches", "Hiking", "Road Trips"] },
+  { category: "Food", tags: ["Cooking", "Baking", "Street Food", "Vegan", "Coffee"] },
+  { category: "Hobbies", tags: ["Photography", "Painting", "Fitness", "Dancing", "Coding"] },
+]
+
+export const countries: { name: string; flag: string }[] = [
+  { name: "United States", flag: "🇺🇸" },
+  { name: "Spain", flag: "🇪🇸" },
+  { name: "Japan", flag: "🇯🇵" },
+  { name: "Brazil", flag: "🇧🇷" },
+  { name: "France", flag: "🇫🇷" },
+  { name: "Germany", flag: "🇩🇪" },
+  { name: "South Korea", flag: "🇰🇷" },
+  { name: "Italy", flag: "🇮🇹" },
+  { name: "Mexico", flag: "🇲🇽" },
+  { name: "India", flag: "🇮🇳" },
+]
+
+export const languageOptions: { code: string; name: string; flag: string }[] = [
+  { code: "EN", name: "English", flag: "🇬🇧" },
+  { code: "ES", name: "Spanish", flag: "🇪🇸" },
+  { code: "JA", name: "Japanese", flag: "🇯🇵" },
+  { code: "PT", name: "Portuguese", flag: "🇧🇷" },
+  { code: "FR", name: "French", flag: "🇫🇷" },
+  { code: "DE", name: "German", flag: "🇩🇪" },
+  { code: "KO", name: "Korean", flag: "🇰🇷" },
+  { code: "IT", name: "Italian", flag: "🇮🇹" },
+]
+
+export const mockUsers: User[] = [
+  {
+    id: "u1",
+    name: "Sofia Martínez",
+    username: "sofiam",
+    country: "Spain",
+    flag: "🇪🇸",
+    avatarInitials: "SM",
+    avatarColor: "from-fuchsia-500 to-purple-600",
+    bio: "Architecture student who loves talking about cities, coffee and indie films.",
+    native: [{ code: "ES", name: "Spanish", flag: "🇪🇸", level: "Native" }],
+    learning: [{ code: "EN", name: "English", flag: "🇬🇧", level: "Advanced" }],
+    interests: ["City Trips", "Coffee", "Indie", "Photography"],
+    plan: "premium",
+    online: true,
+    memberSince: "Jan 2025",
+    sessionsCount: 142,
+    friendsCount: 38,
+  },
+  {
+    id: "u2",
+    name: "Kenji Tanaka",
+    username: "kenji",
+    country: "Japan",
+    flag: "🇯🇵",
+    avatarInitials: "KT",
+    avatarColor: "from-sky-500 to-blue-600",
+    bio: "Anime fan and software engineer practicing English for work.",
+    native: [{ code: "JA", name: "Japanese", flag: "🇯🇵", level: "Native" }],
+    learning: [{ code: "EN", name: "English", flag: "🇬🇧", level: "Intermediate" }],
+    interests: ["Shonen", "Coding", "RPG", "Street Food"],
+    plan: "free",
+    online: false,
+    memberSince: "Mar 2025",
+    sessionsCount: 67,
+    friendsCount: 21,
+  },
+  {
+    id: "u3",
+    name: "Amara Okafor",
+    username: "amara",
+    country: "United States",
+    flag: "🇺🇸",
+    avatarInitials: "AO",
+    avatarColor: "from-emerald-500 to-teal-600",
+    bio: "Bookworm learning Spanish to travel through Latin America next year.",
+    native: [{ code: "EN", name: "English", flag: "🇬🇧", level: "Native" }],
+    learning: [{ code: "ES", name: "Spanish", flag: "🇪🇸", level: "Beginner" }],
+    interests: ["Fiction", "Backpacking", "Jazz", "Vegan"],
+    plan: "premium",
+    online: true,
+    memberSince: "Dec 2024",
+    sessionsCount: 203,
+    friendsCount: 54,
+  },
+  {
+    id: "u4",
+    name: "Lucas Almeida",
+    username: "lucas",
+    country: "Brazil",
+    flag: "🇧🇷",
+    avatarInitials: "LA",
+    avatarColor: "from-amber-500 to-orange-600",
+    bio: "Musician and beach lover. Always up for a deep conversation about life.",
+    native: [{ code: "PT", name: "Portuguese", flag: "🇧🇷", level: "Native" }],
+    learning: [
+      { code: "EN", name: "English", flag: "🇬🇧", level: "Intermediate" },
+      { code: "ES", name: "Spanish", flag: "🇪🇸", level: "Advanced" },
+    ],
+    interests: ["Rock", "Beaches", "Cooking", "Dancing"],
+    plan: "free",
+    online: true,
+    memberSince: "Feb 2025",
+    sessionsCount: 88,
+    friendsCount: 29,
+  },
+  {
+    id: "u5",
+    name: "Chloé Dubois",
+    username: "chloe",
+    country: "France",
+    flag: "🇫🇷",
+    avatarInitials: "CD",
+    avatarColor: "from-rose-500 to-pink-600",
+    bio: "Pastry chef in Lyon learning Japanese for a dream trip to Kyoto.",
+    native: [{ code: "FR", name: "French", flag: "🇫🇷", level: "Native" }],
+    learning: [{ code: "JA", name: "Japanese", flag: "🇯🇵", level: "Beginner" }],
+    interests: ["Baking", "Studio Ghibli", "Classical", "Painting"],
+    plan: "premium",
+    online: false,
+    memberSince: "Nov 2024",
+    sessionsCount: 311,
+    friendsCount: 72,
+  },
+]
+
+export const currentUser: User = {
+  id: "me",
+  name: "Alex Rivera",
+  username: "alexr",
+  country: "Mexico",
+  flag: "🇲🇽",
+  avatarInitials: "AR",
+  avatarColor: "from-violet-500 to-indigo-600",
+  bio: "Learning Japanese and French. Love gaming, travel and good coffee.",
+  native: [{ code: "ES", name: "Spanish", flag: "🇪🇸", level: "Native" }],
+  learning: [
+    { code: "JA", name: "Japanese", flag: "🇯🇵", level: "Intermediate" },
+    { code: "FR", name: "French", flag: "🇫🇷", level: "Beginner" },
+  ],
+  interests: ["RPG", "Road Trips", "Coffee", "Hip-Hop", "Coding"],
+  plan: "premium",
+  online: true,
+  memberSince: "Oct 2024",
+  sessionsCount: 124,
+  friendsCount: 31,
+}
+
+export const mockFriends: Friend[] = [
+  { ...mockUsers[0], status: "friend", lastActive: "2m ago" },
+  { ...mockUsers[2], status: "friend", lastActive: "online" },
+  { ...mockUsers[3], status: "friend", lastActive: "1h ago" },
+  { ...mockUsers[4], status: "friend", lastActive: "yesterday" },
+  { ...mockUsers[1], status: "friend", lastActive: "3d ago" },
+]
+
+export const friendRequests: Friend[] = [
+  { ...mockUsers[1], status: "incoming", lastActive: "just now" },
+  { ...mockUsers[3], status: "incoming", lastActive: "5m ago" },
+]
+
+export const suggestedFriends: Friend[] = [
+  { ...mockUsers[4], status: "suggested" },
+  { ...mockUsers[0], status: "suggested" },
+  { ...mockUsers[2], status: "suggested" },
+]
+
+export const mockSessions: Session[] = [
+  {
+    id: "s1",
+    partner: {
+      id: "u1",
+      name: "Sofia Martínez",
+      username: "sofiam",
+      flag: "🇪🇸",
+      avatarInitials: "SM",
+      avatarColor: "from-fuchsia-500 to-purple-600",
+    },
+    mode: "Deep Conversations",
+    language: "Spanish",
+    date: "2026-05-28",
+    durationMinutes: 24,
+    rating: 5,
+  },
+  {
+    id: "s2",
+    partner: {
+      id: "u2",
+      name: "Kenji Tanaka",
+      username: "kenji",
+      flag: "🇯🇵",
+      avatarInitials: "KT",
+      avatarColor: "from-sky-500 to-blue-600",
+    },
+    mode: "Study Together",
+    language: "Japanese",
+    date: "2026-05-26",
+    durationMinutes: 31,
+    rating: 4,
+  },
+  {
+    id: "s3",
+    partner: {
+      id: "u5",
+      name: "Chloé Dubois",
+      username: "chloe",
+      flag: "🇫🇷",
+      avatarInitials: "CD",
+      avatarColor: "from-rose-500 to-pink-600",
+    },
+    mode: "Cultural Exchange",
+    language: "French",
+    date: "2026-05-24",
+    durationMinutes: 18,
+    rating: 5,
+  },
+]
+
+export const scheduledSessions: ScheduledSession[] = [
+  {
+    id: "sch1",
+    partner: {
+      id: "u1",
+      name: "Sofia Martínez",
+      username: "sofiam",
+      flag: "🇪🇸",
+      avatarInitials: "SM",
+      avatarColor: "from-fuchsia-500 to-purple-600",
+    },
+    mode: "Casual Practice",
+    language: "Spanish",
+    date: "2026-05-31",
+    time: "18:00",
+    timezone: "CET",
+  },
+  {
+    id: "sch2",
+    partner: {
+      id: "u2",
+      name: "Kenji Tanaka",
+      username: "kenji",
+      flag: "🇯🇵",
+      avatarInitials: "KT",
+      avatarColor: "from-sky-500 to-blue-600",
+    },
+    mode: "Study Together",
+    language: "Japanese",
+    date: "2026-06-02",
+    time: "09:30",
+    timezone: "JST",
+  },
+  {
+    id: "sch3",
+    partner: {
+      id: "u4",
+      name: "Lucas Almeida",
+      username: "lucas",
+      flag: "🇧🇷",
+      avatarInitials: "LA",
+      avatarColor: "from-amber-500 to-orange-600",
+    },
+    mode: "Deep Conversations",
+    language: "Portuguese",
+    date: "2026-06-04",
+    time: "20:00",
+    timezone: "BRT",
+  },
+]
+
+export const mockFeedback: Feedback[] = [
+  {
+    id: "f1",
+    type: "idea",
+    title: "Add a daily speaking streak challenge",
+    description: "A gamified daily goal that rewards consistent speaking practice with badges.",
+    votes: 248,
+    status: "planned",
+    author: "Sofia Martínez",
+    authorInitials: "SM",
+    createdAt: "2026-05-20",
+    hasVoted: false,
+  },
+  {
+    id: "f2",
+    type: "feature",
+    title: "Real-time subtitle translation during calls",
+    description: "Show live translated captions so beginners can follow along more easily.",
+    votes: 412,
+    status: "in-progress",
+    author: "Amara Okafor",
+    authorInitials: "AO",
+    createdAt: "2026-05-18",
+    hasVoted: true,
+  },
+  {
+    id: "f3",
+    type: "bug",
+    title: "Microphone stays muted after reconnect",
+    description: "When the connection drops and reconnects, the mic toggle shows unmuted but no audio is sent.",
+    votes: 76,
+    status: "open",
+    author: "Kenji Tanaka",
+    authorInitials: "KT",
+    createdAt: "2026-05-22",
+    hasVoted: false,
+  },
+  {
+    id: "f4",
+    type: "feature",
+    title: "Group conversation rooms (3-4 people)",
+    description: "Let small groups practice together in topic-based rooms.",
+    votes: 189,
+    status: "open",
+    author: "Lucas Almeida",
+    authorInitials: "LA",
+    createdAt: "2026-05-15",
+    hasVoted: false,
+  },
+  {
+    id: "f5",
+    type: "idea",
+    title: "Voice intro recordings on profiles",
+    description: "Let users record a short voice intro so partners hear their voice before matching.",
+    votes: 134,
+    status: "shipped",
+    author: "Chloé Dubois",
+    authorInitials: "CD",
+    createdAt: "2026-05-10",
+    hasVoted: true,
+  },
+]
+
+export const stats: Stats = {
+  totalSessions: 124,
+  totalFriends: 31,
+  streakDays: 12,
+  languagesLearned: 2,
+}
+
+export const dashboardStats = {
+  sessionsToday: 3,
+  friends: 31,
+  streak: 12,
+}
+
+export const friendActivity: {
+  id: string
+  name: string
+  initials: string
+  color: string
+  flag: string
+  action: string
+  time: string
+}[] = [
+  {
+    id: "a1",
+    name: "Sofia Martínez",
+    initials: "SM",
+    color: "from-fuchsia-500 to-purple-600",
+    flag: "🇪🇸",
+    action: "completed a 24-min Spanish session",
+    time: "2m ago",
+  },
+  {
+    id: "a2",
+    name: "Amara Okafor",
+    initials: "AO",
+    color: "from-emerald-500 to-teal-600",
+    flag: "🇺🇸",
+    action: "reached a 30-day streak 🔥",
+    time: "1h ago",
+  },
+  {
+    id: "a3",
+    name: "Lucas Almeida",
+    initials: "LA",
+    color: "from-amber-500 to-orange-600",
+    flag: "🇧🇷",
+    action: "is now learning Spanish",
+    time: "3h ago",
+  },
+  {
+    id: "a4",
+    name: "Chloé Dubois",
+    initials: "CD",
+    color: "from-rose-500 to-pink-600",
+    flag: "🇫🇷",
+    action: "added a new voice intro",
+    time: "yesterday",
+  },
+]
+
+export const aiPrompts: string[] = [
+  "What's a tradition from your country that you wish more people knew about?",
+  "If you could instantly master one more language, which would it be and why?",
+  "Describe your perfect weekend using only the present tense.",
+]
+
+// Admin / analytics mock data
+export const adminStats = {
+  dau: 8421,
+  sessionsToday: 1962,
+  revenueToday: 4380,
+  openReports: 7,
+}
+
+export const dauTrend: { day: string; users: number }[] = [
+  { day: "May 1", users: 6200 },
+  { day: "May 5", users: 6800 },
+  { day: "May 9", users: 7100 },
+  { day: "May 13", users: 6900 },
+  { day: "May 17", users: 7600 },
+  { day: "May 21", users: 8000 },
+  { day: "May 25", users: 8200 },
+  { day: "May 29", users: 8421 },
+]
+
+export const sessionsByMode: { mode: string; sessions: number }[] = [
+  { mode: "Friendly", sessions: 540 },
+  { mode: "Casual", sessions: 720 },
+  { mode: "Deep", sessions: 410 },
+  { mode: "Cultural", sessions: 380 },
+  { mode: "Study", sessions: 290 },
+  { mode: "Fast", sessions: 210 },
+  { mode: "Flirty", sessions: 160 },
+]
+
+export const sentimentData: { name: string; value: number; color: string }[] = [
+  { name: "Positive", value: 68, color: "#22c55e" },
+  { name: "Neutral", value: 24, color: "#a1a1aa" },
+  { name: "Negative", value: 8, color: "#ef4444" },
+]
+
+export const mrrData: { month: string; mrr: number }[] = [
+  { month: "Dec", mrr: 12000 },
+  { month: "Jan", mrr: 18500 },
+  { month: "Feb", mrr: 24300 },
+  { month: "Mar", mrr: 31200 },
+  { month: "Apr", mrr: 38900 },
+  { month: "May", mrr: 47600 },
+]
+
+export const roadmapSuggestions: { title: string; rationale: string; impact: "High" | "Medium" | "Low" }[] = [
+  {
+    title: "Ship real-time subtitle translation",
+    rationale: "Highest-voted feature; strongly correlates with beginner retention.",
+    impact: "High",
+  },
+  {
+    title: "Group conversation rooms",
+    rationale: "Rising demand from power users; could lift session frequency.",
+    impact: "Medium",
+  },
+  {
+    title: "Daily speaking streak challenge",
+    rationale: "Gamification proven to increase D7 retention in similar apps.",
+    impact: "High",
+  },
+]
+
+export const retentionRisks: { signal: string; severity: "High" | "Medium" | "Low"; detail: string }[] = [
+  {
+    signal: "Beginner drop-off after first session",
+    severity: "High",
+    detail: "32% of beginners do not return after their first match. Onboarding pace may feel too fast.",
+  },
+  {
+    signal: "Match wait time on niche languages",
+    severity: "Medium",
+    detail: "Average wait for Korean learners is 2m 40s vs 35s overall.",
+  },
+  {
+    signal: "Premium trial conversion dip",
+    severity: "Low",
+    detail: "Trial-to-paid down 3% week-over-week. Monitor pricing page experiment.",
+  },
+]
+
+export const adminReports: {
+  id: string
+  reporter: string
+  reported: string
+  reason: string
+  session: string
+  date: string
+  status: "pending" | "reviewed" | "dismissed"
+}[] = [
+  {
+    id: "r1",
+    reporter: "amara",
+    reported: "ghost_user_22",
+    reason: "Inappropriate language during call",
+    session: "s-9921",
+    date: "2026-05-29",
+    status: "pending",
+  },
+  {
+    id: "r2",
+    reporter: "kenji",
+    reported: "spam_bot_07",
+    reason: "Sharing external links repeatedly",
+    session: "s-9904",
+    date: "2026-05-29",
+    status: "pending",
+  },
+  {
+    id: "r3",
+    reporter: "chloe",
+    reported: "rude_caller_3",
+    reason: "Harassment",
+    session: "s-9888",
+    date: "2026-05-28",
+    status: "reviewed",
+  },
+  {
+    id: "r4",
+    reporter: "lucas",
+    reported: "afk_user_9",
+    reason: "Left immediately / no-show",
+    session: "s-9870",
+    date: "2026-05-27",
+    status: "dismissed",
+  },
+]
+
+export const adminUsers: {
+  id: string
+  name: string
+  username: string
+  email: string
+  initials: string
+  color: string
+  plan: "free" | "premium"
+  status: "active" | "banned"
+  sessions: number
+  joined: string
+}[] = [
+  { id: "u1", name: "Sofia Martínez", username: "sofiam", email: "sofia@example.com", initials: "SM", color: "from-fuchsia-500 to-purple-600", plan: "premium", status: "active", sessions: 142, joined: "2025-01-12" },
+  { id: "u2", name: "Kenji Tanaka", username: "kenji", email: "kenji@example.com", initials: "KT", color: "from-sky-500 to-blue-600", plan: "free", status: "active", sessions: 67, joined: "2025-03-04" },
+  { id: "u3", name: "Amara Okafor", username: "amara", email: "amara@example.com", initials: "AO", color: "from-emerald-500 to-teal-600", plan: "premium", status: "active", sessions: 203, joined: "2024-12-20" },
+  { id: "u4", name: "Lucas Almeida", username: "lucas", email: "lucas@example.com", initials: "LA", color: "from-amber-500 to-orange-600", plan: "free", status: "banned", sessions: 88, joined: "2025-02-18" },
+  { id: "u5", name: "Chloé Dubois", username: "chloe", email: "chloe@example.com", initials: "CD", color: "from-rose-500 to-pink-600", plan: "premium", status: "active", sessions: 311, joined: "2024-11-09" },
+]
+
+export const pricing = {
+  free: {
+    name: "Free",
+    monthly: 0,
+    yearly: 0,
+    features: [
+      "3 conversations per day",
+      "Voice-only matching",
+      "Basic AI matching",
+      "Friendly & Casual modes",
+      "Add up to 10 friends",
+    ],
+  },
+  premium: {
+    name: "Premium",
+    monthly: 9,
+    yearly: 86,
+    features: [
+      "Unlimited conversations",
+      "All 7 conversation modes",
+      "Advanced AI matching & insights",
+      "Priority match queue",
+      "Unlimited friends",
+      "Video calls (when both agree)",
+      "Weekly AI coaching reports",
+    ],
+  },
+}
+
+export const testimonials: { quote: string; name: string; role: string; initials: string; color: string; flag: string }[] = [
+  {
+    quote:
+      "I went from freezing up to chatting for 30 minutes straight. The voice-first approach changed everything for me.",
+    name: "Sofia Martínez",
+    role: "Learning English",
+    initials: "SM",
+    color: "from-fuchsia-500 to-purple-600",
+    flag: "🇪🇸",
+  },
+  {
+    quote:
+      "The AI actually understood that I'm shy and matched me with patient, kind people. I made real friends here.",
+    name: "Kenji Tanaka",
+    role: "Learning English",
+    initials: "KT",
+    color: "from-sky-500 to-blue-600",
+    flag: "🇯🇵",
+  },
+  {
+    quote:
+      "Cultural Exchange mode is magic. I learned more about real Spanish in a week than a year of apps.",
+    name: "Amara Okafor",
+    role: "Learning Spanish",
+    initials: "AO",
+    color: "from-emerald-500 to-teal-600",
+    flag: "🇺🇸",
+  },
+]
+
+export const notifications: Notification[] = [
+  {
+    id: "notif-1",
+    type: "friend_request",
+    read: false,
+    timestamp: "2 min ago",
+    message: "sent you a friend request",
+    actor: {
+      name: "Kenji M.",
+      initials: "KM",
+      avatarColor: "from-sky-500 to-blue-600",
+    },
+  },
+  {
+    id: "notif-2",
+    type: "session_reminder",
+    read: false,
+    timestamp: "25 min ago",
+    message: "Session reminder with Sofia in 30 minutes",
+  },
+  {
+    id: "notif-3",
+    type: "streak",
+    read: false,
+    timestamp: "1 hr ago",
+    message: "12-day streak! Keep it going 🔥",
+  },
+  {
+    id: "notif-4",
+    type: "friend_accepted",
+    read: true,
+    timestamp: "Yesterday",
+    message: "accepted your friend request",
+    actor: {
+      name: "Lena M.",
+      initials: "LM",
+      avatarColor: "from-amber-400 to-red-500",
+    },
+  },
+  {
+    id: "notif-5",
+    type: "match",
+    read: true,
+    timestamp: "2 days ago",
+    message: "New match available — Japanese speaker nearby",
+  },
+]
