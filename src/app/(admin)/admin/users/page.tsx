@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Ban, CheckCircle, Search, Shield, ShieldOff, Trash2 } from "lucide-react"
+import { Ban, CheckCircle, Plus, Search, Shield, ShieldOff, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 type DBUser = {
   _id: string
@@ -16,6 +23,7 @@ type DBUser = {
   username: string
   email: string
   avatar: string
+  country: string
   plan: "free" | "premium"
   role: "user" | "admin"
   isBanned: boolean
@@ -24,12 +32,18 @@ type DBUser = {
   dailySessionCount: number
 }
 
+const emptyForm = { displayName: "", username: "", email: "", password: "", country: "", role: "user" as "user" | "admin" }
+
 export default function AdminUsersPage() {
   const [users, setUsers] = React.useState<DBUser[]>([])
   const [loading, setLoading] = React.useState(true)
   const [query, setQuery] = React.useState("")
   const [plan, setPlan] = React.useState("all")
   const [status, setStatus] = React.useState("all")
+
+  const [createOpen, setCreateOpen] = React.useState(false)
+  const [form, setForm] = React.useState(emptyForm)
+  const [creating, setCreating] = React.useState(false)
 
   React.useEffect(() => {
     fetch("/api/admin/users")
@@ -92,11 +106,41 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function createUser(e: React.FormEvent) {
+    e.preventDefault()
+    setCreating(true)
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        toast.error(err.error ?? "Failed to create user")
+        return
+      }
+      const newUser: DBUser = await res.json()
+      setUsers((prev) => [newUser, ...prev])
+      toast.success("User created")
+      setCreateOpen(false)
+      setForm(emptyForm)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold sm:text-3xl">User Management</h1>
-        <p className="mt-1 text-muted-foreground">{users.length} total users</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold sm:text-3xl">User Management</h1>
+          <p className="mt-1 text-muted-foreground">{users.length} total users</p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)} size="sm" className="gap-1.5">
+          <Plus className="size-4" />
+          New User
+        </Button>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -138,10 +182,10 @@ export default function AdminUsersPage() {
               <tr className="border-b text-left text-muted-foreground">
                 <th className="px-4 py-3 font-medium">User</th>
                 <th className="px-4 py-3 font-medium">Email</th>
+                <th className="px-4 py-3 font-medium">Country</th>
                 <th className="px-4 py-3 font-medium">Plan</th>
                 <th className="px-4 py-3 font-medium">Role</th>
                 <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium">Sessions</th>
                 <th className="px-4 py-3 font-medium">Joined</th>
                 <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
@@ -164,6 +208,7 @@ export default function AdminUsersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{u.email}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{u.country || "—"}</td>
                   <td className="px-4 py-3">
                     <Badge variant={u.plan === "premium" ? "default" : "secondary"} className="capitalize">
                       {u.plan}
@@ -186,7 +231,6 @@ export default function AdminUsersPage() {
                       {u.isBanned ? "banned" : "active"}
                     </span>
                   </td>
-                  <td className="px-4 py-3">{u.dailySessionCount}</td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {new Date(u.createdAt).toLocaleDateString()}
                   </td>
@@ -234,6 +278,86 @@ export default function AdminUsersPage() {
           </table>
         )}
       </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create User</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={createUser} className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Display Name</label>
+                <Input
+                  required
+                  value={form.displayName}
+                  onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                  placeholder="Jane Doe"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Username</label>
+                <Input
+                  required
+                  value={form.username}
+                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                  placeholder="janedoe"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Email</label>
+              <Input
+                required
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                placeholder="jane@example.com"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Password</label>
+              <Input
+                required
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder="Min 8 characters"
+                minLength={8}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Country</label>
+                <Input
+                  value={form.country}
+                  onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+                  placeholder="US"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Role</label>
+                <select
+                  value={form.role}
+                  onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as "user" | "admin" }))}
+                  className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring dark:bg-input/30"
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creating}>
+                {creating ? "Creating…" : "Create"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

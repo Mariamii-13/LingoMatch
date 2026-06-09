@@ -11,6 +11,7 @@ import {
   type LucideIcon,
   MessageSquare,
   Settings,
+  Shield,
   Users,
   Video,
 } from "lucide-react"
@@ -74,6 +75,7 @@ export function Sidebar() {
   const name = session?.user?.name ?? "User"
   const username = (session?.user as { username?: string })?.username ?? "me"
   const plan = (session?.user as { plan?: string })?.plan ?? "free"
+  const role = (session?.user as { role?: string })?.role
   const image = session?.user?.image ?? ""
   const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
 
@@ -94,6 +96,12 @@ export function Sidebar() {
         {socialNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
         <SectionLabel label="Account" />
         {bottomNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        {role === "admin" && (
+          <NavLink
+            item={{ label: "Admin", href: "/admin/dashboard", icon: Shield }}
+            pathname={pathname}
+          />
+        )}
       </nav>
 
       <div className="border-t p-2 lg:p-3">

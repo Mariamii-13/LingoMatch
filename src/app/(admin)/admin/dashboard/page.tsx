@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import {
   Bar,
   BarChart,
@@ -11,18 +12,19 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
-import { DollarSign, FileWarning, Mic, Users } from "lucide-react"
+import { FileStack, MessageSquare, Network, Users } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
-import { adminReports, adminStats, dauTrend, sessionsByMode } from "@/lib/mock-data"
+import { adminReports, dauTrend, sessionsByMode } from "@/lib/mock-data"
 
-const cards = [
-  { label: "Daily Active Users", value: adminStats.dau.toLocaleString(), icon: Users, change: "+4.2%" },
-  { label: "Sessions Today", value: adminStats.sessionsToday.toLocaleString(), icon: Mic, change: "+1.8%" },
-  { label: "Revenue Today", value: `$${adminStats.revenueToday.toLocaleString()}`, icon: DollarSign, change: "+6.1%" },
-  { label: "Open Reports", value: adminStats.openReports, icon: FileWarning, change: "-2" },
-]
+type Stats = {
+  totalUsers: number
+  activeUsers: number
+  totalUploads: number
+  totalMatches: number
+  totalMessages: number
+}
 
 const statusStyles: Record<string, string> = {
   pending: "bg-amber-500/15 text-amber-600",
@@ -31,6 +33,42 @@ const statusStyles: Record<string, string> = {
 }
 
 export default function AdminDashboardPage() {
+  const [stats, setStats] = React.useState<Stats | null>(null)
+
+  React.useEffect(() => {
+    fetch("/api/admin/stats")
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => null)
+  }, [])
+
+  const cards = [
+    {
+      label: "Total Users",
+      value: stats?.totalUsers.toLocaleString() ?? "—",
+      icon: Users,
+      sub: `${stats?.activeUsers.toLocaleString() ?? "—"} active`,
+    },
+    {
+      label: "Total Uploads",
+      value: stats?.totalUploads.toLocaleString() ?? "—",
+      icon: FileStack,
+      sub: "files on Cloudinary",
+    },
+    {
+      label: "Total Matches",
+      value: stats?.totalMatches.toLocaleString() ?? "—",
+      icon: Network,
+      sub: "conversations started",
+    },
+    {
+      label: "Total Messages",
+      value: stats?.totalMessages.toLocaleString() ?? "—",
+      icon: MessageSquare,
+      sub: "across all sessions",
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <div>
@@ -48,9 +86,9 @@ export default function AdminDashboardPage() {
                 <span className="text-sm text-muted-foreground">{c.label}</span>
                 <Icon className="size-4 text-primary" />
               </div>
-              <div className="mt-2 flex items-end justify-between">
+              <div className="mt-2">
                 <p className="text-2xl font-bold">{c.value}</p>
-                <Badge variant="secondary">{c.change}</Badge>
+                <p className="mt-0.5 text-xs text-muted-foreground">{c.sub}</p>
               </div>
             </div>
           )
