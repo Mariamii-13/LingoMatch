@@ -1,4 +1,8 @@
 import mongoose from 'mongoose'
+import dns from 'dns'
+
+// System DNS refuses SRV queries; force Google DNS globally
+dns.setServers(['8.8.8.8', '8.8.4.4'])
 
 declare global {
   // eslint-disable-next-line no-var
