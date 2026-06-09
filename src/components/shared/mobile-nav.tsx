@@ -2,16 +2,16 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Calendar, LayoutDashboard, MessageSquare, Users, Zap } from "lucide-react"
+import { Inbox, LayoutDashboard, MessageSquare, Users, Video } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 const items = [
-  { label: "Home", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Match", href: "/match", icon: Zap },
-  { label: "Friends", href: "/friends", icon: Users },
-  { label: "Schedule", href: "/schedule", icon: Calendar },
-  { label: "Community", href: "/community", icon: MessageSquare },
+  { label: "Home",     href: "/dashboard",  icon: LayoutDashboard },
+  { label: "Chat",     href: "/match/chat", icon: MessageSquare },
+  { label: "Video",    href: "/match/video", icon: Video },
+  { label: "Messages", href: "/messages",   icon: Inbox },
+  { label: "Friends",  href: "/friends",    icon: Users },
 ]
 
 export function MobileNav() {
@@ -20,8 +20,7 @@ export function MobileNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t bg-background/90 backdrop-blur-md lg:hidden">
       {items.map((item) => {
-        const active =
-          pathname === item.href || pathname.startsWith(item.href + "/")
+        const active = pathname === item.href || pathname.startsWith(item.href + "/")
         const Icon = item.icon
         return (
           <Link

@@ -5,27 +5,67 @@ import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
   Calendar,
+  Inbox,
+  Languages,
   LayoutDashboard,
   type LucideIcon,
   MessageSquare,
-  Mic,
   Settings,
   Users,
-  Zap,
+  Video,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-export const navItems: { label: string; href: string; icon: LucideIcon }[] = [
+type NavItem = { label: string; href: string; icon: LucideIcon }
+
+const mainNav: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Find Match", href: "/match", icon: Zap },
+]
+
+const matchNav: NavItem[] = [
+  { label: "Chat Match", href: "/match/chat", icon: MessageSquare },
+  { label: "Video Match", href: "/match/video", icon: Video },
+]
+
+const socialNav: NavItem[] = [
+  { label: "Messages", href: "/messages", icon: Inbox },
   { label: "Friends", href: "/friends", icon: Users },
   { label: "Schedule", href: "/schedule", icon: Calendar },
-  { label: "Community", href: "/community", icon: MessageSquare },
+]
+
+const bottomNav: NavItem[] = [
   { label: "Settings", href: "/settings", icon: Settings },
 ]
+
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = pathname === item.href || pathname.startsWith(item.href + "/")
+  const Icon = item.icon
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+        active
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+      )}
+    >
+      <Icon className="size-5 shrink-0" />
+      <span className="hidden lg:inline">{item.label}</span>
+    </Link>
+  )
+}
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <p className="hidden px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground lg:block">
+      {label}
+    </p>
+  )
+}
 
 export function Sidebar() {
   const pathname = usePathname()
@@ -35,43 +75,25 @@ export function Sidebar() {
   const username = (session?.user as { username?: string })?.username ?? "me"
   const plan = (session?.user as { plan?: string })?.plan ?? "free"
   const image = session?.user?.image ?? ""
-  const initials = name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
+  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
 
   return (
     <aside className="sticky top-0 hidden h-screen w-16 shrink-0 flex-col border-r bg-sidebar lg:flex lg:w-64">
       <div className="flex h-14 items-center gap-2 border-b px-4">
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Mic className="size-4" />
+          <Languages className="size-4" />
         </span>
         <span className="hidden text-base font-semibold lg:inline">LingoMatch</span>
       </div>
 
-      <nav className="flex-1 space-y-1 p-2 lg:p-3">
-        {navItems.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(item.href + "/")
-          const Icon = item.icon
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                active
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )}
-            >
-              <Icon className="size-5 shrink-0" />
-              <span className="hidden lg:inline">{item.label}</span>
-            </Link>
-          )
-        })}
+      <nav className="flex-1 overflow-y-auto p-2 lg:p-3">
+        {mainNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        <SectionLabel label="Match" />
+        {matchNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        <SectionLabel label="Social" />
+        {socialNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        <SectionLabel label="Account" />
+        {bottomNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
       </nav>
 
       <div className="border-t p-2 lg:p-3">
@@ -87,10 +109,7 @@ export function Sidebar() {
           </Avatar>
           <div className="hidden min-w-0 flex-1 lg:block">
             <p className="truncate text-sm font-medium">{name}</p>
-            <Badge
-              variant={plan === "premium" ? "default" : "secondary"}
-              className="mt-0.5 capitalize"
-            >
+            <Badge variant={plan === "premium" ? "default" : "secondary"} className="mt-0.5 capitalize">
               {plan}
             </Badge>
           </div>

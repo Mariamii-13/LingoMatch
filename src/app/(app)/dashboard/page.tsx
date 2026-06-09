@@ -1,10 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { Calendar, Sparkles, Users } from "lucide-react"
+import { Calendar, MessageSquare, Sparkles, Users, Video } from "lucide-react"
 import { useSession } from "next-auth/react"
 
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -53,17 +52,27 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Find a Conversation CTA */}
-      <div className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-6 py-4 text-white shadow-lg">
-        <span className="text-lg font-bold">Find a Conversation</span>
-        <Button
-          variant="secondary"
-          size="sm"
-          className="shrink-0 bg-white text-violet-700 hover:bg-white/90 font-semibold"
-          render={<Link href="/match" />}
-        >
-          Find Now →
-        </Button>
+      {/* Match CTAs */}
+      <div className="rounded-2xl border bg-card p-5 shadow-sm">
+        <p className="mb-3 text-sm font-semibold text-muted-foreground">Start a conversation</p>
+        <div className="grid grid-cols-2 gap-3">
+          <Link
+            href="/match/chat"
+            className="flex flex-col items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-5 text-white transition-colors hover:bg-blue-700"
+          >
+            <MessageSquare className="size-6" />
+            <span className="text-sm font-semibold">Chat Match</span>
+            <span className="text-xs opacity-75">Text · Instant</span>
+          </Link>
+          <Link
+            href="/match/video"
+            className="flex flex-col items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-5 text-white transition-colors hover:bg-violet-700"
+          >
+            <Video className="size-6" />
+            <span className="text-sm font-semibold">Video Match</span>
+            <span className="text-xs opacity-75">Video · Voice · Chat</span>
+          </Link>
+        </div>
       </div>
 
       {/* AI Weekly Insight — promoted to main column */}
