@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
   Calendar,
+  Compass,
   Inbox,
   Languages,
   LayoutDashboard,
@@ -32,6 +33,7 @@ const matchNav: NavItem[] = [
 ]
 
 const socialNav: NavItem[] = [
+  { label: "Explore", href: "/explore", icon: Compass },
   { label: "Messages", href: "/messages", icon: Inbox },
   { label: "Friends", href: "/friends", icon: Users },
   { label: "Schedule", href: "/schedule", icon: Calendar },

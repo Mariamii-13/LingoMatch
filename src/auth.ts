@@ -88,7 +88,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true
     },
     async jwt({ token, user, account }) {
-      if (account?.provider === 'google') {
+      if (account?.provider === 'google' || user) {
         await connectDB()
         const dbUser = await User.findOne({ email: token.email })
         if (dbUser) {
@@ -98,14 +98,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role = dbUser.role
           token.onboardingCompleted = dbUser.onboardingCompleted
         }
-      } else if (user) {
-        token.id = user.id
-        token.username = (user as { username?: string }).username
-        token.plan = (user as { plan?: string }).plan
-        token.role = (user as { role?: string }).role
-        token.onboardingCompleted = (
-          user as { onboardingCompleted?: boolean }
-        ).onboardingCompleted
+      } else if (token.id) {
+        await connectDB()
+        const dbUser = await User.findById(token.id).select('role plan isBanned').lean() as { role?: string; plan?: string; isBanned?: boolean } | null
+        if (dbUser) {
+          token.role = dbUser.role
+          token.plan = dbUser.plan
+        }
       }
       return token
     },

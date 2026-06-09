@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
+import { UserSearch } from "@/components/shared/user-search"
 
 export function Navbar() {
   const { data: session } = useSession()
@@ -37,7 +38,7 @@ export function Navbar() {
         <span className="text-base font-semibold">LingoMatch</span>
       </Link>
 
-      <div className="hidden lg:block" />
+      <UserSearch />
 
       <div className="flex items-center gap-1 sm:gap-2">
         <ThemeToggle />

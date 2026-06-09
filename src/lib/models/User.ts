@@ -81,4 +81,7 @@ const UserSchema = new Schema(
   { timestamps: true }
 )
 
+// username and email have unique:true which creates B-tree indexes;
+// prefix-regex queries (^pattern) on those fields are index-backed.
+
 export default mongoose.models.User || mongoose.model('User', UserSchema)
