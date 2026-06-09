@@ -5,15 +5,13 @@ import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
   LiveKitRoom,
+  RoomAudioRenderer,
   useLocalParticipant,
-  useRemoteParticipants,
   VideoTrack,
-  AudioTrack,
   useTracks,
   useDataChannel,
 } from "@livekit/components-react"
-import "@livekit/components-styles"
-import { Track } from "livekit-client"
+import { LocalParticipant, Track } from "livekit-client"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SessionControls } from "./SessionControls"
 import { ChatPanel } from "./ChatPanel"
@@ -40,7 +38,6 @@ function VideoSessionInner({
   const [chatOpen, setChatOpen] = React.useState(false)
   const [messages, setMessages] = React.useState<Message[]>([])
   const { localParticipant } = useLocalParticipant()
-  const remoteParticipants = useRemoteParticipants()
   const remoteTracks = useTracks([Track.Source.Camera], { onlySubscribed: true })
   const localTracks = useTracks([Track.Source.Camera], { onlySubscribed: false })
 
@@ -85,8 +82,8 @@ function VideoSessionInner({
     })
   }
 
-  const remoteVideoTrack = remoteTracks.find(t => t.participant.isRemote)
-  const localVideoTrack = localTracks.find(t => !t.participant.isRemote)
+  const remoteVideoTrack = remoteTracks.find(t => !(t.participant instanceof LocalParticipant))
+  const localVideoTrack = localTracks.find(t => t.participant instanceof LocalParticipant)
 
   return (
     <div className="dark fixed inset-0 flex flex-col bg-zinc-950 text-white">
@@ -111,9 +108,7 @@ function VideoSessionInner({
           </div>
         )}
 
-        {remoteParticipants.map((p) => (
-          <AudioTrack key={p.identity} participant={p} source={Track.Source.Microphone} />
-        ))}
+        <RoomAudioRenderer />
 
         {chatOpen && (
           <ChatPanel
