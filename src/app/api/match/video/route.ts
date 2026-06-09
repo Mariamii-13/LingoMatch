@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/db'
 import MatchRequest from '@/lib/models/MatchRequest'
 import Conversation from '@/lib/models/Conversation'
 import User from '@/lib/models/User'
+import { createRoom } from '@/lib/livekit'
 
 function compatibilityPct(idA: string, idB: string): number {
   const hash = [...(idA + idB)].reduce((acc, c) => acc + c.charCodeAt(0), 0)
@@ -43,6 +44,7 @@ export async function POST(req: NextRequest) {
       livekitRoomName: 'lm-video-placeholder',
     })
     const livekitRoomName = `lm-video-${conv._id.toString()}`
+    await createRoom(livekitRoomName)
     await Conversation.findByIdAndUpdate(conv._id, { livekitRoomName })
     existing.conversationId = conv._id
     await existing.save()

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { AccessToken } from 'livekit-server-sdk'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import Conversation from '@/lib/models/Conversation'
+import { generateToken } from '@/lib/livekit'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
@@ -21,13 +21,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const roomName = conv.livekitRoomName ?? `lm-video-${id}`
 
-  const at = new AccessToken(
-    process.env.LIVEKIT_API_KEY!,
-    process.env.LIVEKIT_API_SECRET!,
-    { identity: session.user.id, name: session.user.name ?? 'User' }
-  )
-  at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true })
+  const token = await generateToken({
+    identity: session.user.id,
+    name: session.user.name ?? 'User',
+    roomName,
+    ttl: 3600,
+  })
 
-  const token = await at.toJwt()
   return NextResponse.json({ token, roomName, serverUrl: process.env.LIVEKIT_URL })
 }

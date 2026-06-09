@@ -3,7 +3,7 @@ import { auth } from "@/auth"
 import { connectDB } from "@/lib/db"
 import Conversation from "@/lib/models/Conversation"
 import User from "@/lib/models/User"
-import { AccessToken } from "livekit-server-sdk"
+import { generateToken } from "@/lib/livekit"
 import { VideoSession } from "@/components/session/VideoSession"
 
 export default async function VideoSessionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,13 +22,13 @@ export default async function VideoSessionPage({ params }: { params: Promise<{ i
   if (!partnerDoc) return notFound()
 
   const roomName = (conv.livekitRoomName as string) ?? `lm-video-${id}`
-  const at = new AccessToken(
-    process.env.LIVEKIT_API_KEY!,
-    process.env.LIVEKIT_API_SECRET!,
-    { identity: session.user.id, name: session.user.name ?? "User" }
-  )
-  at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true })
-  const token = await at.toJwt()
+
+  const token = await generateToken({
+    identity: session.user.id,
+    name: session.user.name ?? "User",
+    roomName,
+    ttl: 3600,
+  })
 
   const name = (partnerDoc.displayName as string) ?? "Partner"
   const initials = name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
@@ -51,7 +51,7 @@ export default async function VideoSessionPage({ params }: { params: Promise<{ i
       conversationId={id}
       partner={partner as Parameters<typeof VideoSession>[0]["partner"]}
       token={token}
-      serverUrl={process.env.LIVEKIT_URL!}
+      serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL!}
     />
   )
 }
