@@ -36,6 +36,7 @@ export interface Friend extends User {
 export interface Session {
   id: string
   partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor">
+  type: "chat" | "video"
   mode: string
   language: string
   date: string
@@ -62,6 +63,7 @@ export interface Feedback {
 export interface ScheduledSession {
   id: string
   partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor">
+  type: "chat" | "video"
   mode: string
   language: string
   date: string
@@ -110,4 +112,37 @@ export interface Notification {
     initials: string
     avatarColor: string
   }
+}
+
+export interface Message {
+  id: string
+  conversationId: string
+  senderId: string
+  senderName: string
+  senderInitials: string
+  senderAvatarColor: string
+  content: string
+  createdAt: string
+}
+
+export interface Conversation {
+  id: string
+  type: "chat" | "video"
+  partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor">
+  language: string
+  status: "active" | "ended"
+  lastMessage?: Pick<Message, "content" | "createdAt">
+  unreadCount: number
+  startedAt: string
+}
+
+export type MatchPhase = "idle" | "configuring" | "prejoin" | "searching" | "found"
+
+export interface MatchResult {
+  conversationId: string
+  partner: Pick<
+    User,
+    "id" | "name" | "username" | "country" | "flag" | "avatarInitials" | "avatarColor" | "native" | "learning" | "interests"
+  >
+  compatibilityPct: number
 }
