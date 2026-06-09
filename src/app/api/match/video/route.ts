@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       userId: { $ne: userId },
     },
     { $set: { status: 'matched' } },
-    { new: true }
+    { returnDocument: 'after' }
   )
 
   if (existing) {

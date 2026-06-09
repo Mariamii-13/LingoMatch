@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest) {
 
   await connectDB()
   const user = await User.findByIdAndUpdate(session.user.id, update, {
-    new: true,
+    returnDocument: 'after',
   }).select('-passwordHash')
 
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })

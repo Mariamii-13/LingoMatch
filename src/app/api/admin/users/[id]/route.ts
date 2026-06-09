@@ -27,7 +27,7 @@ export async function PATCH(
   }
 
   await connectDB()
-  const user = await User.findByIdAndUpdate(id, update, { new: true }).select(
+  const user = await User.findByIdAndUpdate(id, update, { returnDocument: 'after' }).select(
     '-passwordHash'
   )
   if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 })
