@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { countries } from "@/lib/mock-data"
+import { CountrySelector } from "@/components/country-selector"
 
 export default function OnboardingProfilePage() {
   const router = useRouter()
@@ -83,18 +83,12 @@ export default function OnboardingProfilePage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="country">Country</Label>
-          <select
-            id="country"
+          <Label>Country</Label>
+          <CountrySelector
             value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            className="h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-          >
-            <option value="">Select your country</option>
-            {countries.map((c) => (
-              <option key={c.name} value={c.name}>{c.flag} {c.name}</option>
-            ))}
-          </select>
+            onChange={setCountry}
+            placeholder="Select your country"
+          />
         </div>
 
         <div className="space-y-2">

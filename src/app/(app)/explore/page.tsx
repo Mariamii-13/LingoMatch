@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { languageOptions } from "@/lib/mock-data"
+import { CountrySelector } from "@/components/country-selector"
 
 type FriendStatus = "none" | "pending" | "friends"
 
@@ -240,20 +241,13 @@ export default function ExplorePage() {
           />
         </div>
 
-        <select
+        <CountrySelector
           value={country}
-          onChange={(e) => handleFilterChange("country", e.target.value)}
-          className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 dark:bg-input/30"
-        >
-          <option value="">All countries</option>
-          {[
-            "USA", "UK", "Canada", "Australia", "Germany", "France",
-            "Spain", "Japan", "South Korea", "Brazil", "Mexico",
-            "India", "China", "Italy", "Netherlands",
-          ].map((c) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
+          onChange={(val) => handleFilterChange("country", val)}
+          placeholder="All countries"
+          allowClear
+          className="h-9 sm:w-52"
+        />
 
         <select
           value={language}
