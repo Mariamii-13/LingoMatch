@@ -25,6 +25,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json()
   const allowed = [
     'displayName',
+    'bio',
     'country',
     'gender',
     'age',
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest) {
     'interests',
     'conversationModes',
     'onboardingCompleted',
+    'aiProfile',
   ]
   const update: Record<string, unknown> = {}
   for (const key of allowed) {

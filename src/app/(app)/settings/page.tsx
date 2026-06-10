@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowRight, Lock, Sparkles, Upload } from "lucide-react"
+import { Sparkles, Upload } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 
@@ -13,6 +13,9 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AIPreferencesForm } from "@/components/ai-preferences/AIPreferencesForm"
+import { languageOptions } from "@/lib/mock-data"
+import type { AIProfile } from "@/types"
 
 const MAX_BYTES = 2 * 1024 * 1024 // 2MB
 
@@ -46,6 +49,11 @@ export default function SettingsPage() {
   const [username, setUsername] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [plan, setPlan] = React.useState("free")
+  const [aiProfile, setAIProfile] = React.useState<Partial<AIProfile>>()
+  const [aiLearningLanguages, setAILearningLanguages] = React.useState<
+    { code: string; name: string; flag: string }[]
+  >([])
+  const [aiInterestTags, setAIInterestTags] = React.useState<string[]>([])
 
   React.useEffect(() => {
     fetch("/api/user/me")
@@ -56,6 +64,17 @@ export default function SettingsPage() {
         setUsername(u.username ?? "")
         setEmail(u.email ?? "")
         setPlan(u.plan ?? "free")
+        if (u.aiProfile) setAIProfile(u.aiProfile)
+        if (u.learningLanguages?.length) {
+          const langs = (u.learningLanguages as { code: string }[])
+            .map((l) => languageOptions.find((o) => o.code === l.code))
+            .filter(Boolean) as { code: string; name: string; flag: string }[]
+          setAILearningLanguages(langs)
+        }
+        if (u.interests) {
+          const tags = Object.values(u.interests as Record<string, string[]>).flat()
+          setAIInterestTags(tags)
+        }
       })
       .catch(() => {})
   }, [])
@@ -116,6 +135,41 @@ export default function SettingsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleAISave(profile: AIProfile) {
+    const res = await fetch("/api/user/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aiProfile: profile }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error ?? "Failed to save AI preferences")
+      throw new Error("Save failed")
+    }
+    setAIProfile(profile)
+    toast.success("AI preferences saved!")
+  }
+
+  async function handleAIReset() {
+    const res = await fetch("/api/user/me/ai-profile", { method: "DELETE" })
+    if (!res.ok) {
+      toast.error("Failed to reset preferences")
+      throw new Error("Reset failed")
+    }
+    setAIProfile(undefined)
+    toast.success("AI preferences reset to defaults.")
+  }
+
+  async function handleAIDelete() {
+    const res = await fetch("/api/user/me/ai-profile", { method: "DELETE" })
+    if (!res.ok) {
+      toast.error("Failed to delete AI preference data")
+      throw new Error("Delete failed")
+    }
+    setAIProfile(undefined)
+    toast.success("AI preference data deleted.")
   }
 
   const initials = displayName
@@ -242,18 +296,15 @@ export default function SettingsPage() {
 
         {/* AI Preferences */}
         <TabsContent value="ai" className="mt-6">
-          <div className="rounded-xl border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-2">
-              <Lock className="size-4 text-primary" />
-              <h3 className="font-semibold">Private AI preferences</h3>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">
-              These help us match you better. Only AI can see them — never other users.
-            </p>
-            <Button variant="outline" className="mt-4" render={<Link href="/ai-preferences" />}>
-              Re-do AI preferences <ArrowRight className="size-4" />
-            </Button>
-          </div>
+          <AIPreferencesForm
+            initialProfile={aiProfile}
+            learningLanguages={aiLearningLanguages}
+            interestTags={aiInterestTags}
+            mode="settings"
+            onSave={handleAISave}
+            onReset={handleAIReset}
+            onDelete={handleAIDelete}
+          />
         </TabsContent>
 
         {/* Notifications */}

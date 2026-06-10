@@ -66,6 +66,7 @@ export default function OnboardingProfilePage() {
           ...(country && { country }),
           ...(gender && { gender }),
           ...(age !== undefined && { age }),
+          ...(bio.trim() && { bio: bio.trim() }),
         }),
       })
       if (!res.ok) {

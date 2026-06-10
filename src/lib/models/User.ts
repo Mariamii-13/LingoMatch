@@ -1,5 +1,22 @@
 import mongoose, { Schema } from 'mongoose'
 
+const AIProfileSchema = new Schema(
+  {
+    conversationGoals: { type: [String], default: [] },
+    matchingPriority: { type: String, default: '' },
+    socialEnergy: { type: Number, default: 5 },
+    comfortLevel: { type: Number, default: 6 },
+    socialAnxietyLevel: { type: Number, default: 4 },
+    pace: { type: String, enum: ['Slow', 'Medium', 'Fast'], default: 'Medium' },
+    style: { type: String, enum: ['Formal', 'Casual'], default: 'Casual' },
+    preferredTraits: { type: [String], default: [] },
+    personalityNotes: { type: String, default: '' },
+    topicsToAvoid: { type: [String], default: [] },
+    aiConversationStarters: { type: Boolean, default: true },
+  },
+  { _id: false }
+)
+
 const LearningLanguageSchema = new Schema(
   {
     code: { type: String, required: true },
@@ -42,6 +59,7 @@ const UserSchema = new Schema(
     passwordHash: { type: String, default: null },
     googleId: { type: String, default: null },
     avatar: { type: String, default: '' },
+    bio: { type: String, default: '' },
     voiceIntro: { type: String, default: '' },
     country: { type: String, default: '' },
     gender: { type: String, enum: ['male', 'female', 'other', ''], default: '' },
@@ -54,6 +72,10 @@ const UserSchema = new Schema(
       default: () => ({}),
     },
     conversationModes: { type: [String], default: [] },
+    aiProfile: {
+      type: AIProfileSchema,
+      default: () => ({}),
+    },
     plan: { type: String, enum: ['free', 'premium'], default: 'free' },
     planExpiry: { type: Date, default: null },
     stripeCustomerId: { type: String, default: null },
@@ -85,5 +107,7 @@ const UserSchema = new Schema(
 
 // username and email have unique:true which creates B-tree indexes;
 // prefix-regex queries (^pattern) on those fields are index-backed.
+// friendRequests.from index supports the sent-requests reverse lookup.
+UserSchema.index({ 'friendRequests.from': 1 })
 
 export default mongoose.models.User || mongoose.model('User', UserSchema)

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { MessageSquare } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { MatchConfigForm } from "@/components/match/MatchConfigForm"
 import { SearchingState } from "@/components/match/SearchingState"
@@ -15,42 +16,72 @@ export default function ChatMatchPage() {
   const [targetLanguage, setTargetLanguage] = React.useState("KO")
   const [nativeLanguage, setNativeLanguage] = React.useState("EN")
   const [interests, setInterests] = React.useState<string[]>([])
+  const [countryPreference, setCountryPreference] = React.useState("")
   const [matchResult, setMatchResult] = React.useState<MatchResult | null>(null)
+  const [requestId, setRequestId] = React.useState<string | null>(null)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
 
   const stopPolling = () => {
     if (pollRef.current) clearInterval(pollRef.current)
   }
 
+  async function cancelQueue() {
+    stopPolling()
+    if (requestId) {
+      await fetch(`/api/match/chat/cancel?requestId=${requestId}`, { method: "DELETE" }).catch(() => {})
+    }
+    setRequestId(null)
+    setPhase("idle")
+  }
+
   const handleFind = async () => {
     setPhase("searching")
-    const res = await fetch("/api/match/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetLanguage, nativeLanguage, interests }),
-    })
-    const data = await res.json()
+    try {
+      const res = await fetch("/api/match/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetLanguage, nativeLanguage, interests, countryPreference }),
+      })
+      if (!res.ok) throw new Error()
+      const data = await res.json()
 
-    if (data.matched) {
-      setMatchResult(data)
-      setPhase("found")
-      return
-    }
-
-    pollRef.current = setInterval(async () => {
-      const poll = await fetch(`/api/match/chat?requestId=${data.requestId}`)
-      const pollData = await poll.json()
-      if (pollData.matched) {
-        stopPolling()
-        setMatchResult(pollData)
+      if (data.matched) {
+        setMatchResult(data)
         setPhase("found")
+        return
       }
-    }, 2000)
+
+      setRequestId(data.requestId)
+
+      pollRef.current = setInterval(async () => {
+        const poll = await fetch(`/api/match/chat?requestId=${data.requestId}`)
+        const pollData = await poll.json()
+
+        if (pollData.expired || pollData.cancelled) {
+          stopPolling()
+          setRequestId(null)
+          setPhase("idle")
+          toast.info("No match found. Try again!")
+          return
+        }
+
+        if (pollData.matched) {
+          stopPolling()
+          setMatchResult(pollData)
+          setPhase("found")
+        }
+      }, 2000)
+    } catch {
+      setPhase("idle")
+      toast.error("Failed to join queue. Please try again.")
+    }
   }
 
   React.useEffect(() => () => stopPolling(), [])
 
-  if (phase === "searching") return <SearchingState onCancel={() => { stopPolling(); setPhase("idle") }} />
+  if (phase === "searching") {
+    return <SearchingState onCancel={cancelQueue} />
+  }
 
   return (
     <div className="space-y-6">
@@ -69,9 +100,11 @@ export default function ChatMatchPage() {
           targetLanguage={targetLanguage}
           nativeLanguage={nativeLanguage}
           interests={interests}
+          countryPreference={countryPreference}
           onTargetLanguage={setTargetLanguage}
           onNativeLanguage={setNativeLanguage}
           onInterests={setInterests}
+          onCountryPreference={setCountryPreference}
         />
 
         <div className="mt-6 border-t pt-5">
@@ -89,8 +122,7 @@ export default function ChatMatchPage() {
       {matchResult && phase === "found" && (
         <MatchFoundModal
           result={matchResult}
-          onStartChat={() => router.push(`/session/chat/${matchResult.conversationId}`)}
-          onJoinVideo={() => router.push(`/session/video/${matchResult.conversationId}`)}
+          onStartChat={() => router.push(`/chat/${matchResult.conversationId}`)}
           onSkip={() => { setMatchResult(null); setPhase("idle") }}
         />
       )}

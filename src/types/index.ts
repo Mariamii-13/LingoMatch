@@ -78,14 +78,59 @@ export interface ConversationMode {
   description: string
 }
 
-export interface AIPreferences {
-  personality: string
+export type ConversationGoal =
+  | "Language Practice"
+  | "New Friends"
+  | "Cultural Exchange"
+  | "Daily Conversations"
+  | "Deep Discussions"
+  | "Casual Chat"
+  | "Anything"
+
+export type MatchingPriority =
+  | "Same language goals"
+  | "Same interests"
+  | "Similar personality"
+  | "Similar communication style"
+  | "Similar age"
+  | "Surprise me"
+
+export type PreferredTrait =
+  | "Patient"
+  | "Funny"
+  | "Curious"
+  | "Supportive"
+  | "Talkative"
+  | "Good Listener"
+  | "Calm"
+  | "Open-minded"
+
+export type TopicToAvoid =
+  | "No Preference"
+  | "Politics"
+  | "Religion"
+  | "Dating"
+  | "Personal Finance"
+  | "Mental Health"
+  | "Family Topics"
+  | "Other"
+
+export interface AIProfile {
+  conversationGoals: ConversationGoal[]
+  matchingPriority: MatchingPriority | ""
+  socialEnergy: number
   comfortLevel: number
   socialAnxietyLevel: number
-  topicsToAvoid: string
   pace: "Slow" | "Medium" | "Fast"
   style: "Formal" | "Casual"
+  preferredTraits: PreferredTrait[]
+  personalityNotes: string
+  topicsToAvoid: TopicToAvoid[]
+  aiConversationStarters: boolean
 }
+
+/** @deprecated use AIProfile */
+export type AIPreferences = AIProfile
 
 export interface Stats {
   totalSessions: number

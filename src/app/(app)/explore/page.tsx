@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { Search, Loader2, UserPlus, Users, Clock } from "lucide-react"
+import { Check, Clock, Loader2, Search, Sparkles, UserCheck, UserPlus, Users } from "lucide-react"
+import { toast } from "sonner"
 
+import { avatarGradient } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -11,17 +13,18 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { languageOptions } from "@/lib/mock-data"
 import { CountrySelector } from "@/components/country-selector"
 
-type FriendStatus = "none" | "pending" | "friends"
+type FriendStatus = "none" | "pending_sent" | "pending_received" | "friends"
 
 interface ExploreUser {
-  _id: string
+  id: string
   username: string
-  email: string
   displayName: string
   avatar: string
+  bio: string
   country: string
   nativeLanguages: string[]
   learningLanguages: { code: string; level: string }[]
+  interestCategories: string[]
   friendStatus: FriendStatus
 }
 
@@ -35,6 +38,10 @@ const INTERESTS = [
   { key: "food", label: "Food" },
   { key: "hobbies", label: "Hobbies" },
 ]
+
+function langMeta(code: string) {
+  return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: "" }
+}
 
 function buildUrl(q: string, country: string, language: string, interest: string, page: number) {
   const params = new URLSearchParams()
@@ -54,22 +61,17 @@ function UserCardSkeleton() {
         <Skeleton className="size-12 rounded-full" />
         <div className="flex-1 space-y-2">
           <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-3 w-36" />
+          <Skeleton className="h-3 w-20" />
         </div>
       </div>
-      <Skeleton className="h-3 w-20" />
+      <Skeleton className="h-3 w-full" />
+      <Skeleton className="h-3 w-2/3" />
       <Skeleton className="h-8 w-full rounded-lg" />
     </div>
   )
 }
 
-function AddFriendButton({
-  userId,
-  initial,
-}: {
-  userId: string
-  initial: FriendStatus
-}) {
+function AddFriendButton({ userId, initial }: { userId: string; initial: FriendStatus }) {
   const [status, setStatus] = useState<FriendStatus>(initial)
   const [loading, setLoading] = useState(false)
 
@@ -81,7 +83,14 @@ function AddFriendButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetUserId: userId }),
       })
-      if (res.ok) setStatus("pending")
+      if (res.ok) {
+        setStatus("pending_sent")
+        toast.success("Friend request sent!")
+      } else {
+        toast.error("Failed to send request")
+      }
+    } catch {
+      toast.error("Failed to send request")
     } finally {
       setLoading(false)
     }
@@ -90,70 +99,98 @@ function AddFriendButton({
   if (status === "friends") {
     return (
       <Button variant="secondary" size="sm" className="w-full" disabled>
-        <Users className="size-4" /> Friends
+        <UserCheck className="size-4" /> Friends
       </Button>
     )
   }
-  if (status === "pending") {
+  if (status === "pending_sent") {
     return (
       <Button variant="secondary" size="sm" className="w-full" disabled>
         <Clock className="size-4" /> Request Sent
       </Button>
     )
   }
+  if (status === "pending_received") {
+    return (
+      <Button variant="outline" size="sm" className="w-full" render={<Link href={`/friends`} />}>
+        <Check className="size-4" /> Accept Request
+      </Button>
+    )
+  }
   return (
     <Button size="sm" className="w-full" onClick={handleAdd} disabled={loading}>
-      {loading ? (
-        <Loader2 className="size-4 animate-spin" />
-      ) : (
-        <UserPlus className="size-4" />
-      )}
+      {loading ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
       Add Friend
     </Button>
   )
 }
 
 function UserCard({ user }: { user: ExploreUser }) {
-  const lang = languageOptions.find((l) => l.code === user.nativeLanguages[0])
+  const gradient = avatarGradient(user.username)
+  const init = user.displayName.slice(0, 2).toUpperCase()
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border bg-card p-4 transition-shadow hover:shadow-md">
       <Link href={`/profile/${user.username}`} className="flex items-start gap-3">
         <Avatar className="size-12 shrink-0">
           {user.avatar ? <AvatarImage src={user.avatar} alt={user.displayName} /> : null}
-          <AvatarFallback className="bg-gradient-to-br from-violet-500 to-indigo-500 text-sm text-white">
-            {user.displayName.slice(0, 2).toUpperCase()}
+          <AvatarFallback className={`bg-gradient-to-br ${gradient} text-sm font-semibold text-white`}>
+            {init}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium leading-tight">{user.displayName}</p>
-          <p className="truncate text-sm text-muted-foreground">@{user.username}</p>
-          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            @{user.username}
+            {user.country ? ` · ${user.country}` : ""}
+          </p>
         </div>
       </Link>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {user.country && (
-          <Badge variant="secondary" className="text-xs">
-            {user.country}
-          </Badge>
-        )}
-        {lang && (
-          <Badge variant="outline" className="text-xs">
-            {lang.flag} {lang.name}
-          </Badge>
-        )}
-        {user.learningLanguages.slice(0, 2).map((ll) => {
-          const l = languageOptions.find((o) => o.code === ll.code)
-          return l ? (
-            <Badge key={ll.code} variant="outline" className="text-xs">
-              {l.flag} {l.name}
+      {user.bio && (
+        <p className="line-clamp-2 text-xs text-muted-foreground">{user.bio}</p>
+      )}
+
+      <div className="flex flex-wrap gap-1">
+        {user.nativeLanguages.map((code) => {
+          const l = langMeta(code)
+          return (
+            <Badge key={`n-${code}`} variant="secondary" className="text-xs">
+              {l.flag} {l.code}
             </Badge>
-          ) : null
+          )
+        })}
+        {user.learningLanguages.slice(0, 2).map(({ code, level }) => {
+          const l = langMeta(code)
+          return (
+            <Badge key={`l-${code}`} variant="outline" className="text-xs">
+              {l.flag} {l.code} · {level}
+            </Badge>
+          )
         })}
       </div>
 
-      <AddFriendButton userId={user._id} initial={user.friendStatus} />
+      {user.interestCategories.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {user.interestCategories.slice(0, 4).map((cat) => (
+            <span
+              key={cat}
+              className="rounded-full border bg-muted/50 px-2 py-0.5 text-xs capitalize text-muted-foreground"
+            >
+              {cat}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-auto flex gap-2">
+        <Button variant="outline" size="sm" className="flex-1" render={<Link href={`/profile/${user.username}`} />}>
+          <Users className="size-4" /> Profile
+        </Button>
+        <div className="flex-1">
+          <AddFriendButton userId={user.id} initial={user.friendStatus} />
+        </div>
+      </div>
     </div>
   )
 }
@@ -165,6 +202,7 @@ export default function ExplorePage() {
   const [interest, setInterest] = useState("")
   const [users, setUsers] = useState<ExploreUser[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(false)
@@ -172,7 +210,8 @@ export default function ExplorePage() {
 
   const fetchUsers = useCallback(
     async (q: string, c: string, l: string, i: string, p: number, append = false) => {
-      setLoading(true)
+      if (append) setLoadingMore(true)
+      else setLoading(true)
       try {
         const res = await fetch(buildUrl(q, c, l, i, p))
         if (!res.ok) throw new Error()
@@ -183,13 +222,13 @@ export default function ExplorePage() {
       } catch {
         if (!append) setUsers([])
       } finally {
-        setLoading(false)
+        if (append) setLoadingMore(false)
+        else setLoading(false)
       }
     },
     []
   )
 
-  // Initial load
   useEffect(() => {
     fetchUsers("", "", "", "", 1)
   }, [fetchUsers])
@@ -202,10 +241,7 @@ export default function ExplorePage() {
     debounceRef.current = setTimeout(() => fetchUsers(val, country, language, interest, 1), 300)
   }
 
-  function handleFilterChange(
-    type: "country" | "language" | "interest",
-    value: string
-  ) {
+  function handleFilterChange(type: "country" | "language" | "interest", value: string) {
     const next = { country, language, interest, [type]: value }
     if (type === "country") setCountry(value)
     if (type === "language") setLanguage(value)
@@ -223,45 +259,64 @@ export default function ExplorePage() {
   const hasFilters = query || country || language || interest
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 p-4 sm:p-6">
+    <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6">
       <div>
         <h1 className="text-2xl font-bold">Explore</h1>
         <p className="text-sm text-muted-foreground">Discover language partners</p>
       </div>
 
+      {/* Recommended For You — AI matching placeholder */}
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Sparkles className="size-4 text-primary" />
+          <h2 className="font-semibold">Recommended For You</h2>
+          <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+        </div>
+        <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center">
+          <Sparkles className="mx-auto mb-2 size-8 text-muted-foreground/40" />
+          <p className="text-sm font-medium text-muted-foreground">AI-powered recommendations coming soon</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            We&apos;ll match you based on your language goals, interests, and communication style.
+          </p>
+        </div>
+      </section>
+
       {/* Search + filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={query}
-            onChange={handleQueryChange}
-            placeholder="Search by username or email…"
-            className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 dark:bg-input/30"
+      <section className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="relative flex-1 sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={handleQueryChange}
+              placeholder="Search by username or name…"
+              className="h-9 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 dark:bg-input/30"
+            />
+          </div>
+
+          <CountrySelector
+            value={country}
+            onChange={(val) => handleFilterChange("country", val)}
+            placeholder="All countries"
+            allowClear
+            className="h-9 sm:w-52"
           />
+
+          <select
+            value={language}
+            onChange={(e) => handleFilterChange("language", e.target.value)}
+            className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 dark:bg-input/30"
+          >
+            <option value="">All languages</option>
+            {languageOptions.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.flag} {l.name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <CountrySelector
-          value={country}
-          onChange={(val) => handleFilterChange("country", val)}
-          placeholder="All countries"
-          allowClear
-          className="h-9 sm:w-52"
-        />
-
-        <select
-          value={language}
-          onChange={(e) => handleFilterChange("language", e.target.value)}
-          className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 dark:bg-input/30"
-        >
-          <option value="">All languages</option>
-          {languageOptions.map((l) => (
-            <option key={l.code} value={l.code}>
-              {l.flag} {l.name}
-            </option>
-          ))}
-        </select>
-
+        {/* Interest chips */}
         <div className="flex flex-wrap gap-1.5">
           {INTERESTS.map((i) => (
             <button
@@ -278,10 +333,10 @@ export default function ExplorePage() {
             </button>
           ))}
         </div>
-      </div>
+      </section>
 
       {/* Results */}
-      {loading && users.length === 0 ? (
+      {loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 8 }).map((_, k) => (
             <UserCardSkeleton key={k} />
@@ -291,30 +346,30 @@ export default function ExplorePage() {
         <div className="flex flex-col items-center gap-2 py-20 text-center">
           <Search className="size-10 text-muted-foreground/40" />
           <p className="font-medium">
-            {hasFilters ? "No users match your search" : "No users yet"}
+            {hasFilters ? "No users match your search" : "No users found"}
           </p>
           {hasFilters && (
             <p className="text-sm text-muted-foreground">Try different keywords or filters</p>
           )}
         </div>
       ) : (
-        <>
+        <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             {total} {total === 1 ? "user" : "users"} found
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {users.map((u) => (
-              <UserCard key={u._id} user={u} />
+              <UserCard key={u.id} user={u} />
             ))}
           </div>
           {hasMore && (
             <div className="flex justify-center pt-2">
-              <Button variant="outline" onClick={loadMore} disabled={loading}>
-                {loading ? <Loader2 className="size-4 animate-spin" /> : "Load more"}
+              <Button variant="outline" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? <Loader2 className="size-4 animate-spin" /> : "Load more"}
               </Button>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   )

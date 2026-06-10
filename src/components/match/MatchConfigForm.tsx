@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils"
 import { languageOptions } from "@/lib/mock-data"
+import { CountrySelector } from "@/components/country-selector"
 
 const INTERESTS = ["Anime", "Travel", "Gaming", "Music", "Food", "Books", "Movies", "Fitness"]
 
@@ -9,23 +10,25 @@ interface MatchConfigFormProps {
   targetLanguage: string
   nativeLanguage: string
   interests: string[]
+  countryPreference: string
   onTargetLanguage: (lang: string) => void
   onNativeLanguage: (lang: string) => void
   onInterests: (interests: string[]) => void
+  onCountryPreference: (country: string) => void
 }
 
 export function MatchConfigForm({
   targetLanguage,
   nativeLanguage,
   interests,
+  countryPreference,
   onTargetLanguage,
   onNativeLanguage,
   onInterests,
+  onCountryPreference,
 }: MatchConfigFormProps) {
   const toggleInterest = (i: string) =>
-    onInterests(
-      interests.includes(i) ? interests.filter((x) => x !== i) : [...interests, i]
-    )
+    onInterests(interests.includes(i) ? interests.filter((x) => x !== i) : [...interests, i])
 
   return (
     <div className="space-y-6">
@@ -73,6 +76,19 @@ export function MatchConfigForm({
             </button>
           ))}
         </div>
+      </div>
+
+      <div>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Partner country (optional)
+        </p>
+        <CountrySelector
+          value={countryPreference}
+          onChange={onCountryPreference}
+          placeholder="Any country"
+          allowClear
+          className="h-9 sm:w-64"
+        />
       </div>
 
       <div>

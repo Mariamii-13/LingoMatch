@@ -1,34 +1,197 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
-import { Check, MessageSquare, Mic, UserPlus, X } from "lucide-react"
+import { Check, Loader2, MessageSquare, UserMinus, UserPlus, X } from "lucide-react"
+import { toast } from "sonner"
 
-import { cn } from "@/lib/utils"
+import { avatarGradient } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { Friend } from "@/types"
-import { friendRequests, mockFriends, suggestedFriends } from "@/lib/mock-data"
+import { languageOptions } from "@/lib/mock-data"
 
-function LanguageBadges({ friend }: { friend: Friend }) {
+interface UserCard {
+  id: string
+  username: string
+  displayName: string
+  avatar: string
+  country: string
+  nativeLanguages: string[]
+  learningLanguages: { code: string; level: string }[]
+}
+
+interface FriendsData {
+  friends: UserCard[]
+  incoming: UserCard[]
+  sent: UserCard[]
+}
+
+function langMeta(code: string) {
+  return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: "" }
+}
+
+function initials(displayName: string) {
+  return displayName
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+function LanguageBadges({ user }: { user: UserCard }) {
   return (
     <div className="flex flex-wrap gap-1">
-      {friend.native.map((l) => (
-        <Badge key={`n-${l.code}`} variant="secondary">
-          {l.flag} {l.code}
-        </Badge>
-      ))}
-      {friend.learning.map((l) => (
-        <Badge key={`l-${l.code}`} variant="outline">
-          {l.flag} {l.code} · {l.level}
-        </Badge>
-      ))}
+      {user.nativeLanguages.map((code) => {
+        const l = langMeta(code)
+        return (
+          <Badge key={`n-${code}`} variant="secondary" className="text-xs">
+            {l.flag} {l.code}
+          </Badge>
+        )
+      })}
+      {user.learningLanguages.map(({ code, level }) => {
+        const l = langMeta(code)
+        return (
+          <Badge key={`l-${code}`} variant="outline" className="text-xs">
+            {l.flag} {l.code} · {level}
+          </Badge>
+        )
+      })}
     </div>
   )
 }
 
+function UserAvatar({ user }: { user: UserCard }) {
+  const gradient = avatarGradient(user.username)
+  const init = initials(user.displayName)
+  return (
+    <Avatar className="size-12 shrink-0">
+      {user.avatar ? <AvatarImage src={user.avatar} alt={user.displayName} /> : null}
+      <AvatarFallback className={`bg-gradient-to-br ${gradient} text-white font-semibold`}>
+        {init}
+      </AvatarFallback>
+    </Avatar>
+  )
+}
+
 export default function FriendsPage() {
+  const [data, setData] = React.useState<FriendsData | null>(null)
+  const [loading, setLoading] = React.useState(true)
+  const [fetchError, setFetchError] = React.useState(false)
+  const [busy, setBusy] = React.useState<Record<string, boolean>>({})
+
+  React.useEffect(() => {
+    fetch("/api/friends")
+      .then((r) => {
+        if (!r.ok) { setFetchError(true); return null }
+        return r.json()
+      })
+      .then((d) => { if (d) setData(d) })
+      .catch(() => setFetchError(true))
+      .finally(() => setLoading(false))
+  }, [])
+
+  function setBusyFor(id: string, val: boolean) {
+    setBusy((b) => ({ ...b, [id]: val }))
+  }
+
+  async function acceptRequest(user: UserCard) {
+    setBusyFor(user.id, true)
+    try {
+      const res = await fetch(`/api/friends/${user.id}/accept`, { method: "POST" })
+      if (!res.ok) { toast.error("Failed to accept request"); return }
+      setData((d) => {
+        if (!d) return d
+        return {
+          friends: [...d.friends, user],
+          incoming: d.incoming.filter((u) => u.id !== user.id),
+          sent: d.sent,
+        }
+      })
+      toast.success(`You and ${user.displayName} are now friends!`)
+    } catch {
+      toast.error("Failed to accept request")
+    } finally {
+      setBusyFor(user.id, false)
+    }
+  }
+
+  async function declineRequest(user: UserCard) {
+    setBusyFor(user.id, true)
+    try {
+      const res = await fetch(`/api/friends/${user.id}/decline`, { method: "POST" })
+      if (!res.ok) { toast.error("Failed to decline request"); return }
+      setData((d) => {
+        if (!d) return d
+        return { ...d, incoming: d.incoming.filter((u) => u.id !== user.id) }
+      })
+      toast.success("Request declined.")
+    } catch {
+      toast.error("Failed to decline request")
+    } finally {
+      setBusyFor(user.id, false)
+    }
+  }
+
+  async function cancelRequest(user: UserCard) {
+    setBusyFor(user.id, true)
+    try {
+      const res = await fetch(`/api/friends/${user.id}/request`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Failed to cancel request"); return }
+      setData((d) => {
+        if (!d) return d
+        return { ...d, sent: d.sent.filter((u) => u.id !== user.id) }
+      })
+      toast.success("Friend request cancelled.")
+    } catch {
+      toast.error("Failed to cancel request")
+    } finally {
+      setBusyFor(user.id, false)
+    }
+  }
+
+  async function removeFriend(user: UserCard) {
+    setBusyFor(user.id, true)
+    try {
+      const res = await fetch(`/api/friends/${user.id}`, { method: "DELETE" })
+      if (!res.ok) { toast.error("Failed to remove friend"); return }
+      setData((d) => {
+        if (!d) return d
+        return { ...d, friends: d.friends.filter((u) => u.id !== user.id) }
+      })
+      toast.success(`${user.displayName} removed from friends.`)
+    } catch {
+      toast.error("Failed to remove friend")
+    } finally {
+      setBusyFor(user.id, false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-20 text-center">
+        <p className="text-lg font-semibold">Something went wrong</p>
+        <p className="text-sm text-muted-foreground">Could not load friends. Please try again.</p>
+        <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    )
+  }
+
+  const friends = data?.friends ?? []
+  const incoming = data?.incoming ?? []
+  const sent = data?.sent ?? []
+
   return (
     <div className="space-y-6">
       <div>
@@ -40,122 +203,187 @@ export default function FriendsPage() {
 
       <Tabs defaultValue="friends">
         <TabsList>
-          <TabsTrigger value="friends">Friends</TabsTrigger>
-          <TabsTrigger value="requests">
-            Requests
-            <Badge variant="default" className="ml-1">
-              {friendRequests.length}
-            </Badge>
+          <TabsTrigger value="friends">
+            Friends
+            {friends.length > 0 && (
+              <Badge variant="secondary" className="ml-1.5">{friends.length}</Badge>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="find">Find Friends</TabsTrigger>
+          <TabsTrigger value="incoming">
+            Requests
+            {incoming.length > 0 && (
+              <Badge variant="default" className="ml-1.5">{incoming.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="sent">
+            Sent
+            {sent.length > 0 && (
+              <Badge variant="secondary" className="ml-1.5">{sent.length}</Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
-        {/* Friends */}
+        {/* Friends tab */}
         <TabsContent value="friends" className="mt-6">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {mockFriends.map((f) => (
-              <div key={f.id} className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="relative">
-                    <Avatar size="lg">
-                      <AvatarFallback className={`bg-gradient-to-br ${f.avatarColor} text-white`}>
-                        {f.avatarInitials}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span
-                      className={cn(
-                        "absolute bottom-0 right-0 size-3 rounded-full ring-2 ring-card",
-                        f.online ? "bg-emerald-500" : "bg-zinc-400"
-                      )}
-                    />
+          {friends.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <p className="text-lg font-semibold">No friends yet</p>
+              <p className="text-sm text-muted-foreground">
+                Explore users and send friend requests to start connecting.
+              </p>
+              <Button render={<Link href="/explore" />}>
+                <UserPlus className="size-4" /> Find People
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {friends.map((user) => (
+                <div key={user.id} className="rounded-xl border bg-card p-4 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <UserAvatar user={user} />
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/profile/${user.username}`}
+                        className="truncate font-medium hover:underline"
+                      >
+                        {user.displayName}
+                        {user.country ? ` · ${user.country}` : ""}
+                      </Link>
+                      <p className="text-xs text-muted-foreground">@{user.username}</p>
+                      <div className="mt-2">
+                        <LanguageBadges user={user} />
+                      </div>
+                    </div>
                   </div>
+                  <div className="mt-4 flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1" disabled title="Coming soon">
+                      <MessageSquare className="size-4" /> Chat
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      disabled={busy[user.id]}
+                      onClick={() => removeFriend(user)}
+                    >
+                      {busy[user.id]
+                        ? <Loader2 className="size-4 animate-spin" />
+                        : <UserMinus className="size-4" />}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Incoming requests tab */}
+        <TabsContent value="incoming" className="mt-6">
+          {incoming.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <p className="text-lg font-semibold">No pending requests</p>
+              <p className="text-sm text-muted-foreground">
+                When someone sends you a friend request, it will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {incoming.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm"
+                >
+                  <UserAvatar user={user} />
                   <div className="min-w-0 flex-1">
                     <Link
-                      href={`/profile/${f.username}`}
+                      href={`/profile/${user.username}`}
                       className="truncate font-medium hover:underline"
                     >
-                      {f.name} {f.flag}
+                      {user.displayName}
                     </Link>
                     <p className="text-xs text-muted-foreground">
-                      {f.online ? "Online" : f.lastActive}
+                      @{user.username}
+                      {user.country ? ` · ${user.country}` : ""}
                     </p>
-                    <div className="mt-2">
-                      <LanguageBadges friend={f} />
+                    <div className="mt-1.5">
+                      <LanguageBadges user={user} />
                     </div>
                   </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      size="icon-sm"
+                      aria-label="Accept"
+                      disabled={busy[user.id]}
+                      onClick={() => acceptRequest(user)}
+                    >
+                      {busy[user.id]
+                        ? <Loader2 className="size-4 animate-spin" />
+                        : <Check className="size-4" />}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Decline"
+                      disabled={busy[user.id]}
+                      onClick={() => declineRequest(user)}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="mt-4 flex gap-2">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <MessageSquare className="size-4" /> Chat
-                  </Button>
-                  <Button size="sm" className="flex-1" render={<Link href={`/session/${f.id}`} />}>
-                    <Mic className="size-4" /> Match
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
-        {/* Requests */}
-        <TabsContent value="requests" className="mt-6">
-          <div className="space-y-3">
-            {friendRequests.map((f) => (
-              <div
-                key={f.id}
-                className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm"
-              >
-                <Avatar size="lg">
-                  <AvatarFallback className={`bg-gradient-to-br ${f.avatarColor} text-white`}>
-                    {f.avatarInitials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{f.name} {f.flag}</p>
-                  <p className="text-xs text-muted-foreground">
-                    wants to connect · {f.lastActive}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="icon-sm" aria-label="Accept">
-                    <Check className="size-4" />
-                  </Button>
-                  <Button variant="outline" size="icon-sm" aria-label="Decline">
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </TabsContent>
-
-        {/* Find */}
-        <TabsContent value="find" className="mt-6">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {suggestedFriends.map((f) => (
-              <div key={f.id} className="rounded-xl border bg-card p-4 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <Avatar size="lg">
-                    <AvatarFallback className={`bg-gradient-to-br ${f.avatarColor} text-white`}>
-                      {f.avatarInitials}
-                    </AvatarFallback>
-                  </Avatar>
+        {/* Sent requests tab */}
+        <TabsContent value="sent" className="mt-6">
+          {sent.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <p className="text-lg font-semibold">No sent requests</p>
+              <p className="text-sm text-muted-foreground">
+                Friend requests you&apos;ve sent will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {sent.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-sm"
+                >
+                  <UserAvatar user={user} />
                   <div className="min-w-0 flex-1">
-                    <Link href={`/profile/${f.username}`} className="font-medium hover:underline">
-                      {f.name} {f.flag}
+                    <Link
+                      href={`/profile/${user.username}`}
+                      className="truncate font-medium hover:underline"
+                    >
+                      {user.displayName}
                     </Link>
-                    <p className="text-xs text-muted-foreground">{f.country}</p>
-                    <div className="mt-2">
-                      <LanguageBadges friend={f} />
+                    <p className="text-xs text-muted-foreground">
+                      @{user.username}
+                      {user.country ? ` · ${user.country}` : ""}
+                    </p>
+                    <div className="mt-1.5">
+                      <LanguageBadges user={user} />
                     </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={busy[user.id]}
+                    onClick={() => cancelRequest(user)}
+                  >
+                    {busy[user.id]
+                      ? <Loader2 className="size-4 animate-spin" />
+                      : <X className="size-4" />}
+                    Cancel
+                  </Button>
                 </div>
-                <Button size="sm" className="mt-4 w-full">
-                  <UserPlus className="size-4" /> Add Friend
-                </Button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

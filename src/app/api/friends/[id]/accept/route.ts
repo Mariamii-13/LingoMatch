@@ -11,13 +11,25 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { id: fromUserId } = await params
   const myId = session.user.id
 
-  await User.findByIdAndUpdate(myId, {
-    $pull: { friendRequests: { from: fromUserId } },
-    $addToSet: { friends: fromUserId },
-  })
-  await User.findByIdAndUpdate(fromUserId, {
-    $addToSet: { friends: myId },
-  })
+  // C2: verify the request actually exists before accepting
+  const me = await User.findById(myId).select('friendRequests').lean()
+  const requestExists = (
+    me as { friendRequests?: { from: { toString(): string } }[] } | null
+  )?.friendRequests?.some((r) => r.from.toString() === fromUserId)
+
+  if (!requestExists) {
+    return NextResponse.json({ error: 'No pending friend request from this user' }, { status: 400 })
+  }
+
+  await Promise.all([
+    User.findByIdAndUpdate(myId, {
+      $pull: { friendRequests: { from: fromUserId } },
+      $addToSet: { friends: fromUserId },
+    }),
+    User.findByIdAndUpdate(fromUserId, {
+      $addToSet: { friends: myId },
+    }),
+  ])
 
   return NextResponse.json({ ok: true })
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import mongoose from 'mongoose'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
@@ -10,19 +11,36 @@ export async function POST(req: NextRequest) {
   const { targetUserId } = await req.json()
   if (!targetUserId) return NextResponse.json({ error: 'targetUserId required' }, { status: 400 })
 
+  // C1: prevent self-friend requests
+  if (targetUserId === session.user.id) {
+    return NextResponse.json({ error: 'Cannot send friend request to yourself' }, { status: 400 })
+  }
+
   await connectDB()
 
-  const target = await User.findById(targetUserId)
+  const [target, me] = await Promise.all([
+    User.findById(targetUserId).select('friendRequests').lean(),
+    User.findById(session.user.id).select('friends').lean(),
+  ])
+
   if (!target) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  const alreadyRequested = target.friendRequests.some(
-    (r: { from: { toString(): string } }) => r.from.toString() === session.user!.id
-  )
-  if (alreadyRequested) return NextResponse.json({ ok: true, alreadyRequested: true })
+  // C4: prevent request if already friends
+  const alreadyFriends = (
+    (me as { friends?: mongoose.Types.ObjectId[] } | null)?.friends ?? []
+  ).some((id) => id.toString() === targetUserId)
+  if (alreadyFriends) return NextResponse.json({ ok: true, alreadyFriends: true })
 
-  await User.findByIdAndUpdate(targetUserId, {
-    $push: { friendRequests: { from: session.user.id } },
-  })
+  // C3: atomic conditional push — only inserts if 'from' not already present
+  const result = await User.findOneAndUpdate(
+    {
+      _id: targetUserId,
+      'friendRequests.from': { $ne: new mongoose.Types.ObjectId(session.user.id) },
+    },
+    { $push: { friendRequests: { from: session.user.id } } }
+  )
+
+  if (!result) return NextResponse.json({ ok: true, alreadyRequested: true })
 
   return NextResponse.json({ ok: true })
 }
