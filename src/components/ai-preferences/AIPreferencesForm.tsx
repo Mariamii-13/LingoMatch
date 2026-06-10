@@ -18,6 +18,7 @@ const CONVERSATION_GOALS: ConversationGoal[] = [
   "Daily Conversations",
   "Deep Discussions",
   "Casual Chat",
+  "Flirty Vibe",
   "Anything",
 ]
 

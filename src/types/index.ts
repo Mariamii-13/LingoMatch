@@ -85,6 +85,7 @@ export type ConversationGoal =
   | "Daily Conversations"
   | "Deep Discussions"
   | "Casual Chat"
+  | "Flirty Vibe"
   | "Anything"
 
 export type MatchingPriority =
