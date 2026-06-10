@@ -10,22 +10,22 @@ interface MatchConfigFormProps {
   targetLanguage: string
   nativeLanguage: string
   interests: string[]
-  countryPreference: string
+  countryPreference?: string
   onTargetLanguage: (lang: string) => void
   onNativeLanguage: (lang: string) => void
   onInterests: (interests: string[]) => void
-  onCountryPreference: (country: string) => void
+  onCountryPreference?: (country: string) => void
 }
 
 export function MatchConfigForm({
   targetLanguage,
   nativeLanguage,
   interests,
-  countryPreference,
+  countryPreference = '',
   onTargetLanguage,
   onNativeLanguage,
   onInterests,
-  onCountryPreference,
+  onCountryPreference = () => {},
 }: MatchConfigFormProps) {
   const toggleInterest = (i: string) =>
     onInterests(interests.includes(i) ? interests.filter((x) => x !== i) : [...interests, i])
