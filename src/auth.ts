@@ -43,6 +43,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: (credentials.email as string).toLowerCase(),
         })
         if (!user || !user.passwordHash) return null
+        if (user.isBanned) return null
 
         const passwordMatch = await bcrypt.compare(
           credentials.password as string,
@@ -67,6 +68,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === 'google') {
         await connectDB()
         const existing = await User.findOne({ email: user.email })
+
+        if (existing?.isBanned) return false
 
         if (!existing) {
           const username = await generateUniqueUsername(user.email!)
@@ -97,13 +100,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.plan = dbUser.plan
           token.role = dbUser.role
           token.onboardingCompleted = dbUser.onboardingCompleted
+          if (dbUser.displayName) token.name = dbUser.displayName
         }
       } else if (token.id) {
         await connectDB()
-        const dbUser = await User.findById(token.id).select('role plan isBanned').lean() as { role?: string; plan?: string; isBanned?: boolean } | null
+        const dbUser = await User.findById(token.id).select('role plan isBanned onboardingCompleted displayName').lean() as { role?: string; plan?: string; isBanned?: boolean; onboardingCompleted?: boolean; displayName?: string } | null
         if (dbUser) {
           token.role = dbUser.role
           token.plan = dbUser.plan
+          token.onboardingCompleted = dbUser.onboardingCompleted
+          if (dbUser.displayName) token.name = dbUser.displayName
         }
       }
       return token

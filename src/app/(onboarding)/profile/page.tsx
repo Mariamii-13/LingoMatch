@@ -1,8 +1,9 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { Camera } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Camera, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,10 +12,38 @@ import { Textarea } from "@/components/ui/textarea"
 import { countries } from "@/lib/mock-data"
 
 export default function OnboardingProfilePage() {
+  const router = useRouter()
   const [name, setName] = React.useState("")
   const [username, setUsername] = React.useState("")
   const [country, setCountry] = React.useState("")
   const [bio, setBio] = React.useState("")
+  const [saving, setSaving] = React.useState(false)
+
+  async function handleContinue() {
+    if (!name.trim()) { toast.error("Display name required"); return }
+    setSaving(true)
+    try {
+      const res = await fetch("/api/user/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: name.trim(),
+          ...(username.trim() && { username: username.trim() }),
+          ...(country && { country }),
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        toast.error(data.error ?? "Failed to save")
+        return
+      }
+      router.push("/ai-preferences")
+    } catch {
+      toast.error("Failed to save")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div>
@@ -36,12 +65,7 @@ export default function OnboardingProfilePage() {
 
         <div className="space-y-2">
           <Label htmlFor="name">Display name</Label>
-          <Input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Alex Rivera"
-          />
+          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Alex Rivera" />
         </div>
 
         <div className="space-y-2">
@@ -68,27 +92,21 @@ export default function OnboardingProfilePage() {
           >
             <option value="">Select your country</option>
             {countries.map((c) => (
-              <option key={c.name} value={c.name}>
-                {c.flag} {c.name}
-              </option>
+              <option key={c.name} value={c.name}>{c.flag} {c.name}</option>
             ))}
           </select>
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="bio">Bio</Label>
-          <Textarea
-            id="bio"
-            value={bio}
-            onChange={(e) => setBio(e.target.value)}
-            placeholder="Tell people a little about yourself..."
-            rows={4}
-          />
+          <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Tell people a little about yourself..." rows={4} />
         </div>
       </div>
 
       <div className="mt-8 flex justify-end">
-        <Button render={<Link href="/ai-preferences" />}>Continue</Button>
+        <Button onClick={handleContinue} disabled={saving}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : "Continue"}
+        </Button>
       </div>
     </div>
   )

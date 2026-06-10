@@ -1,9 +1,6 @@
 import mongoose from 'mongoose'
 import dns from 'dns'
 
-// System DNS refuses SRV queries; force Google DNS globally
-dns.setServers(['8.8.8.8', '8.8.4.4'])
-
 declare global {
   // eslint-disable-next-line no-var
   var mongoose: {
@@ -27,6 +24,7 @@ export async function connectDB() {
   if (cached.conn) return cached.conn
 
   if (!cached.promise) {
+    dns.setServers(['8.8.8.8', '8.8.4.4'])
     cached.promise = mongoose
       .connect(MONGODB_URI, {
         bufferCommands: false,

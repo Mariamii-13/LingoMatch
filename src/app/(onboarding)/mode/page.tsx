@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Check } from "lucide-react"
+import { Check, Loader2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -10,11 +10,30 @@ import { conversationModes } from "@/lib/mock-data"
 
 export default function OnboardingModePage() {
   const [selected, setSelected] = React.useState<string[]>(["friendly", "casual"])
+  const [saving, setSaving] = React.useState(false)
 
   const toggle = (id: string) =>
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
     )
+
+  async function handleFinish() {
+    setSaving(true)
+    try {
+      await fetch("/api/user/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationModes: selected,
+          onboardingCompleted: true,
+        }),
+      })
+    } catch {
+      // best-effort; proceed regardless
+    }
+    // Hard navigation forces JWT refresh so proxy sees onboardingCompleted=true
+    window.location.href = "/dashboard"
+  }
 
   return (
     <div>
@@ -53,7 +72,9 @@ export default function OnboardingModePage() {
 
       <div className="mt-8 flex items-center justify-between">
         <Button variant="ghost" render={<Link href="/interests" />}>Back</Button>
-        <Button render={<Link href="/dashboard" />}>Finish setup</Button>
+        <Button onClick={handleFinish} disabled={saving}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : "Finish setup"}
+        </Button>
       </div>
     </div>
   )

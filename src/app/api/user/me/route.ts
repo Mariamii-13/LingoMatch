@@ -40,6 +40,16 @@ export async function PATCH(req: NextRequest) {
   }
 
   await connectDB()
+
+  if ('username' in body) {
+    const uname = (body.username as string)?.trim().toLowerCase()
+    if (uname) {
+      const taken = await User.findOne({ username: uname, _id: { $ne: session.user.id } }).lean()
+      if (taken) return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
+      update.username = uname
+    }
+  }
+
   const user = await User.findByIdAndUpdate(session.user.id, update, {
     returnDocument: 'after',
   }).select('-passwordHash')
