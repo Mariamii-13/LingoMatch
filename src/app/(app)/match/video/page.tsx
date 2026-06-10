@@ -101,8 +101,7 @@ export default function VideoMatchPage() {
       {matchResult && phase === "found" && (
         <MatchFoundModal
           result={matchResult}
-          onStartChat={() => router.push(`/session/chat/${matchResult.conversationId}`)}
-          onJoinVideo={() => router.push(`/session/video/${matchResult.conversationId}`)}
+          onStartChat={() => router.push(`/session/video/${matchResult.conversationId}`)}
           onSkip={() => { setMatchResult(null); setPhase("idle") }}
         />
       )}
