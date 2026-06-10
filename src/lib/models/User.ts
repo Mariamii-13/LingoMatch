@@ -44,6 +44,8 @@ const UserSchema = new Schema(
     avatar: { type: String, default: '' },
     voiceIntro: { type: String, default: '' },
     country: { type: String, default: '' },
+    gender: { type: String, enum: ['male', 'female', 'other', ''], default: '' },
+    age: { type: Number, default: null },
     timezone: { type: String, default: '' },
     nativeLanguages: { type: [String], default: [] },
     learningLanguages: { type: [LearningLanguageSchema], default: [] },

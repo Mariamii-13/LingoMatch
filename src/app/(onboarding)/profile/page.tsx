@@ -2,7 +2,8 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { Camera, Loader2 } from "lucide-react"
+import { Camera, CalendarIcon, Loader2 } from "lucide-react"
+import { format } from "date-fns"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -10,17 +11,50 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { CountrySelector } from "@/components/country-selector"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DobPicker } from "@/components/dob-picker"
+import { cn } from "@/lib/utils"
+
+const GENDER_OPTIONS = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "other", label: "Other / Prefer not to say" },
+] as const
+
+type Gender = (typeof GENDER_OPTIONS)[number]["value"] | ""
+
+function calcAge(dob: Date): number {
+  const today = new Date()
+  let age = today.getFullYear() - dob.getFullYear()
+  const m = today.getMonth() - dob.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--
+  return age
+}
 
 export default function OnboardingProfilePage() {
   const router = useRouter()
   const [name, setName] = React.useState("")
   const [username, setUsername] = React.useState("")
   const [country, setCountry] = React.useState("")
+  const [gender, setGender] = React.useState<Gender>("")
+  const [dob, setDob] = React.useState<Date | undefined>()
   const [bio, setBio] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
+  const today = new Date()
+  const minDob = new Date(today.getFullYear() - 100, 0, 1)
+  const endOfCurrentYear = new Date(today.getFullYear(), 11, 31)
+
   async function handleContinue() {
     if (!name.trim()) { toast.error("Display name required"); return }
+    let age: number | undefined
+    if (dob) {
+      age = calcAge(dob)
+      if (age < 13) {
+        toast.error("You must be at least 13 years old to register")
+        return
+      }
+    }
     setSaving(true)
     try {
       const res = await fetch("/api/user/me", {
@@ -30,6 +64,8 @@ export default function OnboardingProfilePage() {
           displayName: name.trim(),
           ...(username.trim() && { username: username.trim() }),
           ...(country && { country }),
+          ...(gender && { gender }),
+          ...(age !== undefined && { age }),
         }),
       })
       if (!res.ok) {
@@ -84,11 +120,56 @@ export default function OnboardingProfilePage() {
 
         <div className="space-y-2">
           <Label>Country</Label>
-          <CountrySelector
-            value={country}
-            onChange={setCountry}
-            placeholder="Select your country"
-          />
+          <CountrySelector value={country} onChange={setCountry} placeholder="Select your country" />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Gender</Label>
+          <div className="flex flex-wrap gap-2">
+            {GENDER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setGender(gender === opt.value ? "" : opt.value)}
+                className={cn(
+                  "rounded-full border px-4 py-1.5 text-sm font-medium transition-all duration-150",
+                  gender === opt.value
+                    ? "border-purple-500 bg-purple-600 text-white shadow-sm shadow-purple-900/40"
+                    : "border-border bg-muted text-muted-foreground hover:border-purple-400 hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Date of Birth</Label>
+          <Popover>
+            <PopoverTrigger
+              className={cn(
+                "flex w-full items-center gap-2.5 rounded-lg border border-input bg-background px-3 py-2 text-sm",
+                "transition-colors hover:bg-accent/20",
+                "focus-visible:outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                !dob && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="size-4 shrink-0 text-muted-foreground" />
+              <span>{dob ? format(dob, "MMMM d, yyyy") : "Pick your date of birth"}</span>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto p-0">
+              <DobPicker
+                selected={dob}
+                onSelect={setDob}
+                startMonth={minDob}
+                endMonth={endOfCurrentYear}
+                defaultMonth={today}
+                disabled={(date) => date > today}
+              />
+            </PopoverContent>
+          </Popover>
+          <p className="text-xs text-muted-foreground">You must be at least 13 years old to register.</p>
         </div>
 
         <div className="space-y-2">

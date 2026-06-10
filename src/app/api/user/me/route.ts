@@ -26,6 +26,8 @@ export async function PATCH(req: NextRequest) {
   const allowed = [
     'displayName',
     'country',
+    'gender',
+    'age',
     'timezone',
     'avatar',
     'nativeLanguages',
