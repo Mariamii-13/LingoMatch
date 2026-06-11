@@ -14,6 +14,7 @@ const ConversationSchema = new Schema(
     startedAt: { type: Date, default: Date.now },
     endedAt: { type: Date, default: null },
     durationSeconds: { type: Number, default: null },
+    compatibilityPct: { type: Number, default: 75 },
     // Ephemeral typing indicator: { userId: lastTypingAt }
     typing: { type: Map, of: Date, default: {} },
   },

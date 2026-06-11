@@ -87,6 +87,7 @@ const UserSchema = new Schema(
     banReason: { type: String, default: null },
     role: { type: String, enum: ['user', 'admin'], default: 'user' },
     onboardingCompleted: { type: Boolean, default: false },
+    lastSeenAt: { type: Date, default: null },
     friends: {
       type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
       default: [],

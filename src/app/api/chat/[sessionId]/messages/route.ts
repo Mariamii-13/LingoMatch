@@ -4,6 +4,7 @@ import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import Conversation from '@/lib/models/Conversation'
 import Message from '@/lib/models/Message'
+import { checkRateLimit } from '@/lib/rateLimit'
 
 const TYPING_TIMEOUT_MS = 4000
 
@@ -78,6 +79,15 @@ export async function POST(
   }
   if (content.length > 2000) {
     return NextResponse.json({ error: 'Message too long' }, { status: 400 })
+  }
+
+  // Rate limit: 10 messages per 10 seconds
+  const { allowed } = await checkRateLimit('message', session.user.id, 10, 10)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Sending too fast. Slow down a bit.' },
+      { status: 429 }
+    )
   }
 
   await connectDB()

@@ -4,12 +4,14 @@ import * as React from "react"
 import { use } from "react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { ArrowLeft, Loader2, Send, UserPlus } from "lucide-react"
+import { ArrowLeft, Flag, Loader2, Send, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 
 import { avatarGradient, cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Partner {
   id: string
@@ -18,6 +20,7 @@ interface Partner {
   country: string
   avatarInitials: string
   avatarColor: string
+  lastSeenAt: string | null
   nativeLanguages: { code: string; name: string; flag: string }[]
 }
 
@@ -30,8 +33,235 @@ interface ChatMessage {
 
 type SessionStatus = "active" | "ended"
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+}
+
+function formatPresence(lastSeenAt: string | null | undefined): string {
+  if (!lastSeenAt) return ""
+  const diffMs = Date.now() - new Date(lastSeenAt).getTime()
+  if (diffMs < 3 * 60 * 1000) return "Online"
+  if (diffMs < 60 * 60 * 1000) return `Last seen ${Math.floor(diffMs / 60000)}m ago`
+  return "Last seen recently"
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+const REPORT_REASONS = [
+  "Spam",
+  "Harassment",
+  "Inappropriate Content",
+  "Fake Profile",
+  "Other",
+] as const
+
+function ReportModal({
+  partner,
+  sessionId,
+  onClose,
+}: {
+  partner: Partner
+  sessionId: string
+  onClose: () => void
+}) {
+  const [reason, setReason] = React.useState("")
+  const [details, setDetails] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+  const [done, setDone] = React.useState(false)
+
+  async function handleSubmit() {
+    if (!reason) return
+    setBusy(true)
+    try {
+      const res = await fetch("/api/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportedUserId: partner.id,
+          conversationId: sessionId,
+          reason,
+          details,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast.error(err.error ?? "Failed to submit report")
+        return
+      }
+      setDone(true)
+      setTimeout(onClose, 1800)
+    } catch {
+      toast.error("Failed to submit report")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border bg-card p-6 shadow-xl">
+        {done ? (
+          <div className="py-6 text-center">
+            <p className="text-3xl">✓</p>
+            <p className="mt-2 font-semibold">Report submitted</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Our moderation team will review it shortly.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Report User</h2>
+              <button
+                onClick={onClose}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Reporting <span className="font-medium text-foreground">{partner.name}</span>
+            </p>
+
+            <div className="mt-4 space-y-2">
+              {REPORT_REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setReason(r)}
+                  className={cn(
+                    "w-full rounded-xl border px-3 py-2 text-left text-sm transition-colors",
+                    reason === r
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "hover:bg-muted"
+                  )}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              placeholder="Additional details (optional)"
+              maxLength={500}
+              rows={2}
+              className="mt-3 w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+            />
+
+            <div className="mt-4 flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-rose-600 text-white hover:bg-rose-700"
+                disabled={!reason || busy}
+                onClick={handleSubmit}
+              >
+                {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />}
+                Submit Report
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FeedbackModal({
+  onSubmit,
+  onSkip,
+}: {
+  onSubmit: (rating: number, wouldTalkAgain: boolean, note: string) => Promise<void>
+  onSkip: () => void
+}) {
+  const [rating, setRating] = React.useState(0)
+  const [wouldTalkAgain, setWouldTalkAgain] = React.useState<boolean | null>(null)
+  const [note, setNote] = React.useState("")
+  const [busy, setBusy] = React.useState(false)
+
+  const canSubmit = rating > 0 && wouldTalkAgain !== null && !busy
+
+  async function handleSubmit() {
+    if (!canSubmit) return
+    setBusy(true)
+    await onSubmit(rating, wouldTalkAgain!, note)
+    setBusy(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border bg-card p-6 shadow-xl">
+        <h2 className="text-lg font-semibold">How was this conversation?</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">Your feedback improves future matches.</p>
+
+        {/* Star rating */}
+        <div className="mt-4 flex justify-center gap-2">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              onClick={() => setRating(star)}
+              className={cn(
+                "text-3xl transition-transform hover:scale-110",
+                star <= rating ? "text-amber-400" : "text-muted-foreground/25 hover:text-amber-300"
+              )}
+            >
+              ★
+            </button>
+          ))}
+        </div>
+
+        {/* Would talk again */}
+        <p className="mt-5 text-sm font-medium">Would you talk with this person again?</p>
+        <div className="mt-2 flex gap-3">
+          {(
+            [
+              { label: "Yes", value: true, active: "border-emerald-500 bg-emerald-500/10 text-emerald-500" },
+              { label: "No", value: false, active: "border-rose-500 bg-rose-500/10 text-rose-500" },
+            ] as const
+          ).map(({ label, value, active }) => (
+            <button
+              key={label}
+              onClick={() => setWouldTalkAgain(value)}
+              className={cn(
+                "flex-1 rounded-xl border py-2 text-sm font-medium transition-colors",
+                wouldTalkAgain === value ? active : "hover:bg-muted"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Optional note */}
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Anything else? (optional)"
+          maxLength={500}
+          rows={2}
+          className="mt-4 w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-ring focus:ring-2 focus:ring-ring/20"
+        />
+
+        <div className="mt-4 flex flex-col gap-2">
+          <Button className="w-full" disabled={!canSubmit} onClick={handleSubmit}>
+            {busy && <Loader2 className="mr-1.5 size-4 animate-spin" />}
+            Submit Feedback
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full text-sm text-muted-foreground"
+            onClick={onSkip}
+          >
+            Skip
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function PostChatModal({
@@ -63,7 +293,9 @@ function PostChatModal({
         </p>
 
         <Avatar className="mx-auto mt-4 size-16">
-          <AvatarFallback className={`bg-gradient-to-br ${partner.avatarColor} text-lg font-semibold text-white`}>
+          <AvatarFallback
+            className={`bg-gradient-to-br ${partner.avatarColor} text-lg font-semibold text-white`}
+          >
             {partner.avatarInitials}
           </AvatarFallback>
         </Avatar>
@@ -79,11 +311,19 @@ function PostChatModal({
             </Button>
           ) : (
             <Button className="w-full" onClick={handleAdd} disabled={addBusy}>
-              {addBusy ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
+              {addBusy ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <UserPlus className="size-4" />
+              )}
               Add Friend
             </Button>
           )}
-          <Button variant="ghost" className="w-full text-muted-foreground" onClick={onDismiss}>
+          <Button
+            variant="ghost"
+            className="w-full text-muted-foreground"
+            onClick={onDismiss}
+          >
             Not Now
           </Button>
         </div>
@@ -91,6 +331,8 @@ function PostChatModal({
     </div>
   )
 }
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ChatSessionPage({
   params,
@@ -109,7 +351,11 @@ export default function ChatSessionPage({
   const [inputValue, setInputValue] = React.useState("")
   const [sending, setSending] = React.useState(false)
   const [partnerTyping, setPartnerTyping] = React.useState(false)
+
+  // Modal state — feedback shows first, then add-friend
+  const [showFeedback, setShowFeedback] = React.useState(false)
   const [showPostChat, setShowPostChat] = React.useState(false)
+  const [showReport, setShowReport] = React.useState(false)
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
@@ -117,10 +363,20 @@ export default function ChatSessionPage({
   const typingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
 
-  // Scroll to bottom
+  // Scroll to bottom when messages or typing state changes
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, partnerTyping])
+
+  // Presence heartbeat — lets partner see "Online"
+  React.useEffect(() => {
+    function ping() {
+      fetch("/api/user/me/presence", { method: "POST" }).catch(() => {})
+    }
+    ping()
+    const id = setInterval(ping, 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Load session info + initial messages
   React.useEffect(() => {
@@ -131,7 +387,10 @@ export default function ChatSessionPage({
           fetch(`/api/chat/${sessionId}/messages`),
         ])
 
-        if (!infoRes.ok || !msgRes.ok) { setFetchError(true); return }
+        if (!infoRes.ok || !msgRes.ok) {
+          setFetchError(true)
+          return
+        }
 
         const info = await infoRes.json()
         const msgData = await msgRes.json()
@@ -145,7 +404,7 @@ export default function ChatSessionPage({
           lastMessageTimeRef.current = msgData.messages.at(-1)!.createdAt
         }
 
-        if (info.status === "ended") setShowPostChat(true)
+        if (info.status === "ended") setShowFeedback(true)
       } catch {
         setFetchError(true)
       } finally {
@@ -155,7 +414,7 @@ export default function ChatSessionPage({
     init()
   }, [sessionId])
 
-  // Poll for new messages
+  // Poll for new messages every 2 seconds while session is active
   React.useEffect(() => {
     if (sessionStatus !== "active") return
 
@@ -181,11 +440,13 @@ export default function ChatSessionPage({
       if (data.sessionStatus === "ended") {
         clearInterval(pollRef.current!)
         setSessionStatus("ended")
-        setShowPostChat(true)
+        setShowFeedback(true)
       }
     }, 2000)
 
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+    }
   }, [sessionId, sessionStatus])
 
   async function sendMessage() {
@@ -202,7 +463,8 @@ export default function ChatSessionPage({
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        toast.error(err.error === "Session ended" ? "Chat session has ended" : "Failed to send")
+        if (res.status === 429) toast.error("Sending too fast — slow down a bit")
+        else toast.error(err.error === "Session ended" ? "Chat session has ended" : "Failed to send")
         setInputValue(content)
         return
       }
@@ -227,7 +489,6 @@ export default function ChatSessionPage({
 
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     setInputValue(e.target.value)
-    // Debounced typing indicator
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
     typingTimerRef.current = setTimeout(() => {
       fetch(`/api/chat/${sessionId}/typing`, { method: "POST" }).catch(() => {})
@@ -238,6 +499,24 @@ export default function ChatSessionPage({
     if (pollRef.current) clearInterval(pollRef.current)
     await fetch(`/api/chat/${sessionId}/leave`, { method: "POST" }).catch(() => {})
     setSessionStatus("ended")
+    setShowFeedback(true)
+  }
+
+  async function handleFeedbackSubmit(
+    rating: number,
+    wouldTalkAgain: boolean,
+    note: string
+  ) {
+    try {
+      await fetch(`/api/chat/${sessionId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rating, wouldTalkAgain, note }),
+      })
+    } catch {
+      // Non-fatal — proceed to add-friend modal regardless
+    }
+    setShowFeedback(false)
     setShowPostChat(true)
   }
 
@@ -271,6 +550,8 @@ export default function ChatSessionPage({
     )
   }
 
+  const presenceText = formatPresence(partner.lastSeenAt)
+
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col overflow-hidden rounded-2xl border bg-card shadow-sm lg:h-[calc(100vh-6rem)]">
       {/* Header */}
@@ -286,7 +567,10 @@ export default function ChatSessionPage({
 
         <Avatar className="size-9">
           <AvatarFallback
-            className={cn("bg-gradient-to-br text-sm font-semibold text-white", avatarGradient(partner.username))}
+            className={cn(
+              "bg-gradient-to-br text-sm font-semibold text-white",
+              avatarGradient(partner.username)
+            )}
           >
             {partner.avatarInitials}
           </AvatarFallback>
@@ -295,10 +579,32 @@ export default function ChatSessionPage({
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold leading-tight">{partner.name}</p>
           <p className="truncate text-xs text-muted-foreground">
+            {presenceText ? (
+              <span
+                className={cn(
+                  "font-medium",
+                  presenceText === "Online" ? "text-emerald-500" : ""
+                )}
+              >
+                {presenceText}
+                {presenceText !== "Online" && partner.nativeLanguages.length > 0 && " · "}
+              </span>
+            ) : null}
             {partner.nativeLanguages.map((l) => `${l.flag} ${l.name}`).join(", ")}
             {partner.country ? ` · ${partner.country}` : ""}
           </p>
         </div>
+
+        {/* Report button */}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Report user"
+          className="shrink-0 text-muted-foreground hover:text-rose-500"
+          onClick={() => setShowReport(true)}
+        >
+          <Flag className="size-4" />
+        </Button>
 
         {sessionStatus === "active" ? (
           <Button
@@ -321,7 +627,7 @@ export default function ChatSessionPage({
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
             <p className="text-sm text-muted-foreground">
-              Say hello! Start the conversation in {" "}
+              Say hello! Start the conversation in{" "}
               <strong>{partner.nativeLanguages[0]?.name ?? "their language"}</strong>.
             </p>
           </div>
@@ -421,10 +727,32 @@ export default function ChatSessionPage({
       ) : (
         <div className="shrink-0 border-t px-4 py-3 text-center text-sm text-muted-foreground">
           Chat session ended.{" "}
-          <Link href="/match/chat" className="text-primary underline-offset-4 hover:underline">
+          <Link
+            href="/match/chat"
+            className="text-primary underline-offset-4 hover:underline"
+          >
             Find a new partner
           </Link>
         </div>
+      )}
+
+      {/* Modals — shown in sequence: Feedback → AddFriend */}
+      {showReport && partner && (
+        <ReportModal
+          partner={partner}
+          sessionId={sessionId}
+          onClose={() => setShowReport(false)}
+        />
+      )}
+
+      {showFeedback && (
+        <FeedbackModal
+          onSubmit={handleFeedbackSubmit}
+          onSkip={() => {
+            setShowFeedback(false)
+            setShowPostChat(true)
+          }}
+        />
       )}
 
       {showPostChat && partner && (

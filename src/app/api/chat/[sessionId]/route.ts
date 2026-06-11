@@ -31,7 +31,7 @@ export async function GET(
 
   const partnerId = participants.find((p) => p.toString() !== session.user!.id)
   const partnerDoc = await User.findById(partnerId)
-    .select('displayName username avatar country nativeLanguages learningLanguages')
+    .select('displayName username avatar country nativeLanguages learningLanguages lastSeenAt')
     .lean() as Record<string, unknown>
 
   const name = (partnerDoc.displayName as string) ?? 'Partner'
@@ -51,6 +51,9 @@ export async function GET(
       country: (partnerDoc.country as string) || '',
       avatarInitials: initials,
       avatarColor: avatarGradient(username),
+      lastSeenAt: partnerDoc.lastSeenAt
+        ? (partnerDoc.lastSeenAt as Date).toISOString()
+        : null,
       nativeLanguages: nativeCodes.map((code) => {
         const l = langMeta(code)
         return { code: l.code, name: l.name, flag: l.flag }

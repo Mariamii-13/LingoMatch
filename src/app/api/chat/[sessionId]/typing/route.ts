@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import Conversation from '@/lib/models/Conversation'
+import { checkRateLimit } from '@/lib/rateLimit'
 
 export async function POST(
   _req: NextRequest,
@@ -11,6 +12,11 @@ export async function POST(
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { sessionId } = await params
+
+  // Rate limit: 30 typing events per 60 seconds (≈1 every 2s, prevents automation spam)
+  const { allowed } = await checkRateLimit('typing', session.user.id, 30, 60)
+  if (!allowed) return NextResponse.json({ ok: true }) // silently drop, not a user error
+
   await connectDB()
 
   const conv = await Conversation.findOneAndUpdate(

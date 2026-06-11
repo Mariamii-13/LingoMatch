@@ -6,6 +6,8 @@ import Conversation from '@/lib/models/Conversation'
 import User from '@/lib/models/User'
 import { avatarGradient } from '@/lib/utils'
 import { languageOptions } from '@/lib/mock-data'
+import { checkRateLimit } from '@/lib/rateLimit'
+import { activeProvider, type MatchCandidate } from '@/lib/matching'
 
 function langMeta(code: string) {
   return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: '' }
@@ -79,14 +81,32 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json()
+  const body = await req.json().catch(() => ({}))
   const { targetLanguage, nativeLanguage, interests = [], countryPreference = '' } = body
 
   if (!targetLanguage || !nativeLanguage)
-    return NextResponse.json({ error: 'targetLanguage and nativeLanguage required' }, { status: 400 })
+    return NextResponse.json(
+      { error: 'targetLanguage and nativeLanguage required' },
+      { status: 400 }
+    )
+
+  // Rate limit: 5 queue joins per minute
+  const { allowed } = await checkRateLimit('match-queue', session.user.id, 5, 60)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Too many match requests. Wait a moment before trying again.' },
+      { status: 429 }
+    )
+  }
 
   await connectDB()
   const userId = session.user.id
+
+  // Cancel any existing waiting request from this user to prevent queue spam
+  await MatchRequest.findOneAndUpdate(
+    { userId, type: 'chat', status: 'waiting' },
+    { $set: { status: 'cancelled' } }
+  )
 
   const existing = await tryMatch(userId, targetLanguage, nativeLanguage, countryPreference)
 
@@ -95,11 +115,28 @@ export async function POST(req: NextRequest) {
       .select('displayName username avatar country nativeLanguages learningLanguages')
       .lean() as Record<string, unknown>
 
+    const candidate1: MatchCandidate = {
+      userId,
+      targetLanguage,
+      nativeLanguage,
+      countryPreference,
+      interests,
+    }
+    const candidate2: MatchCandidate = {
+      userId: (existing.userId as { toString(): string }).toString(),
+      targetLanguage: existing.targetLanguage as string,
+      nativeLanguage: existing.nativeLanguage as string,
+      countryPreference: (existing.countryPreference as string) || '',
+      interests: (existing.interests as string[]) || [],
+    }
+    const { score: compatibilityPct } = await activeProvider.score(candidate1, candidate2)
+
     const conv = await Conversation.create({
       participants: [userId, existing.userId],
       type: 'chat',
       language: targetLanguage,
       status: 'active',
+      compatibilityPct: Math.round(compatibilityPct),
     })
 
     existing.conversationId = conv._id
@@ -109,7 +146,7 @@ export async function POST(req: NextRequest) {
       matched: true,
       conversationId: conv._id.toString(),
       partner: buildPartner(partnerDoc),
-      compatibilityPct: 75 + (([...userId + existing.userId.toString()].reduce((a, c) => a + c.charCodeAt(0), 0)) % 22),
+      compatibilityPct: Math.round(compatibilityPct),
     })
   }
 
@@ -144,7 +181,12 @@ export async function GET(req: NextRequest) {
   if (request.status === 'cancelled') return NextResponse.json({ matched: false, cancelled: true })
   if (request.status !== 'matched') return NextResponse.json({ matched: false })
 
-  const conv = await Conversation.findById(request.conversationId).lean() as Record<string, unknown>
+  const conv = await Conversation.findById(request.conversationId).lean() as Record<string, unknown> | null
+  if (!conv) {
+    // Matched status but conversation creation failed — treat as unmatched
+    return NextResponse.json({ matched: false })
+  }
+
   const participants = conv.participants as { toString(): string }[]
   const partnerId = participants.find((p) => p.toString() !== session.user!.id)
 
@@ -156,6 +198,6 @@ export async function GET(req: NextRequest) {
     matched: true,
     conversationId: (request.conversationId as { toString(): string }).toString(),
     partner: buildPartner(partnerDoc),
-    compatibilityPct: 75 + (([...session.user.id + (partnerId?.toString() ?? '')].reduce((a, c) => a + c.charCodeAt(0), 0)) % 22),
+    compatibilityPct: (conv.compatibilityPct as number) ?? 75,
   })
 }
