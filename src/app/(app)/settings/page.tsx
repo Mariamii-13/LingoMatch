@@ -17,6 +17,13 @@ import { AIPreferencesForm } from "@/components/ai-preferences/AIPreferencesForm
 import { LanguageLevelPicker, type LanguageLevelEntry } from "@/components/language-level-picker"
 import { getLanguage, SPOKEN_LEVELS, LEARNING_LEVELS } from "@/constants/languages"
 import type { AIProfile } from "@/types"
+import { useRouter } from "next/navigation"
+import {
+  getCompletionPercentage,
+  getFirstIncompleteStep,
+  STEP_PATHS,
+  type UserProfileData,
+} from "@/lib/onboarding-progress"
 
 const MAX_BYTES = 2 * 1024 * 1024 // 2MB
 
@@ -58,6 +65,9 @@ export default function SettingsPage() {
   const [spoken, setSpoken] = React.useState<LanguageLevelEntry[]>([])
   const [learning, setLearning] = React.useState<LanguageLevelEntry[]>([])
   const [langSaving, setLangSaving] = React.useState(false)
+  const router = useRouter()
+  const [completionPct, setCompletionPct] = React.useState(0)
+  const [profileData, setProfileData] = React.useState<UserProfileData | null>(null)
 
   React.useEffect(() => {
     fetch("/api/user/me")
@@ -79,6 +89,8 @@ export default function SettingsPage() {
           const tags = Object.values(u.interests as Record<string, string[]>).flat()
           setAIInterestTags(tags)
         }
+        setProfileData(u as UserProfileData)
+        setCompletionPct(getCompletionPercentage(u as UserProfileData))
       })
       .catch(() => {})
   }, [])
@@ -216,6 +228,14 @@ export default function SettingsPage() {
           <TabsTrigger value="ai">AI Preferences</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="subscription">Subscription</TabsTrigger>
+          <TabsTrigger value="setup" className="relative">
+            {completionPct < 100 && (
+              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary" />
+            )}
+            {completionPct < 100
+              ? `Complete Profile (${completionPct}% complete)`
+              : `Profile Setup (100% complete)`}
+          </TabsTrigger>
         </TabsList>
 
         {/* Account */}
@@ -416,6 +436,36 @@ export default function SettingsPage() {
             <Button className="mt-6" render={<Link href="/subscription" />}>
               Manage subscription
             </Button>
+          </div>
+        </TabsContent>
+        {/* Profile Setup */}
+        <TabsContent value="setup" className="mt-6">
+          <div className="rounded-xl border bg-card p-6 shadow-sm">
+            <h2 className="font-semibold text-lg">
+              {completionPct < 100 ? "Complete Your Profile" : "Profile Setup"}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {completionPct < 100
+                ? "Finish setting up your profile to improve matching and recommendations."
+                : "Your profile is complete. You can revisit any section to make changes."}
+            </p>
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!profileData) return
+                  const next = getFirstIncompleteStep(profileData)
+                  if (next) {
+                    router.push(`${STEP_PATHS[next]}?from=settings`)
+                  } else {
+                    router.push(`/profile?from=settings`)
+                  }
+                }}
+                className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                {completionPct < 100 ? "Continue Setup" : "Edit Profile Setup"}
+              </button>
+            </div>
           </div>
         </TabsContent>
       </Tabs>
