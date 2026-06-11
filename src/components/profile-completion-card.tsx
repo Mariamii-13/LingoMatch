@@ -48,6 +48,18 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
     }
   }, [collapsed, percentage])
 
+  React.useEffect(() => {
+    if (!collapsed) return
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored && (JSON.parse(stored) as { pct: number }).pct !== percentage) {
+        setCollapsed(false)
+      }
+    } catch {
+      setCollapsed(false)
+    }
+  }, [percentage, collapsed])
+
   if (percentage >= 100) return null
 
   if (collapsed) {
