@@ -1,14 +1,11 @@
 "use client"
-
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
-
 import { Button } from "@/components/ui/button"
 import { interestCategories } from "@/lib/mock-data"
 import { InterestCategoryCard } from "./_components/InterestCategoryCard"
-import { SubInterestSheet } from "./_components/SubInterestSheet"
 
 function buildInterestsObj(
   selectedCategories: string[],
@@ -23,12 +20,22 @@ export default function OnboardingInterestsPage() {
   const router = useRouter()
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([])
   const [subInterests, setSubInterests] = React.useState<Record<string, string[]>>({})
-  const [activeSheet, setActiveSheet] = React.useState<string | null>(null)
+  const [expandedCategories, setExpandedCategories] = React.useState<string[]>([])
   const [saving, setSaving] = React.useState(false)
 
-  function toggleCategory(key: string) {
-    setSelectedCategories((prev) =>
-      prev.includes(key) ? prev.filter((c) => c !== key) : [...prev, key]
+  function selectCategory(key: string) {
+    setSelectedCategories((prev) => [...prev, key])
+    setExpandedCategories((prev) => [...prev, key])
+  }
+
+  function deselectCategory(key: string) {
+    setSelectedCategories((prev) => prev.filter((k) => k !== key))
+    setExpandedCategories((prev) => prev.filter((k) => k !== key))
+  }
+
+  function toggleExpand(key: string) {
+    setExpandedCategories((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     )
   }
 
@@ -43,15 +50,6 @@ export default function OnboardingInterestsPage() {
       }
     })
   }
-
-  function openSheet(key: string) {
-    setSelectedCategories((prev) =>
-      prev.includes(key) ? prev : [...prev, key]
-    )
-    setActiveSheet(key)
-  }
-
-  const activeCategory = interestCategories.find((c) => c.key === activeSheet) ?? null
 
   async function handleContinue() {
     setSaving(true)
@@ -89,25 +87,16 @@ export default function OnboardingInterestsPage() {
             category={cat.category}
             emoji={cat.emoji}
             selected={selectedCategories.includes(cat.key)}
-            subLabels={subInterests[cat.key] ?? []}
-            onSelect={() => toggleCategory(cat.key)}
-            onOpenSheet={() => openSheet(cat.key)}
+            expanded={expandedCategories.includes(cat.key)}
+            subInterests={cat.subInterests}
+            selectedSubs={subInterests[cat.key] ?? []}
+            onSelect={() => selectCategory(cat.key)}
+            onDeselect={() => deselectCategory(cat.key)}
+            onToggleExpand={() => toggleExpand(cat.key)}
+            onToggleSub={(interest) => toggleSubInterest(cat.key, interest)}
           />
         ))}
       </div>
-
-      {activeCategory && (
-        <SubInterestSheet
-          open={activeSheet !== null}
-          category={activeCategory.category}
-          emoji={activeCategory.emoji}
-          subInterests={activeCategory.subInterests}
-          selected={subInterests[activeSheet!] ?? []}
-          onToggle={(interest) => toggleSubInterest(activeSheet!, interest)}
-          onDone={() => setActiveSheet(null)}
-          onSkip={() => setActiveSheet(null)}
-        />
-      )}
 
       <div className="mt-8 flex items-center justify-between">
         <Button variant="ghost" onClick={() => router.push("/languages")}>
@@ -117,7 +106,10 @@ export default function OnboardingInterestsPage() {
           <span className="text-sm text-muted-foreground">
             {selectedCategories.length} selected
           </span>
-          <Button onClick={handleContinue} disabled={saving || selectedCategories.length === 0}>
+          <Button
+            onClick={handleContinue}
+            disabled={saving || selectedCategories.length === 0}
+          >
             {saving ? <Loader2 className="size-4 animate-spin" /> : "Continue"}
           </Button>
         </div>

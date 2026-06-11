@@ -85,12 +85,11 @@ interface InterestCategoryCardProps {
 | Selected + collapsed | `1 / -1` (full-width) | Row 1 only: `✓` · emoji · name · selected-sub-count · expand chevron |
 
 **Tap targets:**
-- Tap default card → `onSelect()` (selects + auto-expands)
-- Tap expanded card header → `onToggleExpand()` (collapses pill row, keeps selected)
-- Tap collapsed selected card header → `onToggleExpand()` (re-expands)
-- Double-tap or second tap on card when pills collapsed → `onSelect()` only fires on the card body when unselected; deselect via dedicated close/X or second header tap when pills already collapsed
+- Tap unselected card body → `onSelect()` (selects + auto-expands)
+- Tap selected card header (emoji/name area) → `onToggleExpand()` (collapse ↔ expand, never deselects)
+- Tap ✓ checkmark button → `onDeselect()` (only way to deselect — explicit intent required)
 
-> **Deselect rule (simple):** Tap a selected+collapsed card → deselects it. Tap a selected+expanded card header → collapses pills first. This prevents accidental deselection while browsing sub-interests.
+> **Deselect rule:** Deselection is only possible via the ✓ checkmark button. Card body and header taps only toggle the pill row open/closed. This prevents accidental deselection while browsing sub-interests during onboarding.
 
 ### Page component (`OnboardingInterestsPage`)
 
@@ -103,20 +102,21 @@ const [expandedCategories, setExpandedCategories] = useState<string[]>([])
 
 No `activeSheet` state — bottom sheet is removed.
 
-**`toggleCategory(key)`:**
+**`selectCategory(key)`** — called when unselected card is tapped:
 ```ts
-function toggleCategory(key: string) {
-  setSelectedCategories(prev => {
-    if (prev.includes(key)) {
-      // deselecting — also collapse
-      setExpandedCategories(e => e.filter(k => k !== key))
-      return prev.filter(k => k !== key)
-    }
-    // selecting — auto-expand so user discovers sub-interests
-    setExpandedCategories(e => e.includes(key) ? e : [...e, key])
-    return [...prev, key]
-  })
+function selectCategory(key: string) {
+  setSelectedCategories(prev => [...prev, key])
+  setExpandedCategories(prev => [...prev, key]) // auto-expand for discoverability
 }
+```
+
+**`deselectCategory(key)`** — called only when ✓ button is tapped:
+```ts
+function deselectCategory(key: string) {
+  setSelectedCategories(prev => prev.filter(k => k !== key))
+  setExpandedCategories(prev => prev.filter(k => k !== key))
+}
+```
 ```
 
 **`toggleExpand(key)`:**
