@@ -1,42 +1,83 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Check, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { conversationModes } from "@/lib/mock-data"
+import { getCompletionPercentage } from "@/lib/onboarding-progress"
+import { useSetupPage } from "@/hooks/use-setup-page"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 
 export default function OnboardingModePage() {
-  const [selected, setSelected] = React.useState<string[]>(["friendly", "casual"])
+  const router = useRouter()
+  const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
+    useSetupPage("modes")
+
+  const [selected, setSelected] = React.useState<string[]>([])
   const [saving, setSaving] = React.useState(false)
+
+  const isDirty = selected.length > 0
+  const { confirmNavigation } = useUnsavedChanges(isDirty)
 
   const toggle = (id: string) =>
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
     )
 
-  async function handleFinish() {
+  async function handleSave() {
+    if (selected.length === 0) { toast.error("Select at least one mode"); return }
     setSaving(true)
     try {
-      await fetch("/api/user/me", {
+      const updatedUser = { ...(user ?? {}), conversationModes: selected }
+      const allDone = getCompletionPercentage(updatedUser) === 100
+
+      const res = await fetch("/api/user/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           conversationModes: selected,
-          onboardingCompleted: true,
+          ...(allDone && { onboardingCompleted: true }),
         }),
       })
+      if (!res.ok) { toast.error("Failed to save"); return }
+
+      const redirect = buildRedirect(updatedUser)
+      if (!redirect) { toast.success("Saved"); return }
+      if (redirect === "/dashboard") {
+        window.location.href = "/dashboard"
+      } else {
+        router.push(redirect)
+      }
     } catch {
-      // best-effort; proceed regardless
+      toast.error("Failed to save")
+    } finally {
+      setSaving(false)
     }
-    // Hard navigation forces JWT refresh so proxy sees onboardingCompleted=true
-    window.location.href = "/dashboard"
+  }
+
+  function handleBack() {
+    if (!confirmNavigation()) return
+    router.push(backHref)
   }
 
   return (
     <div>
+      <p className="mb-6 text-sm text-muted-foreground">
+        {completedCount} of 5 sections completed
+      </p>
+
+      <button
+        type="button"
+        onClick={handleBack}
+        className="mb-4 text-sm text-primary hover:underline"
+      >
+        {backLabel}
+      </button>
+
       <h1 className="text-2xl font-semibold">Pick your modes</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Choose the conversation styles you&apos;re open to. You can change these anytime.
@@ -70,10 +111,9 @@ export default function OnboardingModePage() {
         })}
       </div>
 
-      <div className="mt-8 flex items-center justify-between">
-        <Button variant="ghost" render={<Link href="/interests" />}>Back</Button>
-        <Button onClick={handleFinish} disabled={saving}>
-          {saving ? <Loader2 className="size-4 animate-spin" /> : "Finish setup"}
+      <div className="mt-8 flex justify-end">
+        <Button onClick={handleSave} disabled={saving || selected.length === 0}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : buttonLabel}
         </Button>
       </div>
     </div>

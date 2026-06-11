@@ -1,11 +1,16 @@
 "use client"
+
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
+
 import { Button } from "@/components/ui/button"
 import { interestCategories } from "@/lib/mock-data"
 import { InterestCategoryCard } from "./_components/InterestCategoryCard"
+import { getCompletionPercentage } from "@/lib/onboarding-progress"
+import { useSetupPage } from "@/hooks/use-setup-page"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 
 function buildInterestsObj(
   selectedCategories: string[],
@@ -18,10 +23,16 @@ function buildInterestsObj(
 
 export default function OnboardingInterestsPage() {
   const router = useRouter()
+  const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
+    useSetupPage("interests")
+
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([])
   const [subInterests, setSubInterests] = React.useState<Record<string, string[]>>({})
   const [expandedCategories, setExpandedCategories] = React.useState<string[]>([])
   const [saving, setSaving] = React.useState(false)
+
+  const isDirty = selectedCategories.length > 0
+  const { confirmNavigation } = useUnsavedChanges(isDirty)
 
   function selectCategory(key: string) {
     setSelectedCategories((prev) => [...prev, key])
@@ -51,21 +62,30 @@ export default function OnboardingInterestsPage() {
     })
   }
 
-  async function handleContinue() {
+  async function handleSave() {
     setSaving(true)
     try {
+      const interests = buildInterestsObj(selectedCategories, subInterests)
+      const updatedUser = { ...(user ?? {}), interests }
+      const allDone = getCompletionPercentage(updatedUser) === 100
+
       const res = await fetch("/api/user/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          interests: buildInterestsObj(selectedCategories, subInterests),
+          interests,
+          ...(allDone && { onboardingCompleted: true }),
         }),
       })
-      if (!res.ok) {
-        toast.error("Failed to save")
-        return
+      if (!res.ok) { toast.error("Failed to save"); return }
+
+      const redirect = buildRedirect(updatedUser)
+      if (!redirect) { toast.success("Saved"); return }
+      if (redirect === "/dashboard") {
+        window.location.href = "/dashboard"
+      } else {
+        router.push(redirect)
       }
-      router.push("/mode")
     } catch {
       toast.error("Failed to save")
     } finally {
@@ -73,8 +93,25 @@ export default function OnboardingInterestsPage() {
     }
   }
 
+  function handleBack() {
+    if (!confirmNavigation()) return
+    router.push(backHref)
+  }
+
   return (
     <div>
+      <p className="mb-6 text-sm text-muted-foreground">
+        {completedCount} of 5 sections completed
+      </p>
+
+      <button
+        type="button"
+        onClick={handleBack}
+        className="mb-4 text-sm text-primary hover:underline"
+      >
+        {backLabel}
+      </button>
+
       <h1 className="text-2xl font-semibold">What are you into?</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Tap topics you love. Add detail anytime.
@@ -99,20 +136,12 @@ export default function OnboardingInterestsPage() {
       </div>
 
       <div className="mt-8 flex items-center justify-between">
-        <Button variant="ghost" onClick={() => router.push("/languages")}>
-          Back
+        <span className="text-sm text-muted-foreground">
+          {selectedCategories.length} selected
+        </span>
+        <Button onClick={handleSave} disabled={saving || selectedCategories.length === 0}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : buttonLabel}
         </Button>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            {selectedCategories.length} selected
-          </span>
-          <Button
-            onClick={handleContinue}
-            disabled={saving || selectedCategories.length === 0}
-          >
-            {saving ? <Loader2 className="size-4 animate-spin" /> : "Continue"}
-          </Button>
-        </div>
       </div>
     </div>
   )

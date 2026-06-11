@@ -14,6 +14,9 @@ import { CountrySelector } from "@/components/country-selector"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DobPicker } from "@/components/dob-picker"
 import { cn } from "@/lib/utils"
+import { useSetupPage } from "@/hooks/use-setup-page"
+import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { getCompletionPercentage } from "@/lib/onboarding-progress"
 
 const GENDER_OPTIONS = [
   { value: "male", label: "Male" },
@@ -33,6 +36,9 @@ function calcAge(dob: Date): number {
 
 export default function OnboardingProfilePage() {
   const router = useRouter()
+  const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
+    useSetupPage("profile")
+
   const [name, setName] = React.useState("")
   const [username, setUsername] = React.useState("")
   const [country, setCountry] = React.useState("")
@@ -41,22 +47,30 @@ export default function OnboardingProfilePage() {
   const [bio, setBio] = React.useState("")
   const [saving, setSaving] = React.useState(false)
 
+  const isDirty = !!(name || username || country || gender || dob || bio)
+  const { confirmNavigation } = useUnsavedChanges(isDirty)
+
   const today = new Date()
   const minDob = new Date(today.getFullYear() - 100, 0, 1)
   const endOfCurrentYear = new Date(today.getFullYear(), 11, 31)
 
-  async function handleContinue() {
+  async function handleSave() {
     if (!name.trim()) { toast.error("Display name required"); return }
     let age: number | undefined
     if (dob) {
       age = calcAge(dob)
-      if (age < 13) {
-        toast.error("You must be at least 13 years old to register")
-        return
-      }
+      if (age < 13) { toast.error("You must be at least 13 years old"); return }
     }
     setSaving(true)
     try {
+      const updatedUser = {
+        ...(user ?? {}),
+        displayName: name.trim(),
+        ...(username.trim() && { username: username.trim() }),
+        ...(country && { country }),
+      }
+      const allDone = getCompletionPercentage(updatedUser) === 100
+
       const res = await fetch("/api/user/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -67,6 +81,7 @@ export default function OnboardingProfilePage() {
           ...(gender && { gender }),
           ...(age !== undefined && { age }),
           ...(bio.trim() && { bio: bio.trim() }),
+          ...(allDone && { onboardingCompleted: true }),
         }),
       })
       if (!res.ok) {
@@ -74,7 +89,14 @@ export default function OnboardingProfilePage() {
         toast.error(data.error ?? "Failed to save")
         return
       }
-      router.push("/ai-preferences")
+
+      const redirect = buildRedirect(updatedUser)
+      if (!redirect) { toast.success("Saved"); return }
+      if (redirect === "/dashboard") {
+        window.location.href = "/dashboard"
+      } else {
+        router.push(redirect)
+      }
     } catch {
       toast.error("Failed to save")
     } finally {
@@ -82,8 +104,27 @@ export default function OnboardingProfilePage() {
     }
   }
 
+  function handleBack() {
+    if (!confirmNavigation()) return
+    router.push(backHref)
+  }
+
   return (
     <div>
+      {/* Status line */}
+      <p className="mb-6 text-sm text-muted-foreground">
+        {completedCount} of 5 sections completed
+      </p>
+
+      {/* Back link */}
+      <button
+        type="button"
+        onClick={handleBack}
+        className="mb-4 text-sm text-primary hover:underline"
+      >
+        {backLabel}
+      </button>
+
       <h1 className="text-2xl font-semibold">Set up your profile</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         This is what other speakers will see.
@@ -180,8 +221,8 @@ export default function OnboardingProfilePage() {
       </div>
 
       <div className="mt-8 flex justify-end">
-        <Button onClick={handleContinue} disabled={saving}>
-          {saving ? <Loader2 className="size-4 animate-spin" /> : "Continue"}
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 className="size-4 animate-spin" /> : buttonLabel}
         </Button>
       </div>
     </div>
