@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { Calendar, MessageSquare, Sparkles, Users, Video } from "lucide-react"
 import { useSession } from "next-auth/react"
@@ -11,6 +12,8 @@ import {
   friendActivity,
   scheduledSessions,
 } from "@/lib/mock-data"
+import { ProfileCompletionCard } from "@/components/profile-completion-card"
+import type { UserProfileData } from "@/lib/onboarding-progress"
 
 const aiInsight = {
   week: "Week of Jun 2",
@@ -26,6 +29,15 @@ export default function DashboardPage() {
   const { data: session } = useSession()
   const firstName = session?.user?.name?.split(" ")[0] ?? "there"
 
+  const [profileData, setProfileData] = React.useState<UserProfileData | null>(null)
+
+  React.useEffect(() => {
+    fetch("/api/user/me")
+      .then((r) => r.json())
+      .then((data: UserProfileData) => setProfileData(data))
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="space-y-6">
 
@@ -35,6 +47,9 @@ export default function DashboardPage() {
           🌤️ Good morning, {firstName}
         </h1>
       </div>
+
+      {/* Profile completion card */}
+      {profileData && <ProfileCompletionCard user={profileData} />}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
