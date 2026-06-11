@@ -28,37 +28,26 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
     ? `${STEP_PATHS[firstIncomplete]}?from=dashboard`
     : "/dashboard"
 
-  const [collapsed, setCollapsed] = React.useState<boolean>(() => {
-    if (typeof window === "undefined") return false
+  const [collapsedAtPct, setCollapsedAtPct] = React.useState<number | null>(() => {
+    if (typeof window === "undefined") return null
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (!stored) return false
-      const { pct } = JSON.parse(stored) as { pct: number }
-      return pct === percentage
+      if (!stored) return null
+      return (JSON.parse(stored) as { pct: number }).pct
     } catch {
-      return false
+      return null
     }
   })
 
+  const collapsed = collapsedAtPct === percentage
+
   React.useEffect(() => {
-    if (collapsed) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ pct: percentage }))
+    if (collapsedAtPct !== null) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ pct: collapsedAtPct }))
     } else {
       localStorage.removeItem(STORAGE_KEY)
     }
-  }, [collapsed, percentage])
-
-  React.useEffect(() => {
-    if (!collapsed) return
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored && (JSON.parse(stored) as { pct: number }).pct !== percentage) {
-        setCollapsed(false)
-      }
-    } catch {
-      setCollapsed(false)
-    }
-  }, [percentage, collapsed])
+  }, [collapsedAtPct])
 
   if (percentage >= 100) return null
 
@@ -76,7 +65,7 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
           </Link>
           <button
             type="button"
-            onClick={() => setCollapsed(false)}
+            onClick={() => setCollapsedAtPct(null)}
             className="text-muted-foreground hover:text-foreground"
             aria-label="Expand"
           >
@@ -101,7 +90,7 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
           <span className="text-sm font-semibold text-primary">{percentage}%</span>
           <button
             type="button"
-            onClick={() => setCollapsed(true)}
+            onClick={() => setCollapsedAtPct(percentage)}
             className="text-muted-foreground hover:text-foreground"
             aria-label="Collapse"
           >
@@ -148,7 +137,7 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
         </Link>
         <button
           type="button"
-          onClick={() => setCollapsed(true)}
+          onClick={() => setCollapsedAtPct(percentage)}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           Remind Me Later
