@@ -53,7 +53,7 @@ export default function OnboardingAIPreferencesPage() {
     }
 
     const redirect = buildRedirect(updatedUser)
-    if (!redirect) return
+    if (!redirect) { toast.success("Saved"); return }
     if (redirect === "/dashboard") {
       window.location.href = "/dashboard"
     } else {
