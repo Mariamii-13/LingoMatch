@@ -16,24 +16,15 @@ export default function OnboardingAIPreferencesPage() {
   const { completedCount, backHref, user, loading, buildRedirect } =
     useSetupPage("ai-preferences")
 
-  const [initialProfile, setInitialProfile] = React.useState<Partial<AIProfile>>()
-  const [learningLanguages, setLearningLanguages] = React.useState<
-    { code: string; name: string; flag: string }[]
-  >([])
-  const [interestTags, setInterestTags] = React.useState<string[]>([])
-
-  React.useEffect(() => {
-    if (!user) return
-    if (user.aiProfile) setInitialProfile(user.aiProfile as Partial<AIProfile>)
-    if (user.learningLanguages?.length) {
-      setLearningLanguages(
-        (user.learningLanguages as { code: string }[]).map((l) => getLanguage(l.code))
-      )
-    }
-    if (user.interests) {
-      setInterestTags(Object.values(user.interests as Record<string, string[]>).flat())
-    }
-  }, [user])
+  const initialProfile = user?.aiProfile as Partial<AIProfile> | undefined
+  const learningLanguages = React.useMemo(
+    () => ((user?.learningLanguages ?? []) as { code: string }[]).map((l) => getLanguage(l.code)),
+    [user]
+  )
+  const interestTags = React.useMemo(
+    () => Object.values((user?.interests as Record<string, string[]>) ?? {}).flat(),
+    [user]
+  )
 
   async function handleSave(profile: AIProfile) {
     const updatedUser = { ...(user ?? {}), aiProfile: profile }
