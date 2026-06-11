@@ -27,14 +27,12 @@ const LearningLanguageSchema = new Schema(
 
 const InterestsSchema = new Schema(
   {
-    anime: { type: [String], default: [] },
-    books: { type: [String], default: [] },
-    movies: { type: [String], default: [] },
+    entertainment: { type: [String], default: [] },
     music: { type: [String], default: [] },
     gaming: { type: [String], default: [] },
     travel: { type: [String], default: [] },
-    food: { type: [String], default: [] },
-    hobbies: { type: [String], default: [] },
+    creativity: { type: [String], default: [] },
+    lifestyle: { type: [String], default: [] },
   },
   { _id: false }
 )
