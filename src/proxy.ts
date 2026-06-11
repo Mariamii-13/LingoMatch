@@ -21,12 +21,6 @@ export default auth((req) => {
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
-  const onboardingCompleted = (req.auth?.user as { onboardingCompleted?: boolean })?.onboardingCompleted
-  const onboardingPaths = new Set(['/profile', '/languages', '/interests', '/mode', '/ai-preferences'])
-  if (isLoggedIn && !onboardingCompleted && !onboardingPaths.has(pathname) && !isPublic && !pathname.startsWith('/api/')) {
-    return NextResponse.redirect(new URL('/profile', req.url))
-  }
-
   return NextResponse.next()
 })
 
