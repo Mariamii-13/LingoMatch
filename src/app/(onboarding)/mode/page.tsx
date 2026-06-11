@@ -12,7 +12,7 @@ import { getCompletionPercentage } from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 
-export default function OnboardingModePage() {
+function OnboardingModeContent() {
   const router = useRouter()
   const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
     useSetupPage("modes")
@@ -117,5 +117,13 @@ export default function OnboardingModePage() {
         </Button>
       </div>
     </div>
+  )
+}
+
+export default function OnboardingModePage() {
+  return (
+    <React.Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>}>
+      <OnboardingModeContent />
+    </React.Suspense>
   )
 }

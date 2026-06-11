@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
+import { Loader2 } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { interestCategories } from "@/lib/mock-data"
 import { InterestCategoryCard } from "./_components/InterestCategoryCard"
@@ -21,7 +23,7 @@ function buildInterestsObj(
   )
 }
 
-export default function OnboardingInterestsPage() {
+function OnboardingInterestsContent() {
   const router = useRouter()
   const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
     useSetupPage("interests")
@@ -144,5 +146,13 @@ export default function OnboardingInterestsPage() {
         </Button>
       </div>
     </div>
+  )
+}
+
+export default function OnboardingInterestsPage() {
+  return (
+    <React.Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>}>
+      <OnboardingInterestsContent />
+    </React.Suspense>
   )
 }

@@ -34,7 +34,7 @@ function calcAge(dob: Date): number {
   return age
 }
 
-export default function OnboardingProfilePage() {
+function OnboardingProfileContent() {
   const router = useRouter()
   const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
     useSetupPage("profile")
@@ -226,5 +226,13 @@ export default function OnboardingProfilePage() {
         </Button>
       </div>
     </div>
+  )
+}
+
+export default function OnboardingProfilePage() {
+  return (
+    <React.Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>}>
+      <OnboardingProfileContent />
+    </React.Suspense>
   )
 }

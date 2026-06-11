@@ -11,7 +11,7 @@ import { getCompletionPercentage } from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"
 import type { AIProfile } from "@/types"
 
-export default function OnboardingAIPreferencesPage() {
+function OnboardingAIPreferencesContent() {
   const router = useRouter()
   const { completedCount, backHref, user, loading, buildRedirect } =
     useSetupPage("ai-preferences")
@@ -82,5 +82,13 @@ export default function OnboardingAIPreferencesPage() {
         />
       </div>
     </div>
+  )
+}
+
+export default function OnboardingAIPreferencesPage() {
+  return (
+    <React.Suspense fallback={<div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>}>
+      <OnboardingAIPreferencesContent />
+    </React.Suspense>
   )
 }
