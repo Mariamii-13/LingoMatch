@@ -5,7 +5,6 @@ import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import {
   getCompletedCount,
-  getCompletionPercentage,
   getFirstIncompleteStep,
   getStepStatus,
   STEP_ORDER,
