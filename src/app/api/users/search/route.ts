@@ -6,7 +6,7 @@ import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
 import { migrateLegacyLevel } from '@/constants/languages'
 
-const VALID_INTERESTS = ['anime', 'books', 'movies', 'music', 'gaming', 'travel', 'food', 'hobbies']
+const VALID_INTERESTS = ['entertainment', 'music', 'gaming', 'travel', 'creativity', 'lifestyle']
 
 export async function GET(req: NextRequest) {
   const session = await auth()
