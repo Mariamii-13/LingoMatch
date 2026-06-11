@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
-import { Loader2 } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import { interestCategories } from "@/lib/mock-data"
 import { InterestCategoryCard } from "./_components/InterestCategoryCard"
