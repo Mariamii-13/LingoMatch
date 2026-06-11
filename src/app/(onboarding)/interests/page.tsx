@@ -45,9 +45,9 @@ export default function OnboardingInterestsPage() {
   }
 
   function openSheet(key: string) {
-    if (!selectedCategories.includes(key)) {
-      setSelectedCategories((prev) => [...prev, key])
-    }
+    setSelectedCategories((prev) =>
+      prev.includes(key) ? prev : [...prev, key]
+    )
     setActiveSheet(key)
   }
 
@@ -117,7 +117,7 @@ export default function OnboardingInterestsPage() {
           <span className="text-sm text-muted-foreground">
             {selectedCategories.length} selected
           </span>
-          <Button onClick={handleContinue} disabled={saving}>
+          <Button onClick={handleContinue} disabled={saving || selectedCategories.length === 0}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : "Continue"}
           </Button>
         </div>
