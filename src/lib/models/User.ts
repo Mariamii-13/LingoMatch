@@ -65,7 +65,10 @@ const UserSchema = new Schema(
     gender: { type: String, enum: ['male', 'female', 'other', ''], default: '' },
     age: { type: Number, default: null },
     timezone: { type: String, default: '' },
+    // Legacy — kept for backward compat; new writes use spokenLanguages
     nativeLanguages: { type: [String], default: [] },
+    // Structured spoken languages with CEFR / Native levels
+    spokenLanguages: { type: [LearningLanguageSchema], default: [] },
     learningLanguages: { type: [LearningLanguageSchema], default: [] },
     interests: {
       type: InterestsSchema,

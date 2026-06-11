@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { AIPreferencesForm } from "@/components/ai-preferences/AIPreferencesForm"
-import { languageOptions } from "@/lib/mock-data"
+import { getLanguage } from "@/constants/languages"
 import type { AIProfile } from "@/types"
 
 export default function OnboardingAIPreferencesPage() {
@@ -24,9 +24,7 @@ export default function OnboardingAIPreferencesPage() {
       .then((u) => {
         if (u.aiProfile) setInitialProfile(u.aiProfile)
         if (u.learningLanguages?.length) {
-          const langs = (u.learningLanguages as { code: string }[])
-            .map((l) => languageOptions.find((o) => o.code === l.code))
-            .filter(Boolean) as { code: string; name: string; flag: string }[]
+          const langs = (u.learningLanguages as { code: string }[]).map((l) => getLanguage(l.code))
           setLearningLanguages(langs)
         }
         if (u.interests) {

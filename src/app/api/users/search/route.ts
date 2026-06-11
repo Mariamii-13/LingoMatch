@@ -4,6 +4,7 @@ import mongoose from 'mongoose'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import { migrateLegacyLevel } from '@/constants/languages'
 
 const VALID_INTERESTS = ['anime', 'books', 'movies', 'music', 'gaming', 'travel', 'food', 'hobbies']
 
@@ -44,10 +45,11 @@ export async function GET(req: NextRequest) {
   if (country) base.country = country
 
   if (language) {
-    const code = language.toUpperCase()
+    const code = language.toLowerCase()
     andClauses.push({
       $or: [
-        { nativeLanguages: code },
+        { 'spokenLanguages.code': code },
+        { nativeLanguages: code },           // backward compat
         { 'learningLanguages.code': code },
       ],
     })
@@ -62,7 +64,7 @@ export async function GET(req: NextRequest) {
   // Parallel: fetch result users + current user's relationship state
   const [users, total, me, sentToUsers] = await Promise.all([
     User.find(base)
-      .select('username displayName avatar bio country nativeLanguages learningLanguages interests')
+      .select('username displayName avatar bio country nativeLanguages spokenLanguages learningLanguages interests')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
@@ -114,8 +116,16 @@ export async function GET(req: NextRequest) {
       avatar: (u.avatar as string) || '',
       bio: (u.bio as string) || '',
       country: (u.country as string) || '',
-      nativeLanguages: (u.nativeLanguages as string[]) || [],
-      learningLanguages: (u.learningLanguages as { code: string; level: string }[]) || [],
+      spokenLanguages: (() => {
+        const spoken = (u.spokenLanguages as { code: string; level: string }[] | undefined) ?? []
+        const base = spoken.length
+          ? spoken
+          : ((u.nativeLanguages as string[]) ?? []).map((code) => ({ code, level: 'native' }))
+        return base.map((l) => ({ ...l, level: l.level === 'native' ? 'native' : 'other' }))
+      })(),
+      learningLanguages: ((u.learningLanguages as { code: string; level: string }[]) ?? []).map(
+        (l) => ({ code: l.code, level: migrateLegacyLevel(l.level) })
+      ),
       interestCategories,
       friendStatus,
     }

@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { languageOptions } from "@/lib/mock-data"
+import { LanguageSelector } from "@/components/language-selector"
 import { CountrySelector } from "@/components/country-selector"
 
 const INTERESTS = ["Anime", "Travel", "Gaming", "Music", "Food", "Books", "Movies", "Fitness"]
@@ -21,7 +21,7 @@ export function MatchConfigForm({
   targetLanguage,
   nativeLanguage,
   interests,
-  countryPreference = '',
+  countryPreference = "",
   onTargetLanguage,
   onNativeLanguage,
   onInterests,
@@ -36,46 +36,24 @@ export function MatchConfigForm({
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           I want to practice
         </p>
-        <div className="flex flex-wrap gap-2">
-          {languageOptions.map((l) => (
-            <button
-              key={l.code}
-              type="button"
-              onClick={() => onTargetLanguage(l.code)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                targetLanguage === l.code
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:bg-accent"
-              )}
-            >
-              <span>{l.flag}</span> {l.name}
-            </button>
-          ))}
-        </div>
+        <LanguageSelector
+          value={targetLanguage}
+          onChange={onTargetLanguage}
+          placeholder="Select a language"
+          className="sm:w-64"
+        />
       </div>
 
       <div>
         <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           My native language
         </p>
-        <div className="flex flex-wrap gap-2">
-          {languageOptions.map((l) => (
-            <button
-              key={l.code}
-              type="button"
-              onClick={() => onNativeLanguage(l.code)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors",
-                nativeLanguage === l.code
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:bg-accent"
-              )}
-            >
-              <span>{l.flag}</span> {l.name}
-            </button>
-          ))}
-        </div>
+        <LanguageSelector
+          value={nativeLanguage}
+          onChange={onNativeLanguage}
+          placeholder="Select a language"
+          className="sm:w-64"
+        />
       </div>
 
       <div>

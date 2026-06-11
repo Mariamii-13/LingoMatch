@@ -5,19 +5,21 @@ import MatchRequest from '@/lib/models/MatchRequest'
 import Conversation from '@/lib/models/Conversation'
 import User from '@/lib/models/User'
 import { avatarGradient } from '@/lib/utils'
-import { languageOptions } from '@/lib/mock-data'
+import { getLanguage, migrateLegacyLevel, formatLevel } from '@/constants/languages'
 import { checkRateLimit } from '@/lib/rateLimit'
 import { activeProvider, type MatchCandidate } from '@/lib/matching'
-
-function langMeta(code: string) {
-  return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: '' }
-}
 
 function buildPartner(doc: Record<string, unknown>) {
   const name = (doc.displayName as string) ?? 'Partner'
   const username = (doc.username as string) ?? ''
   const initials = name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+  // Prefer structured spokenLanguages; fall back to legacy nativeLanguages string array
+  const spokenItems = (doc.spokenLanguages as { code: string; level: string }[] | undefined) ?? []
   const nativeCodes = (doc.nativeLanguages as string[]) ?? []
+  const spoken = spokenItems.length
+    ? spokenItems
+    : nativeCodes.map((code) => ({ code, level: 'native' }))
+
   const learningItems = (doc.learningLanguages as { code: string; level: string }[]) ?? []
 
   return {
@@ -28,13 +30,13 @@ function buildPartner(doc: Record<string, unknown>) {
     flag: '',
     avatarInitials: initials,
     avatarColor: avatarGradient(username),
-    native: nativeCodes.map((code) => {
-      const l = langMeta(code)
-      return { code: l.code, name: l.name, flag: l.flag, level: 'Native' }
+    native: spoken.map(({ code, level }) => {
+      const l = getLanguage(code)
+      return { code: l.code, name: l.name, flag: l.flag, level: formatLevel(level) }
     }),
     learning: learningItems.map(({ code, level }) => {
-      const l = langMeta(code)
-      return { code: l.code, name: l.name, flag: l.flag, level }
+      const l = getLanguage(code)
+      return { code: l.code, name: l.name, flag: l.flag, level: formatLevel(migrateLegacyLevel(level)) }
     }),
     interests: [],
   }
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
 
   if (existing) {
     const partnerDoc = await User.findById(existing.userId)
-      .select('displayName username avatar country nativeLanguages learningLanguages')
+      .select('displayName username avatar country nativeLanguages spokenLanguages learningLanguages')
       .lean() as Record<string, unknown>
 
     const candidate1: MatchCandidate = {
@@ -191,7 +193,7 @@ export async function GET(req: NextRequest) {
   const partnerId = participants.find((p) => p.toString() !== session.user!.id)
 
   const partnerDoc = await User.findById(partnerId)
-    .select('displayName username avatar country nativeLanguages learningLanguages')
+    .select('displayName username avatar country nativeLanguages spokenLanguages learningLanguages')
     .lean() as Record<string, unknown>
 
   return NextResponse.json({

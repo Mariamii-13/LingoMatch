@@ -10,12 +10,7 @@ import { avatarGradient, cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { languageOptions } from "@/lib/mock-data"
-
-
-function langMeta(code: string) {
-  return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: "" }
-}
+import { getLanguage, formatLevel } from "@/constants/languages"
 
 interface PublicProfile {
   id: string
@@ -24,7 +19,7 @@ interface PublicProfile {
   avatar: string
   bio: string
   country: string
-  nativeLanguages: string[]
+  spokenLanguages: { code: string; level: string }[]
   learningLanguages: { code: string; level: string }[]
   interestTags: string[]
   friendsCount: number
@@ -127,7 +122,7 @@ export default function PublicProfilePage({
 
   const gradient = avatarGradient(profile.username)
   const joinYear = new Date(profile.joinedAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })
-  const langCount = profile.nativeLanguages.length + profile.learningLanguages.length
+  const langCount = profile.spokenLanguages.length + profile.learningLanguages.length
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -219,29 +214,42 @@ export default function PublicProfilePage({
         )}
 
         {/* Languages */}
-        {(profile.nativeLanguages.length > 0 || profile.learningLanguages.length > 0) && (
-          <section className="mt-6">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Languages
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {profile.nativeLanguages.map((code) => {
-                const lang = langMeta(code)
-                return (
-                  <Badge key={code} variant="secondary">
-                    {lang.flag} {lang.name} · Native
-                  </Badge>
-                )
-              })}
-              {profile.learningLanguages.map(({ code, level }) => {
-                const lang = langMeta(code)
-                return (
-                  <Badge key={code} variant="outline">
-                    {lang.flag} {lang.name} · {level}
-                  </Badge>
-                )
-              })}
-            </div>
+        {(profile.spokenLanguages.length > 0 || profile.learningLanguages.length > 0) && (
+          <section className="mt-6 space-y-4">
+            {profile.spokenLanguages.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Languages I Speak
+                </h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {profile.spokenLanguages.map(({ code, level }) => {
+                    const lang = getLanguage(code)
+                    return (
+                      <Badge key={code} variant="secondary">
+                        {lang.flag} {lang.name}{level === "native" ? " — Native" : ""}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {profile.learningLanguages.length > 0 && (
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Languages I&apos;m Learning
+                </h2>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {profile.learningLanguages.map(({ code, level }) => {
+                    const lang = getLanguage(code)
+                    return (
+                      <Badge key={code} variant="outline">
+                        {lang.flag} {lang.name} — {formatLevel(level)}
+                      </Badge>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </section>
         )}
 

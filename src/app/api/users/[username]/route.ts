@@ -4,6 +4,7 @@ import mongoose from 'mongoose'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import { migrateLegacyLevel } from '@/constants/languages'
 
 export async function GET(
   _req: NextRequest,
@@ -18,7 +19,7 @@ export async function GET(
 
   const [target, me] = await Promise.all([
     User.findOne({ username: username.toLowerCase(), isBanned: false, isActive: true })
-      .select('username displayName avatar bio country nativeLanguages learningLanguages interests friends friendRequests createdAt')
+      .select('username displayName avatar bio country nativeLanguages spokenLanguages learningLanguages interests friends friendRequests createdAt')
       .lean(),
     User.findById(session.user.id)
       .select('friends friendRequests')
@@ -62,6 +63,19 @@ export async function GET(
     (target as { interests?: Record<string, string[]> }).interests ?? {}
   ).flat()
 
+  // Synthesize spokenLanguages from legacy nativeLanguages if not yet migrated
+  const rawSpoken = (target as { spokenLanguages?: { code: string; level: string }[] }).spokenLanguages ?? []
+  const rawNative = (target as { nativeLanguages?: string[] }).nativeLanguages ?? []
+  const spokenLanguages = (rawSpoken.length
+    ? rawSpoken
+    : rawNative.map((code) => ({ code, level: 'native' }))
+  ).map((l) => ({ ...l, level: l.level === 'native' ? 'native' : 'other' }))
+
+  // Normalise legacy learning language levels
+  const learningLanguages = (
+    (target as { learningLanguages?: { code: string; level: string }[] }).learningLanguages ?? []
+  ).map((l) => ({ ...l, level: migrateLegacyLevel(l.level) }))
+
   return NextResponse.json({
     id: targetId,
     username: target.username as string,
@@ -69,9 +83,8 @@ export async function GET(
     avatar: (target.avatar as string) || '',
     bio: (target.bio as string) || '',
     country: (target.country as string) || '',
-    nativeLanguages: (target.nativeLanguages as string[]) || [],
-    learningLanguages:
-      (target.learningLanguages as { code: string; level: string }[]) || [],
+    spokenLanguages,
+    learningLanguages,
     interestTags,
     friendsCount: ((target.friends as unknown[]) || []).length,
     joinedAt: (target.createdAt as Date).toISOString(),

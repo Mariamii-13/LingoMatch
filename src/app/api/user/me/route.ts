@@ -2,6 +2,33 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import { migrateLegacyLevel } from '@/constants/languages'
+
+function applyMigrations(raw: Record<string, unknown>): Record<string, unknown> {
+  // Synthesize spokenLanguages from legacy nativeLanguages if not yet migrated
+  if (
+    !(raw.spokenLanguages as unknown[])?.length &&
+    (raw.nativeLanguages as string[])?.length
+  ) {
+    raw.spokenLanguages = (raw.nativeLanguages as string[]).map((code) => ({
+      code,
+      level: 'native',
+    }))
+  }
+  // Collapse any CEFR spoken levels to "other" (spoken section no longer uses CEFR)
+  if ((raw.spokenLanguages as unknown[])?.length) {
+    raw.spokenLanguages = (raw.spokenLanguages as { code: string; level: string }[]).map(
+      (l) => ({ ...l, level: l.level === 'native' ? 'native' : 'other' })
+    )
+  }
+  // Normalise old Beginner/Intermediate/Advanced levels to CEFR
+  if ((raw.learningLanguages as unknown[])?.length) {
+    raw.learningLanguages = (
+      raw.learningLanguages as { code: string; level: string }[]
+    ).map((l) => ({ ...l, level: migrateLegacyLevel(l.level) }))
+  }
+  return raw
+}
 
 export async function GET() {
   const session = await auth()
@@ -10,10 +37,10 @@ export async function GET() {
   }
 
   await connectDB()
-  const user = await User.findById(session.user.id).select('-passwordHash')
+  const user = await User.findById(session.user.id).select('-passwordHash').lean()
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  return NextResponse.json(user)
+  return NextResponse.json(applyMigrations(user as Record<string, unknown>))
 }
 
 export async function PATCH(req: NextRequest) {
@@ -31,7 +58,8 @@ export async function PATCH(req: NextRequest) {
     'age',
     'timezone',
     'avatar',
-    'nativeLanguages',
+    'nativeLanguages',    // kept for legacy clients
+    'spokenLanguages',
     'learningLanguages',
     'interests',
     'conversationModes',
@@ -56,9 +84,11 @@ export async function PATCH(req: NextRequest) {
 
   const user = await User.findByIdAndUpdate(session.user.id, update, {
     returnDocument: 'after',
-  }).select('-passwordHash')
+  })
+    .select('-passwordHash')
+    .lean()
 
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  return NextResponse.json(user)
+  return NextResponse.json(applyMigrations(user as Record<string, unknown>))
 }

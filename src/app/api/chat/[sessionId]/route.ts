@@ -5,11 +5,7 @@ import { connectDB } from '@/lib/db'
 import Conversation from '@/lib/models/Conversation'
 import User from '@/lib/models/User'
 import { avatarGradient } from '@/lib/utils'
-import { languageOptions } from '@/lib/mock-data'
-
-function langMeta(code: string) {
-  return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: '' }
-}
+import { getLanguage } from '@/constants/languages'
 
 export async function GET(
   _req: NextRequest,
@@ -55,7 +51,7 @@ export async function GET(
         ? (partnerDoc.lastSeenAt as Date).toISOString()
         : null,
       nativeLanguages: nativeCodes.map((code) => {
-        const l = langMeta(code)
+        const l = getLanguage(code)
         return { code: l.code, name: l.name, flag: l.flag }
       }),
     },

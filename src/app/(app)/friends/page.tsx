@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { languageOptions } from "@/lib/mock-data"
+import { getLanguage } from "@/constants/languages"
 
 interface UserCard {
   id: string
@@ -28,9 +28,6 @@ interface FriendsData {
   sent: UserCard[]
 }
 
-function langMeta(code: string) {
-  return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: "" }
-}
 
 function initials(displayName: string) {
   return displayName
@@ -45,7 +42,7 @@ function LanguageBadges({ user }: { user: UserCard }) {
   return (
     <div className="flex flex-wrap gap-1">
       {user.nativeLanguages.map((code) => {
-        const l = langMeta(code)
+        const l = getLanguage(code)
         return (
           <Badge key={`n-${code}`} variant="secondary" className="text-xs">
             {l.flag} {l.code}
@@ -53,7 +50,7 @@ function LanguageBadges({ user }: { user: UserCard }) {
         )
       })}
       {user.learningLanguages.map(({ code, level }) => {
-        const l = langMeta(code)
+        const l = getLanguage(code)
         return (
           <Badge key={`l-${code}`} variant="outline" className="text-xs">
             {l.flag} {l.code} · {level}

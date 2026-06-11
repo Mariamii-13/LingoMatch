@@ -14,7 +14,8 @@ import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AIPreferencesForm } from "@/components/ai-preferences/AIPreferencesForm"
-import { languageOptions } from "@/lib/mock-data"
+import { LanguageLevelPicker, type LanguageLevelEntry } from "@/components/language-level-picker"
+import { getLanguage, SPOKEN_LEVELS, LEARNING_LEVELS } from "@/constants/languages"
 import type { AIProfile } from "@/types"
 
 const MAX_BYTES = 2 * 1024 * 1024 // 2MB
@@ -54,6 +55,9 @@ export default function SettingsPage() {
     { code: string; name: string; flag: string }[]
   >([])
   const [aiInterestTags, setAIInterestTags] = React.useState<string[]>([])
+  const [spoken, setSpoken] = React.useState<LanguageLevelEntry[]>([])
+  const [learning, setLearning] = React.useState<LanguageLevelEntry[]>([])
+  const [langSaving, setLangSaving] = React.useState(false)
 
   React.useEffect(() => {
     fetch("/api/user/me")
@@ -65,11 +69,11 @@ export default function SettingsPage() {
         setEmail(u.email ?? "")
         setPlan(u.plan ?? "free")
         if (u.aiProfile) setAIProfile(u.aiProfile)
+        if (u.spokenLanguages?.length) setSpoken(u.spokenLanguages as LanguageLevelEntry[])
         if (u.learningLanguages?.length) {
-          const langs = (u.learningLanguages as { code: string }[])
-            .map((l) => languageOptions.find((o) => o.code === l.code))
-            .filter(Boolean) as { code: string; name: string; flag: string }[]
-          setAILearningLanguages(langs)
+          const ll = u.learningLanguages as LanguageLevelEntry[]
+          setLearning(ll)
+          setAILearningLanguages(ll.map((l) => getLanguage(l.code)))
         }
         if (u.interests) {
           const tags = Object.values(u.interests as Record<string, string[]>).flat()
@@ -172,6 +176,25 @@ export default function SettingsPage() {
     toast.success("AI preference data deleted.")
   }
 
+  async function handleLangSave() {
+    if (spoken.length === 0) { toast.error("Add at least one language you speak"); return }
+    setLangSaving(true)
+    try {
+      const res = await fetch("/api/user/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spokenLanguages: spoken, learningLanguages: learning }),
+      })
+      if (!res.ok) { toast.error("Failed to save languages"); return }
+      setAILearningLanguages(learning.map((l) => getLanguage(l.code)))
+      toast.success("Languages saved!")
+    } catch {
+      toast.error("Failed to save languages")
+    } finally {
+      setLangSaving(false)
+    }
+  }
+
   const initials = displayName
     ? displayName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
     : session?.user?.name?.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() ?? "?"
@@ -188,6 +211,7 @@ export default function SettingsPage() {
       <Tabs defaultValue="account">
         <TabsList className="flex-wrap">
           <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="languages">Languages</TabsTrigger>
           <TabsTrigger value="privacy">Privacy</TabsTrigger>
           <TabsTrigger value="ai">AI Preferences</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
@@ -258,6 +282,50 @@ export default function SettingsPage() {
             <Button className="mt-6" disabled={saving} onClick={handleSave}>
               {saving ? "Saving…" : "Save changes"}
             </Button>
+          </div>
+        </TabsContent>
+
+        {/* Languages */}
+        <TabsContent value="languages" className="mt-6">
+          <div className="rounded-xl border bg-card p-6 shadow-sm">
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <div>
+                  <Label>Languages I speak</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Include your native language and any others you speak well.
+                  </p>
+                </div>
+                <LanguageLevelPicker
+                  value={spoken}
+                  onChange={setSpoken}
+                  levels={SPOKEN_LEVELS}
+                  defaultLevel="native"
+                  placeholder="Add a language…"
+                />
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label>Languages I&apos;m learning</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Languages you are currently learning or plan to study.
+                  </p>
+                </div>
+                <LanguageLevelPicker
+                  value={learning}
+                  onChange={setLearning}
+                  levels={LEARNING_LEVELS}
+                  defaultLevel="beginner"
+                  excludeCodes={spoken.map((s) => s.code)}
+                  placeholder="Add a language…"
+                />
+              </div>
+
+              <Button onClick={handleLangSave} disabled={langSaving}>
+                {langSaving ? "Saving…" : "Save languages"}
+              </Button>
+            </div>
           </div>
         </TabsContent>
 

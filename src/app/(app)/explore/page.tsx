@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { languageOptions } from "@/lib/mock-data"
+import { LANGUAGES, getLanguage, formatLevel, migrateLegacyLevel } from "@/constants/languages"
 import { CountrySelector } from "@/components/country-selector"
 
 type FriendStatus = "none" | "pending_sent" | "pending_received" | "friends"
@@ -22,7 +22,7 @@ interface ExploreUser {
   avatar: string
   bio: string
   country: string
-  nativeLanguages: string[]
+  spokenLanguages: { code: string; level: string }[]
   learningLanguages: { code: string; level: string }[]
   interestCategories: string[]
   friendStatus: FriendStatus
@@ -39,9 +39,6 @@ const INTERESTS = [
   { key: "hobbies", label: "Hobbies" },
 ]
 
-function langMeta(code: string) {
-  return languageOptions.find((l) => l.code === code) ?? { code, name: code, flag: "" }
-}
 
 function buildUrl(q: string, country: string, language: string, interest: string, page: number) {
   const params = new URLSearchParams()
@@ -152,19 +149,19 @@ function UserCard({ user }: { user: ExploreUser }) {
       )}
 
       <div className="flex flex-wrap gap-1">
-        {user.nativeLanguages.map((code) => {
-          const l = langMeta(code)
+        {user.spokenLanguages.map(({ code }) => {
+          const l = getLanguage(code)
           return (
-            <Badge key={`n-${code}`} variant="secondary" className="text-xs">
-              {l.flag} {l.code}
+            <Badge key={`s-${code}`} variant="secondary" className="text-xs">
+              {l.flag} {l.name}
             </Badge>
           )
         })}
         {user.learningLanguages.slice(0, 2).map(({ code, level }) => {
-          const l = langMeta(code)
+          const l = getLanguage(code)
           return (
             <Badge key={`l-${code}`} variant="outline" className="text-xs">
-              {l.flag} {l.code} · {level}
+              {l.flag} {l.name} · {formatLevel(migrateLegacyLevel(level))}
             </Badge>
           )
         })}
@@ -308,7 +305,7 @@ export default function ExplorePage() {
             className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/20 dark:bg-input/30"
           >
             <option value="">All languages</option>
-            {languageOptions.map((l) => (
+            {LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.flag} {l.name}
               </option>
