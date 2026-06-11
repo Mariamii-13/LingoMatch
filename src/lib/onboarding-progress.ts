@@ -53,7 +53,7 @@ export function getStepStatus(
   const hasAIPrefs =
     (ai.conversationGoals?.length ?? 0) > 0 ||
     (ai.preferredTraits?.length ?? 0) > 0 ||
-    !!(ai.personalityNotes?.trim()) ||
+    (ai.personalityNotes?.trim().length ?? 0) > 0 ||
     (ai.topicsToAvoid?.length ?? 0) > 0
 
   return {
