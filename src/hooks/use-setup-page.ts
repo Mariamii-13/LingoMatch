@@ -17,11 +17,14 @@ interface UseSetupPageResult {
   loading: boolean
   user: UserProfileData | null
   completedCount: number
+  currentStepIndex: number
+  stepStatus: Record<OnboardingStep, boolean>
   backHref: string
   backLabel: string
   buttonLabel: string
   from: string
   buildRedirect: (savedUser: UserProfileData) => string | null
+  buildSkipRedirect: () => string
 }
 
 export function useSetupPage(currentStep: OnboardingStep): UseSetupPageResult {
@@ -39,6 +42,11 @@ export function useSetupPage(currentStep: OnboardingStep): UseSetupPageResult {
   }, [])
 
   const completedCount = user ? getCompletedCount(user) : 0
+  const currentStepIndex = STEP_ORDER.indexOf(currentStep)
+  const stepStatus: Record<OnboardingStep, boolean> = user
+    ? getStepStatus(user)
+    : { profile: false, "ai-preferences": false, languages: false, interests: false, modes: false }
+
   const backHref = from === "settings" ? "/settings" : "/dashboard"
   const backLabel = from === "settings" ? "← Settings" : "← Dashboard"
 
@@ -58,14 +66,23 @@ export function useSetupPage(currentStep: OnboardingStep): UseSetupPageResult {
     return `${STEP_PATHS[next]}?from=${from}`
   }
 
+  function buildSkipRedirect(): string {
+    const next = STEP_ORDER[currentStepIndex + 1]
+    if (!next) return from === "settings" ? "/settings" : "/dashboard"
+    return `${STEP_PATHS[next]}?from=${from}`
+  }
+
   return {
     loading,
     user,
     completedCount,
+    currentStepIndex,
+    stepStatus,
     backHref,
     backLabel,
     buttonLabel,
     from,
     buildRedirect,
+    buildSkipRedirect,
   }
 }

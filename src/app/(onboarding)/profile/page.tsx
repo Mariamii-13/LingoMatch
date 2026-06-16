@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { useSetupPage } from "@/hooks/use-setup-page"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { getCompletionPercentage } from "@/lib/onboarding-progress"
+import { OnboardingStepBar } from "@/components/onboarding/OnboardingStepBar"
 
 const GENDER_OPTIONS = [
   { value: "male", label: "Male" },
@@ -36,7 +37,7 @@ function calcAge(dob: Date): number {
 
 function OnboardingProfileContent() {
   const router = useRouter()
-  const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
+  const { backHref, backLabel, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("profile")
 
   const [name, setName] = React.useState("")
@@ -111,12 +112,8 @@ function OnboardingProfileContent() {
 
   return (
     <div>
-      {/* Status line */}
-      <p className="mb-6 text-sm text-muted-foreground">
-        {completedCount} of 5 sections completed
-      </p>
+      <OnboardingStepBar currentStep="profile" stepStatus={stepStatus} />
 
-      {/* Back link */}
       <button
         type="button"
         onClick={handleBack}
@@ -220,7 +217,14 @@ function OnboardingProfileContent() {
         </div>
       </div>
 
-      <div className="mt-8 flex justify-end">
+      <div className="mt-8 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => router.push(buildSkipRedirect())}
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Skip this step
+        </button>
         <Button onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : buttonLabel}
         </Button>

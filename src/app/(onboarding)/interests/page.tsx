@@ -11,6 +11,7 @@ import { InterestCategoryCard } from "./_components/InterestCategoryCard"
 import { getCompletionPercentage } from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { OnboardingStepBar } from "@/components/onboarding/OnboardingStepBar"
 
 function buildInterestsObj(
   selectedCategories: string[],
@@ -23,7 +24,7 @@ function buildInterestsObj(
 
 function OnboardingInterestsContent() {
   const router = useRouter()
-  const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
+  const { backHref, backLabel, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("interests")
 
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([])
@@ -100,9 +101,7 @@ function OnboardingInterestsContent() {
 
   return (
     <div>
-      <p className="mb-6 text-sm text-muted-foreground">
-        {completedCount} of 5 sections completed
-      </p>
+      <OnboardingStepBar currentStep="interests" stepStatus={stepStatus} />
 
       <button
         type="button"
@@ -136,9 +135,18 @@ function OnboardingInterestsContent() {
       </div>
 
       <div className="mt-8 flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">
-          {selectedCategories.length} selected
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">
+            {selectedCategories.length} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => router.push(buildSkipRedirect())}
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Skip this step
+          </button>
+        </div>
         <Button onClick={handleSave} disabled={saving || selectedCategories.length === 0}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : buttonLabel}
         </Button>

@@ -11,10 +11,11 @@ import { conversationModes } from "@/lib/mock-data"
 import { getCompletionPercentage } from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
+import { OnboardingStepBar } from "@/components/onboarding/OnboardingStepBar"
 
 function OnboardingModeContent() {
   const router = useRouter()
-  const { completedCount, backHref, backLabel, buttonLabel, user, buildRedirect } =
+  const { backHref, backLabel, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("modes")
 
   const [selected, setSelected] = React.useState<string[]>([])
@@ -66,9 +67,7 @@ function OnboardingModeContent() {
 
   return (
     <div>
-      <p className="mb-6 text-sm text-muted-foreground">
-        {completedCount} of 5 sections completed
-      </p>
+      <OnboardingStepBar currentStep="modes" stepStatus={stepStatus} />
 
       <button
         type="button"
@@ -111,7 +110,14 @@ function OnboardingModeContent() {
         })}
       </div>
 
-      <div className="mt-8 flex justify-end">
+      <div className="mt-8 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => router.push(buildSkipRedirect())}
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Skip this step
+        </button>
         <Button onClick={handleSave} disabled={saving || selected.length === 0}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : buttonLabel}
         </Button>

@@ -9,11 +9,12 @@ import { AIPreferencesForm } from "@/components/ai-preferences/AIPreferencesForm
 import { getLanguage } from "@/constants/languages"
 import { getCompletionPercentage } from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"
+import { OnboardingStepBar } from "@/components/onboarding/OnboardingStepBar"
 import type { AIProfile } from "@/types"
 
 function OnboardingAIPreferencesContent() {
   const router = useRouter()
-  const { completedCount, backHref, user, loading, buildRedirect } =
+  const { backHref, user, loading, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("ai-preferences")
 
   const initialProfile = user?.aiProfile as Partial<AIProfile> | undefined
@@ -62,10 +63,7 @@ function OnboardingAIPreferencesContent() {
 
   return (
     <div>
-      {/* Status line */}
-      <p className="mb-6 text-sm text-muted-foreground">
-        {completedCount} of 5 sections completed
-      </p>
+      <OnboardingStepBar currentStep="ai-preferences" stepStatus={stepStatus} />
 
       <h1 className="text-2xl font-semibold">AI Matching Profile</h1>
       <p className="mt-1 text-sm text-muted-foreground">
@@ -79,6 +77,7 @@ function OnboardingAIPreferencesContent() {
           mode="onboarding"
           onSave={handleSave}
           backHref={backHref}
+          skipHref={buildSkipRedirect()}
         />
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Lock, Languages, Sparkles, Loader2, RotateCcw, Trash2 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -82,6 +83,7 @@ interface AIPreferencesFormProps {
   onReset?: () => Promise<void>
   onDelete?: () => Promise<void>
   backHref?: string
+  skipHref?: string
 }
 
 export function AIPreferencesForm({
@@ -93,7 +95,9 @@ export function AIPreferencesForm({
   onReset,
   onDelete,
   backHref = "/profile",
+  skipHref = "/dashboard",
 }: AIPreferencesFormProps) {
+  const router = useRouter()
   const [profile, setProfile] = React.useState<AIProfile>({
     ...DEFAULT_AI_PROFILE,
     ...initialProfile,
@@ -491,20 +495,29 @@ export function AIPreferencesForm({
 
       {/* Actions */}
       {mode === "onboarding" ? (
-        <div className="flex justify-between">
+        <div className="flex items-center justify-between">
           <Button variant="ghost" render={<Link href={backHref} />}>
             Back
           </Button>
-          <Button onClick={handleSave} disabled={busy}>
-            {saving ? (
-              <>
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              "Save & Continue"
-            )}
-          </Button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => router.push(skipHref)}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Skip for now
+            </button>
+            <Button onClick={handleSave} disabled={busy}>
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Save & Continue"
+              )}
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
