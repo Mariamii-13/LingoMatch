@@ -1,10 +1,12 @@
 import { Navbar } from "@/components/shared/navbar"
 import { Sidebar } from "@/components/shared/sidebar"
 import { MobileNav } from "@/components/shared/mobile-nav"
+import { AppThemeProvider } from "@/components/shared/app-theme-provider"
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen">
+    <div className="app-scope flex min-h-screen">
+      <AppThemeProvider />
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Navbar />

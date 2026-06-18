@@ -4,6 +4,9 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
   BarChart3,
+  CreditCard,
+  Database,
+  FileText,
   FileWarning,
   Files,
   Flag,
@@ -11,6 +14,7 @@ import {
   type LucideIcon,
   MessageSquare,
   Mic,
+  Paintbrush,
   Radio,
   Shield,
   Users,
@@ -27,6 +31,10 @@ const adminNav: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Feedback", href: "/admin/feedback", icon: MessageSquare },
   { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   { label: "Feature Flags", href: "/admin/flags", icon: Flag },
+  { label: "Theme", href: "/admin/theme", icon: Paintbrush },
+  { label: "Content", href: "/admin/content", icon: FileText },
+  { label: "Database", href: "/admin/database", icon: Database },
+  { label: "Billing", href: "/admin/billing", icon: CreditCard },
 ]
 
 export function AdminSidebar() {
@@ -41,7 +49,7 @@ export function AdminSidebar() {
         <span className="hidden font-semibold lg:inline">Admin Console</span>
       </div>
 
-      <nav className="flex-1 space-y-1 p-2 lg:p-3">
+      <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-2 lg:p-3">
         {adminNav.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(item.href + "/")
@@ -64,7 +72,7 @@ export function AdminSidebar() {
         })}
       </nav>
 
-      <div className="border-t border-zinc-800 p-3">
+      <div className="shrink-0 border-t border-zinc-800 p-3">
         <Link
           href="/dashboard"
           className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
