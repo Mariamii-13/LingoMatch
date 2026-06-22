@@ -83,11 +83,13 @@ export function Sidebar() {
 
   return (
     <aside className="sticky top-0 hidden h-screen w-16 shrink-0 flex-col border-r bg-sidebar lg:flex lg:w-64">
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Languages className="size-4" />
-        </span>
-        <span className="hidden text-base font-semibold lg:inline">LingoMatch</span>
+      <div className="flex h-14 items-center border-b px-4">
+        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Languages className="size-4" />
+          </span>
+          <span className="hidden text-base font-semibold lg:inline">LingoMatch</span>
+        </Link>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 lg:p-3">
