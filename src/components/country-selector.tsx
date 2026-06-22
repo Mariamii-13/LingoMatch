@@ -3,7 +3,7 @@
 import * as React from "react"
 import { ChevronsUpDown, Globe } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import {
   Command,
   CommandEmpty,
@@ -99,15 +99,10 @@ export function CountrySelector({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger
-        render={
-          <Button
-            variant="outline"
-            role="combobox"
-            aria-expanded={open}
-            disabled={disabled}
-            className={cn("w-full justify-between font-normal", className)}
-          />
-        }
+        role="combobox"
+        aria-expanded={open}
+        disabled={disabled}
+        className={buttonVariants({ variant: "outline", className: cn("w-full justify-between font-normal", className) })}
       >
         {selected ? (
           <span className="flex items-center gap-2">

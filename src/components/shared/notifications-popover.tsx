@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 import { useNotifications } from "@/hooks/use-notifications"
 import type { Notification, NotificationType } from "@/types"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 
 const TYPE_ICON: Record<NotificationType, React.ReactNode> = {
   friend_request: <UserPlus className="size-4" />,
@@ -119,14 +119,8 @@ export function NotificationsPopover() {
   return (
     <Popover.Root>
       <Popover.Trigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Notifications"
-            className="relative"
-          />
-        }
+        aria-label="Notifications"
+        className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "relative")}
       >
         <Bell className="size-5" />
         {unreadCount > 0 && (
@@ -136,7 +130,7 @@ export function NotificationsPopover() {
 
       <Popover.Portal>
         <Popover.Positioner side="bottom" align="end" sideOffset={8}>
-          <Popover.Popup className="z-50 w-80 rounded-xl border bg-popover shadow-lg outline-none data-[ending-style]:animate-out data-[ending-style]:fade-out-0 data-[ending-style]:zoom-out-95 data-[starting-style]:animate-in data-[starting-style]:fade-in-0 data-[starting-style]:zoom-in-95">
+          <Popover.Popup className="z-50 w-80 rounded-xl border bg-popover shadow-lg outline-none data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95 data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95">
 
             {/* Header */}
             <div className="flex items-center justify-between px-4 pt-4 pb-0">

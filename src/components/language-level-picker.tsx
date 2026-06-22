@@ -4,7 +4,7 @@ import * as React from "react"
 import { Check, Plus, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import {
   Command,
   CommandEmpty,
@@ -137,15 +137,9 @@ export function LanguageLevelPicker({
       {/* Add language button */}
       <Popover open={open} onOpenChange={handleOpenChange}>
         <PopoverTrigger
-          render={
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              aria-expanded={open}
-              className="h-9 gap-1.5 rounded-full border-dashed px-3 text-muted-foreground hover:text-foreground"
-            />
-          }
+          type="button"
+          aria-expanded={open}
+          className={buttonVariants({ variant: "outline", size: "sm", className: "h-9 gap-1.5 rounded-full border-dashed px-3 text-muted-foreground hover:text-foreground" })}
         >
           <Plus className="size-3.5" />
           {value.length === 0 ? placeholder : "Add another"}

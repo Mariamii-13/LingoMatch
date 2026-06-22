@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
+import { LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { buttonVariants } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { UserSearch } from "@/components/shared/user-search"
+import { NotificationsPopover } from "@/components/shared/notifications-popover"
 
 export function Navbar() {
   const { data: session } = useSession()
@@ -43,16 +45,12 @@ export function Navbar() {
       <div className="flex items-center gap-1 sm:gap-2">
         <ThemeToggle />
 
-        <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
-          <Bell className="size-5" />
-          <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" />
-        </Button>
+        <NotificationsPopover />
 
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={
-              <Button variant="ghost" size="icon" className="rounded-full" aria-label="Account menu" />
-            }
+            aria-label="Account menu"
+            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "rounded-full")}
           >
             <Avatar>
               {image ? <AvatarImage src={image} alt={displayName} /> : null}

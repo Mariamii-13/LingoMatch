@@ -4,7 +4,8 @@ import Link from "next/link"
 import { LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
 import { signOut, useSession } from "next-auth/react"
 
-import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -41,9 +42,8 @@ export function Navbar() {
 
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={
-              <Button variant="ghost" size="icon" className="rounded-full" aria-label="Account menu" />
-            }
+            aria-label="Account menu"
+            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "rounded-full")}
           >
             <Avatar>
               <AvatarFallback className="bg-gradient-to-br from-violet-500 to-purple-600 text-white">
