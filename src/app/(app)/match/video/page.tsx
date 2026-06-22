@@ -18,8 +18,24 @@ export default function VideoMatchPage() {
   const [interests, setInterests] = React.useState<string[]>([])
   const [matchResult, setMatchResult] = React.useState<MatchResult | null>(null)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+  const requestIdRef = React.useRef<string | null>(null)
 
-  const stopPolling = () => { if (pollRef.current) clearInterval(pollRef.current) }
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+  }
+
+  const cancelRequest = React.useCallback((id: string | null) => {
+    if (!id) return
+    // Use sendBeacon so it fires even on tab close
+    navigator.sendBeacon(`/api/match/video/cancel?requestId=${id}`)
+    requestIdRef.current = null
+  }, [])
+
+  const handleCancel = () => {
+    stopPolling()
+    cancelRequest(requestIdRef.current)
+    setPhase("prejoin")
+  }
 
   const startSearching = async () => {
     setPhase("searching")
@@ -36,21 +52,38 @@ export default function VideoMatchPage() {
       return
     }
 
+    requestIdRef.current = data.requestId
+
     pollRef.current = setInterval(async () => {
       const poll = await fetch(`/api/match/video?requestId=${data.requestId}`)
       const pollData = await poll.json()
       if (pollData.matched) {
         stopPolling()
+        requestIdRef.current = null
         setMatchResult(pollData)
         setPhase("found")
+      } else if (pollData.expired || pollData.cancelled) {
+        stopPolling()
+        requestIdRef.current = null
+        setPhase("prejoin")
       }
     }, 2000)
   }
 
-  React.useEffect(() => () => stopPolling(), [])
+  // Cancel on unmount (tab close handled by sendBeacon in beforeunload)
+  React.useEffect(() => {
+    const onUnload = () => cancelRequest(requestIdRef.current)
+    window.addEventListener("beforeunload", onUnload)
+    return () => {
+      window.removeEventListener("beforeunload", onUnload)
+      stopPolling()
+      cancelRequest(requestIdRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (phase === "searching") return (
-    <SearchingState onCancel={() => { stopPolling(); setPhase("prejoin") }} />
+    <SearchingState onCancel={handleCancel} />
   )
 
   if (phase === "prejoin") return (
