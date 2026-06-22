@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Check, Loader2, MessageSquare, UserMinus, UserPlus, X } from "lucide-react"
 import { toast } from "sonner"
 
@@ -75,6 +76,7 @@ function UserAvatar({ user }: { user: UserCard }) {
 }
 
 export default function FriendsPage() {
+  const router = useRouter()
   const [data, setData] = React.useState<FriendsData | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [fetchError, setFetchError] = React.useState(false)
@@ -145,6 +147,24 @@ export default function FriendsPage() {
       toast.success("Friend request cancelled.")
     } catch {
       toast.error("Failed to cancel request")
+    } finally {
+      setBusyFor(user.id, false)
+    }
+  }
+
+  async function openChat(user: UserCard) {
+    setBusyFor(user.id, true)
+    try {
+      const res = await fetch("/api/conversations/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipientId: user.id }),
+      })
+      if (!res.ok) { toast.error("Failed to open chat"); return }
+      const conv = await res.json()
+      router.push(`/messages/${conv.id}`)
+    } catch {
+      toast.error("Failed to open chat")
     } finally {
       setBusyFor(user.id, false)
     }
@@ -253,8 +273,17 @@ export default function FriendsPage() {
                     </div>
                   </div>
                   <div className="mt-4 flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1" disabled title="Coming soon">
-                      <MessageSquare className="size-4" /> Chat
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      disabled={busy[user.id]}
+                      onClick={() => openChat(user)}
+                    >
+                      {busy[user.id]
+                        ? <Loader2 className="size-4 animate-spin" />
+                        : <MessageSquare className="size-4" />}
+                      Chat
                     </Button>
                     <Button
                       variant="ghost"

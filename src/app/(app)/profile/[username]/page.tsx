@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { use } from "react"
+import { useRouter } from "next/navigation"
 import { CalendarDays, Loader2, MessageSquare, UserCheck, UserPlus, Users } from "lucide-react"
 import { toast } from "sonner"
 
@@ -33,11 +34,13 @@ export default function PublicProfilePage({
   params: Promise<{ username: string }>
 }) {
   const { username } = use(params)
+  const router = useRouter()
   const [profile, setProfile] = React.useState<PublicProfile | null>(null)
   const [notFound, setNotFound] = React.useState(false)
   const [fetchError, setFetchError] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [friendBusy, setFriendBusy] = React.useState(false)
+  const [chatBusy, setChatBusy] = React.useState(false)
 
   React.useEffect(() => {
     fetch(`/api/users/${encodeURIComponent(username)}`)
@@ -61,8 +64,14 @@ export default function PublicProfilePage({
         body: JSON.stringify({ targetUserId: profile.id }),
       })
       if (!res.ok) { toast.error("Failed to send request"); return }
-      setProfile((p) => p ? { ...p, friendStatus: "pending_sent" } : p)
-      toast.success("Friend request sent!")
+      const data = await res.json()
+      if (data.accepted) {
+        setProfile((p) => p ? { ...p, friendStatus: "friends" } : p)
+        toast.success("You are now friends!")
+      } else {
+        setProfile((p) => p ? { ...p, friendStatus: "pending_sent" } : p)
+        toast.success("Friend request sent!")
+      }
     } catch {
       toast.error("Failed to send request")
     } finally {
@@ -82,6 +91,25 @@ export default function PublicProfilePage({
       toast.error("Failed to accept request")
     } finally {
       setFriendBusy(false)
+    }
+  }
+
+  async function openChat() {
+    if (!profile) return
+    setChatBusy(true)
+    try {
+      const res = await fetch("/api/conversations/upsert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipientId: profile.id }),
+      })
+      if (!res.ok) { toast.error("Failed to open chat"); return }
+      const conv = await res.json()
+      router.push(`/messages/${conv.id}`)
+    } catch {
+      toast.error("Failed to open chat")
+    } finally {
+      setChatBusy(false)
     }
   }
 
@@ -197,10 +225,12 @@ export default function PublicProfilePage({
 
             <Button
               variant="outline"
-              disabled
-              title="Coming soon"
+              disabled={chatBusy}
+              onClick={openChat}
             >
-              <MessageSquare className="size-4" />
+              {chatBusy
+                ? <Loader2 className="size-4 animate-spin" />
+                : <MessageSquare className="size-4" />}
               Message
             </Button>
           </div>
