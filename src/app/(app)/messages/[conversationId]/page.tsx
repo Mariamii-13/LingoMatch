@@ -4,12 +4,14 @@ import * as React from "react"
 import { use } from "react"
 import Link from "next/link"
 import { useSession } from "next-auth/react"
-import { ArrowLeft, Flag, Loader2, Send, UserPlus } from "lucide-react"
+import { ArrowLeft, Flag, Loader2, Send, UserPlus, Video, WifiOff } from "lucide-react"
 import { toast } from "sonner"
 
 import { avatarGradient, cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { useRealtimeMessages } from "@/components/messages/RealtimeMessagesProvider"
+import { reconcileMessages, type CanonicalMessage } from "@/lib/messages/reconcile"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,12 +26,7 @@ interface Partner {
   nativeLanguages: { code: string; name: string; flag: string }[]
 }
 
-interface ChatMessage {
-  id: string
-  senderId: string
-  content: string
-  createdAt: string
-}
+type ChatMessage = CanonicalMessage
 
 type SessionStatus = "active" | "ended"
 
@@ -40,14 +37,6 @@ function formatTime(iso: string) {
     hour: "2-digit",
     minute: "2-digit",
   })
-}
-
-function formatPresence(lastSeenAt: string | null | undefined): string {
-  if (!lastSeenAt) return ""
-  const diffMs = Date.now() - new Date(lastSeenAt).getTime()
-  if (diffMs < 3 * 60 * 1000) return "Online"
-  if (diffMs < 60 * 60 * 1000) return `Last seen ${Math.floor(diffMs / 60000)}m ago`
-  return "Last seen recently"
 }
 
 // ─── Modals ──────────────────────────────────────────────────────────────────
@@ -377,40 +366,24 @@ export default function ConversationPage({
   const [fetchError, setFetchError] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
   const [sending, setSending] = React.useState(false)
-  const [partnerTyping, setPartnerTyping] = React.useState(false)
+  const { status: realtimeStatus, reconnect, subscribe, dispatch } = useRealtimeMessages()
 
   const [showFeedback, setShowFeedback] = React.useState(false)
   const [showPostChat, setShowPostChat] = React.useState(false)
   const [showReport, setShowReport] = React.useState(false)
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
-  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
-  const lastMessageTimeRef = React.useRef<string | null>(null)
-  const typingTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  )
+  const nearBottomRef = React.useRef(true)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
 
   React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, partnerTyping])
-
-  React.useEffect(() => {
-    function ping() {
-      fetch("/api/user/me/presence", { method: "POST" }).catch(() => {})
+    if (nearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }
-    ping()
-    const id = setInterval(ping, 30_000)
-    return () => clearInterval(id)
-  }, [])
+  }, [messages])
 
   React.useEffect(() => {
-    setLoading(true)
-    setFetchError(false)
-    setMessages([])
-    setPartner(null)
-    setSessionStatus("active")
-    lastMessageTimeRef.current = null
+    nearBottomRef.current = true
 
     async function init() {
       try {
@@ -430,11 +403,6 @@ export default function ConversationPage({
         setPartner(info.partner)
         setSessionStatus(info.status)
         setMessages(msgData.messages)
-        setPartnerTyping(msgData.partnerTyping)
-
-        if (msgData.messages.length > 0) {
-          lastMessageTimeRef.current = msgData.messages.at(-1)!.createdAt
-        }
 
         if (info.status === "ended") setShowFeedback(true)
       } catch {
@@ -446,41 +414,30 @@ export default function ConversationPage({
     init()
   }, [conversationId])
 
+  React.useEffect(
+    () =>
+      subscribe((event) => {
+        if (event.conversationId !== conversationId) return
+        setMessages((current) => reconcileMessages(current, [event.message]))
+      }),
+    [conversationId, subscribe]
+  )
+
   React.useEffect(() => {
-    if (sessionStatus !== "active") return
+    if (realtimeStatus !== "disconnected" || sessionStatus !== "active") return
 
-    pollRef.current = setInterval(async () => {
-      const after = lastMessageTimeRef.current ?? ""
-      const res = await fetch(
-        `/api/chat/${conversationId}/messages${after ? `?after=${encodeURIComponent(after)}` : ""}`
-      ).catch(() => null)
-      if (!res?.ok) return
+    const interval = setInterval(async () => {
+      const response = await fetch(`/api/chat/${conversationId}/messages`, {
+        cache: "no-store",
+      }).catch(() => null)
+      if (!response?.ok) return
+      const data = await response.json()
+      setMessages((current) => reconcileMessages(current, data.messages))
+      if (data.sessionStatus === "ended") setSessionStatus("ended")
+    }, 10_000)
 
-      const data = await res.json()
-      setPartnerTyping(data.partnerTyping)
-
-      if (data.messages.length > 0) {
-        setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id))
-          const fresh = data.messages.filter(
-            (m: ChatMessage) => !existingIds.has(m.id)
-          )
-          return fresh.length > 0 ? [...prev, ...fresh] : prev
-        })
-        lastMessageTimeRef.current = data.messages.at(-1).createdAt
-      }
-
-      if (data.sessionStatus === "ended") {
-        clearInterval(pollRef.current!)
-        setSessionStatus("ended")
-        setShowFeedback(true)
-      }
-    }, 2000)
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [conversationId, sessionStatus])
+    return () => clearInterval(interval)
+  }, [conversationId, realtimeStatus, sessionStatus])
 
   async function sendMessage() {
     const content = inputValue.trim()
@@ -507,8 +464,7 @@ export default function ConversationPage({
         return
       }
       const msg = await res.json()
-      setMessages((prev) => [...prev, msg])
-      lastMessageTimeRef.current = msg.createdAt
+      dispatch({ type: "conversation.message", conversationId, message: msg })
     } catch {
       toast.error("Failed to send message")
       setInputValue(content)
@@ -525,18 +481,7 @@ export default function ConversationPage({
     }
   }
 
-  function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
-    setInputValue(e.target.value)
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current)
-    typingTimerRef.current = setTimeout(() => {
-      fetch(`/api/chat/${conversationId}/typing`, {
-        method: "POST",
-      }).catch(() => {})
-    }, 300)
-  }
-
   async function handleLeave() {
-    if (pollRef.current) clearInterval(pollRef.current)
     await fetch(`/api/chat/${conversationId}/leave`, {
       method: "POST",
     }).catch(() => {})
@@ -592,8 +537,6 @@ export default function ConversationPage({
     )
   }
 
-  const presenceText = formatPresence(partner.lastSeenAt)
-
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
@@ -623,23 +566,20 @@ export default function ConversationPage({
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold leading-tight">{partner.name}</p>
           <p className="truncate text-xs text-muted-foreground">
-            {presenceText ? (
-              <span
-                className={cn(
-                  "font-medium",
-                  presenceText === "Online" ? "text-emerald-500" : ""
-                )}
-              >
-                {presenceText}
-                {presenceText !== "Online" &&
-                  partner.nativeLanguages.length > 0 &&
-                  " · "}
-              </span>
-            ) : null}
             {partner.nativeLanguages.map((l) => `${l.flag} ${l.name}`).join(", ")}
             {partner.country ? ` · ${partner.country}` : ""}
           </p>
         </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          className="shrink-0"
+          render={<Link href="/match/video" />}
+        >
+          <Video className="size-4" />
+          <span className="hidden md:inline">Live practice</span>
+        </Button>
 
         <Button
           variant="ghost"
@@ -667,8 +607,26 @@ export default function ConversationPage({
         )}
       </div>
 
+      {realtimeStatus === "reconnecting" && (
+        <div className="border-b bg-amber-500/10 px-4 py-2 text-center text-xs text-amber-700">
+          Reconnecting live messages…
+        </div>
+      )}
+      {realtimeStatus === "disconnected" && (
+        <div className="flex items-center justify-center gap-2 border-b bg-muted px-4 py-2 text-xs text-muted-foreground">
+          <WifiOff className="size-3.5" /> Live updates disconnected. Messages will refresh periodically.
+          <button className="font-medium text-primary hover:underline" onClick={reconnect}>Reconnect</button>
+        </div>
+      )}
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div
+        className="flex-1 overflow-y-auto px-4 py-4"
+        onScroll={(event) => {
+          const element = event.currentTarget
+          nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120
+        }}
+      >
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
             <p className="text-sm text-muted-foreground">
@@ -722,24 +680,6 @@ export default function ConversationPage({
             )
           })}
 
-          {partnerTyping && (
-            <div className="flex justify-start">
-              <Avatar className="mr-2 mt-1 size-7 shrink-0">
-                <AvatarFallback
-                  className={`bg-gradient-to-br ${partner.avatarColor} text-xs font-semibold text-white`}
-                >
-                  {partner.avatarInitials}
-                </AvatarFallback>
-              </Avatar>
-              <div className="rounded-2xl rounded-bl-sm bg-muted px-4 py-3">
-                <span className="flex gap-1">
-                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
-                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
-                  <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
-                </span>
-              </div>
-            </div>
-          )}
         </div>
         <div ref={messagesEndRef} />
       </div>
@@ -751,7 +691,7 @@ export default function ConversationPage({
             <textarea
               ref={inputRef}
               value={inputValue}
-              onChange={handleInputChange}
+              onChange={(event) => setInputValue(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type a message… (Enter to send)"
               rows={1}

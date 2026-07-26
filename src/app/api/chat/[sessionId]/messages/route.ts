@@ -5,6 +5,8 @@ import { connectDB } from '@/lib/db'
 import Conversation from '@/lib/models/Conversation'
 import Message from '@/lib/models/Message'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { isConversationParticipant } from '@/lib/messages/access'
+import { publishConversationMessage } from '@/lib/messages/realtime'
 
 const TYPING_TIMEOUT_MS = 4000
 
@@ -24,7 +26,7 @@ export async function GET(
   if (!conv) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const participants = conv.participants as { toString(): string }[]
-  if (!participants.some((p) => p.toString() === session.user!.id)) {
+  if (!isConversationParticipant(participants, session.user.id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -40,6 +42,7 @@ export async function GET(
 
   const result = messages.map((m) => ({
     id: (m._id as mongoose.Types.ObjectId).toString(),
+    conversationId: sessionId,
     senderId: (m.senderId as mongoose.Types.ObjectId).toString(),
     content: m.content as string,
     createdAt: (m.createdAt as Date).toISOString(),
@@ -97,7 +100,7 @@ export async function POST(
   if (conv.status !== 'active') return NextResponse.json({ error: 'Session ended' }, { status: 410 })
 
   const participants = conv.participants as { toString(): string }[]
-  if (!participants.some((p) => p.toString() === session.user!.id)) {
+  if (!isConversationParticipant(participants, session.user.id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -107,10 +110,17 @@ export async function POST(
     content: content.trim(),
   })
 
-  return NextResponse.json({
+  await Conversation.findByIdAndUpdate(sessionId, { $set: { updatedAt: msg.createdAt } })
+
+  const shaped = {
     id: (msg._id as mongoose.Types.ObjectId).toString(),
+    conversationId: sessionId,
     senderId: session.user.id,
     content: msg.content,
     createdAt: (msg.createdAt as Date).toISOString(),
-  })
+  }
+
+  await publishConversationMessage(participants.map((participant) => participant.toString()), shaped)
+
+  return NextResponse.json(shaped)
 }

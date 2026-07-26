@@ -3,9 +3,15 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Inbox, MessageSquare, Search, Video } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Inbox, MessageSquare, Search, Video, WifiOff } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
+import {
+  RealtimeMessagesProvider,
+  useRealtimeMessages,
+} from "@/components/messages/RealtimeMessagesProvider"
 import { cn } from "@/lib/utils"
+import { applyMessageToConversations } from "@/lib/messages/reconcile"
 import type { Conversation } from "@/types"
 
 interface Props {
@@ -26,8 +32,38 @@ function formatTime(iso: string) {
 }
 
 export function MessengerShell({ conversations, children }: Props) {
+  return (
+    <RealtimeMessagesProvider>
+      <MessengerShellContent conversations={conversations}>{children}</MessengerShellContent>
+    </RealtimeMessagesProvider>
+  )
+}
+
+function MessengerShellContent({ conversations, children }: Props) {
   const pathname = usePathname()
   const [search, setSearch] = React.useState("")
+  const [conversationItems, setConversationItems] = React.useState(conversations)
+  const { status, reconnect, subscribe } = useRealtimeMessages()
+
+  React.useEffect(
+    () =>
+      subscribe((event) => {
+        setConversationItems((current) => {
+          if (current.some((conversation) => conversation.id === event.conversationId)) {
+            return applyMessageToConversations(current, event.message)
+          }
+
+          fetch("/api/conversations", { cache: "no-store" })
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data) => {
+              if (data?.conversations) setConversationItems(data.conversations)
+            })
+            .catch(() => {})
+          return current
+        })
+      }),
+    [subscribe]
+  )
 
   const activeId = pathname.startsWith("/messages/")
     ? pathname.slice("/messages/".length).split("/")[0]
@@ -35,7 +71,7 @@ export function MessengerShell({ conversations, children }: Props) {
 
   const isOnChat = !!activeId
 
-  const filtered = conversations.filter((c) =>
+  const filtered = conversationItems.filter((c) =>
     c.partner.name.toLowerCase().includes(search.toLowerCase())
   )
 
@@ -50,7 +86,17 @@ export function MessengerShell({ conversations, children }: Props) {
       >
         {/* Header */}
         <div className="border-b px-4 py-3">
-          <h2 className="text-lg font-semibold">Messages</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">Conversations</h2>
+            {status === "reconnecting" && (
+              <span className="text-xs text-amber-600">Reconnecting…</span>
+            )}
+            {status === "disconnected" && (
+              <Button variant="ghost" size="xs" onClick={reconnect}>
+                <WifiOff className="size-3.5" /> Reconnect
+              </Button>
+            )}
+          </div>
           <div className="relative mt-2">
             <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -85,6 +131,9 @@ export function MessengerShell({ conversations, children }: Props) {
                 >
                   <div className="relative shrink-0">
                     <Avatar className="size-11">
+                      {conv.partner.avatar && (
+                        <AvatarImage src={conv.partner.avatar} alt={conv.partner.name} />
+                      )}
                       <AvatarFallback
                         className={`bg-gradient-to-br ${conv.partner.avatarColor} text-sm font-semibold text-white`}
                       >

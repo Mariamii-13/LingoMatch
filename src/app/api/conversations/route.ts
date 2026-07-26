@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import Conversation from '@/lib/models/Conversation'
 import MessageModel from '@/lib/models/Message'
 import User from '@/lib/models/User'
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -32,6 +32,7 @@ export async function GET(_req: NextRequest) {
           id: partnerDoc ? (partnerDoc._id as object).toString() : '',
           name,
           username: (partnerDoc?.username as string) ?? '',
+          avatar: (partnerDoc?.avatar as string) ?? '',
           flag: '',
           avatarInitials: name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase(),
           avatarColor: 'from-violet-500 to-indigo-500',

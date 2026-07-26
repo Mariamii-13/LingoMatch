@@ -17,6 +17,7 @@ export interface User {
   flag: string
   avatarInitials: string
   avatarColor: string
+  avatar?: string
   bio?: string
   native: Language[]
   learning: Language[]
@@ -174,7 +175,7 @@ export interface Message {
 export interface Conversation {
   id: string
   type: "chat" | "video"
-  partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor">
+  partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor" | "avatar">
   language: string
   status: "active" | "ended"
   lastMessage?: Pick<Message, "content" | "createdAt">

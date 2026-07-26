@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   await connectDB()
 
-  const recipient = await User.findById(recipientId).select('displayName username').lean() as Record<string, unknown> | null
+  const recipient = await User.findById(recipientId).select('displayName username avatar').lean() as Record<string, unknown> | null
   if (!recipient) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
   // Find existing DM conversation (language='any' marks direct messages vs match sessions)
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
       id: recipientId,
       name,
       username,
+      avatar: (recipient.avatar as string) ?? '',
       avatarInitials: name
         .split(' ')
         .map((w: string) => w[0])

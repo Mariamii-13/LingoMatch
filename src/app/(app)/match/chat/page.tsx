@@ -122,7 +122,7 @@ export default function ChatMatchPage() {
       {matchResult && phase === "found" && (
         <MatchFoundModal
           result={matchResult}
-          onStartChat={() => router.push(`/chat/${matchResult.conversationId}`)}
+          onStartChat={() => router.push(`/messages/${matchResult.conversationId}`)}
           onSkip={() => { setMatchResult(null); setPhase("idle") }}
         />
       )}

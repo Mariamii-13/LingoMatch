@@ -43,6 +43,7 @@ export default async function MessagesLayout({
           id: partnerDoc ? (partnerDoc._id as object).toString() : "",
           name,
           username: (partnerDoc?.username as string) ?? "",
+          avatar: (partnerDoc?.avatar as string) ?? "",
           flag: "",
           avatarInitials: name
             .split(" ")
