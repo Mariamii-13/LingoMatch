@@ -2,208 +2,159 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { Calendar, MessageSquare, Sparkles, Users, Video } from "lucide-react"
+import {
+  ArrowRight,
+  BarChart3,
+  Bot,
+  Compass,
+  Inbox,
+  MessageSquare,
+  Video,
+} from "lucide-react"
 import { useSession } from "next-auth/react"
 
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import {
-  dashboardStats,
-  friendActivity,
-  scheduledSessions,
-} from "@/lib/mock-data"
+import { Button } from "@/components/ui/button"
 import { ProfileCompletionCard } from "@/components/profile-completion-card"
 import type { UserProfileData } from "@/lib/onboarding-progress"
 
-const aiInsight = {
-  week: "Week of Jun 2",
-  language: "Spanish focus",
-  speakingHours: "3.2h",
-  sessions: 4,
-  growthPct: "+18%",
-  fluencyPct: 67,
-  tip: "Focus on pronunciation in Spanish conditional tense. Try 3 sessions this week.",
-}
+const secondaryLinks = [
+  {
+    title: "Find Partners",
+    description: "Browse profiles and connect with people who share your language goals.",
+    href: "/explore",
+    icon: Compass,
+  },
+  {
+    title: "Conversations",
+    description: "Return to your existing conversations.",
+    href: "/messages",
+    icon: Inbox,
+  },
+  {
+    title: "Progress",
+    description: "View your practice activity as it becomes available.",
+    href: "/progress",
+    icon: BarChart3,
+  },
+]
 
 export default function DashboardPage() {
   const { data: session } = useSession()
   const firstName = session?.user?.name?.split(" ")[0] ?? "there"
-
   const [profileData, setProfileData] = React.useState<UserProfileData | null>(null)
 
   React.useEffect(() => {
     fetch("/api/user/me")
-      .then((r) => r.json())
+      .then((response) => response.json())
       .then((data: UserProfileData) => setProfileData(data))
       .catch(() => {})
   }, [])
 
   return (
-    <div className="space-y-6">
-
-      {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold sm:text-3xl">
-          🌤️ Good morning, {firstName}
+    <div className="mx-auto max-w-6xl space-y-8">
+      <header>
+        <p className="text-sm font-medium text-primary">Welcome back</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
+          Ready to practise, {firstName}?
         </h1>
-      </div>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
+          Choose the kind of language practice that feels right today.
+        </p>
+      </header>
 
-      {/* Profile completion card */}
       {profileData && <ProfileCompletionCard user={profileData} />}
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-xl border bg-card p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold">{dashboardStats.sessionsToday}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Sessions</p>
+      <section aria-labelledby="practice-heading">
+        <div className="mb-4">
+          <h2 id="practice-heading" className="text-lg font-semibold">Start practising</h2>
+          <p className="text-sm text-muted-foreground">AI, text, and optional live practice are all available from one place.</p>
         </div>
-        <div className="rounded-xl border bg-card p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold">{dashboardStats.friends}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Friends</p>
-        </div>
-        <div className="rounded-xl border bg-card p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold">🔥 {dashboardStats.streak}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Streak</p>
-        </div>
-      </div>
 
-      {/* Match CTAs */}
-      <div className="rounded-2xl border bg-card p-5 shadow-sm">
-        <p className="mb-3 text-sm font-semibold text-muted-foreground">Start a conversation</p>
-        <div className="grid grid-cols-2 gap-3">
-          <Link
-            href="/match/chat"
-            className="flex flex-col items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-5 text-white transition-colors hover:bg-blue-700"
-          >
-            <MessageSquare className="size-6" />
-            <span className="text-sm font-semibold">Chat Match</span>
-            <span className="text-xs opacity-75">Text · Instant</span>
-          </Link>
-          <Link
-            href="/match/video"
-            className="flex flex-col items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-5 text-white transition-colors hover:bg-violet-700"
-          >
-            <Video className="size-6" />
-            <span className="text-sm font-semibold">Video Match</span>
-            <span className="text-xs opacity-75">Video · Voice · Chat</span>
-          </Link>
-        </div>
-      </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          <article className="relative overflow-hidden rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm lg:col-span-3">
+            <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-primary/10 blur-2xl" />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                  <Bot className="size-6" />
+                </span>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-xl font-semibold">Practice with AI</h3>
+                    <Badge variant="secondary">Preview</Badge>
+                  </div>
+                  <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                    Explore the AI Practice area and see the guided experiences being prepared for LingoMatch.
+                  </p>
+                </div>
+              </div>
+              <Button size="lg" render={<Link href="/ai-practice" />}>
+                Explore AI Practice <ArrowRight className="size-4" />
+              </Button>
+            </div>
+          </article>
 
-      {/* AI Weekly Insight — promoted to main column */}
-      <div className="rounded-2xl border border-primary/30 bg-card p-5 shadow-sm">
-        {/* Header */}
-        <div className="flex items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
-            <Sparkles className="size-5" />
-          </span>
-          <div>
-            <p className="font-semibold leading-tight">AI Weekly Insight</p>
-            <p className="text-xs text-muted-foreground">
-              {aiInsight.week} · {aiInsight.language}
+          <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
+              <MessageSquare className="size-5" />
+            </span>
+            <h3 className="mt-4 text-lg font-semibold">Text Practice</h3>
+            <p className="mt-2 flex-1 text-sm text-muted-foreground">
+              Match with a language partner for an instant text conversation.
             </p>
-          </div>
-        </div>
+            <Button className="mt-5" variant="outline" render={<Link href="/match/chat" />}>
+              Find a text match
+            </Button>
+          </article>
 
-        {/* Stat mini-cards */}
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className="rounded-xl bg-muted/60 p-3 text-center">
-            <p className="text-lg font-bold">{aiInsight.speakingHours}</p>
-            <p className="text-[11px] text-muted-foreground">Speaking</p>
-          </div>
-          <div className="rounded-xl bg-muted/60 p-3 text-center">
-            <p className="text-lg font-bold">{aiInsight.sessions}</p>
-            <p className="text-[11px] text-muted-foreground">Sessions</p>
-          </div>
-          <div className="rounded-xl bg-muted/60 p-3 text-center">
-            <p className="text-lg font-bold text-emerald-400">{aiInsight.growthPct}</p>
-            <p className="text-[11px] text-muted-foreground">vs last wk</p>
-          </div>
-        </div>
+          <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="flex size-11 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600">
+                <Video className="size-5" />
+              </span>
+              <Badge variant="outline">Optional</Badge>
+            </div>
+            <h3 className="mt-4 text-lg font-semibold">Live Practice</h3>
+            <p className="mt-2 flex-1 text-sm text-muted-foreground">
+              Practise live with a partner when you want to. Camera use is always your choice.
+            </p>
+            <Button className="mt-5" variant="outline" render={<Link href="/match/video" />}>
+              Choose live practice
+            </Button>
+          </article>
 
-        {/* Fluency progress */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Fluency progress</span>
-            <span className="font-semibold">{aiInsight.fluencyPct}%</span>
-          </div>
-          <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${aiInsight.fluencyPct}%` }}
-            />
-          </div>
+          <article className="flex flex-col justify-center rounded-2xl border border-dashed bg-muted/20 p-5">
+            <p className="font-medium">Your recent practice will appear here</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              There is no recorded practice activity to show yet. Start with any practice mode when you are ready.
+            </p>
+          </article>
         </div>
+      </section>
 
-        {/* Tip */}
-        <div className="mt-4 rounded-xl bg-muted/50 px-4 py-3 text-sm">
-          💡 <span className="font-medium">Tip:</span>{" "}
-          <span className="text-muted-foreground">{aiInsight.tip}</span>
-        </div>
-      </div>
-
-      {/* Bottom grid: sessions + activity */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Upcoming sessions */}
-        <section className="rounded-xl border bg-card p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2 font-semibold">
-              <Calendar className="size-4 text-primary" /> Upcoming Sessions
-            </h3>
-            <Link href="/schedule" className="text-sm text-primary hover:underline">
-              View all
-            </Link>
-          </div>
-          <div className="mt-4 space-y-3">
-            {scheduledSessions.slice(0, 3).map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
+      <section aria-labelledby="continue-heading">
+        <h2 id="continue-heading" className="text-lg font-semibold">Continue your journey</h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {secondaryLinks.map((item) => {
+            const Icon = item.icon
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group rounded-xl border bg-card p-4 shadow-sm transition-colors hover:bg-accent"
               >
-                <Avatar>
-                  <AvatarFallback className={`bg-gradient-to-br ${s.partner.avatarColor} text-white`}>
-                    {s.partner.avatarInitials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {s.partner.name} {s.partner.flag}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {s.date} · {s.time} {s.timezone}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <Icon className="size-5 text-primary" />
+                  <h3 className="font-semibold">{item.title}</h3>
+                  <ArrowRight className="ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                 </div>
-                <Badge variant="secondary">{s.mode}</Badge>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Friend activity */}
-        <section className="rounded-xl border bg-card p-5 shadow-sm">
-          <h3 className="flex items-center gap-2 font-semibold">
-            <Users className="size-4 text-primary" /> Friend Activity
-          </h3>
-          <div className="mt-4 space-y-4">
-            {friendActivity.map((a) => (
-              <div key={a.id} className="flex items-start gap-3">
-                <Avatar size="sm">
-                  <AvatarFallback className={`bg-gradient-to-br ${a.color} text-white text-xs`}>
-                    {a.initials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 text-sm">
-                  <p>
-                    <span className="font-medium">{a.name}</span>{" "}
-                    <span className="text-muted-foreground">{a.action}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">{a.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
+                <p className="mt-2 text-sm text-muted-foreground">{item.description}</p>
+              </Link>
+            )
+          })}
+        </div>
+      </section>
     </div>
   )
 }

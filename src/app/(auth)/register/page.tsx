@@ -31,7 +31,7 @@ export default function RegisterPage() {
       return
     }
     if (!agreed) {
-      setError("Please accept the Terms and Privacy Policy")
+      setError("Please confirm that you agree to the preview terms")
       return
     }
 
@@ -60,7 +60,7 @@ export default function RegisterPage() {
       <div className="mb-6 text-center">
         <h1 className="text-2xl font-semibold">Create your account</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Start speaking in under a minute.
+          Set up your profile and choose how you want to practise.
         </p>
       </div>
 
@@ -148,9 +148,7 @@ export default function RegisterPage() {
             onChange={(e) => setAgreed(e.target.checked)}
           />
           <span>
-            I agree to the{" "}
-            <a href="#" className="text-primary hover:underline">Terms</a> and{" "}
-            <a href="#" className="text-primary hover:underline">Privacy Policy</a>.
+            I agree to use LingoMatch responsibly during the product preview.
           </span>
         </label>
         <Button className="w-full" type="submit" disabled={loading}>
