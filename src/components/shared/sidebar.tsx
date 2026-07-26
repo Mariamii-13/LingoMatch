@@ -4,17 +4,15 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import {
-  Calendar,
+  BarChart3,
+  Bot,
   Compass,
   Inbox,
   Languages,
   LayoutDashboard,
   type LucideIcon,
-  MessageSquare,
   Settings,
   Shield,
-  Users,
-  Video,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -23,23 +21,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 type NavItem = { label: string; href: string; icon: LucideIcon }
 
-const mainNav: NavItem[] = [
+const productNav: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
-]
-
-const matchNav: NavItem[] = [
-  { label: "Chat Match", href: "/match/chat", icon: MessageSquare },
-  { label: "Video Match", href: "/match/video", icon: Video },
-]
-
-const socialNav: NavItem[] = [
-  { label: "Explore", href: "/explore", icon: Compass },
-  { label: "Messages", href: "/messages", icon: Inbox },
-  { label: "Friends", href: "/friends", icon: Users },
-  { label: "Schedule", href: "/schedule", icon: Calendar },
-]
-
-const bottomNav: NavItem[] = [
+  { label: "AI Practice", href: "/ai-practice", icon: Bot },
+  { label: "Find Partners", href: "/explore", icon: Compass },
+  { label: "Conversations", href: "/messages", icon: Inbox },
+  { label: "Progress", href: "/progress", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
 
@@ -59,14 +46,6 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       <Icon className="size-5 shrink-0" />
       <span className="hidden lg:inline">{item.label}</span>
     </Link>
-  )
-}
-
-function SectionLabel({ label }: { label: string }) {
-  return (
-    <p className="hidden px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground lg:block">
-      {label}
-    </p>
   )
 }
 
@@ -93,13 +72,9 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 lg:p-3">
-        {mainNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
-        <SectionLabel label="Match" />
-        {matchNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
-        <SectionLabel label="Social" />
-        {socialNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
-        <SectionLabel label="Account" />
-        {bottomNav.map((item) => <NavLink key={item.href} item={item} pathname={pathname} />)}
+        {productNav.map((item) => (
+          <NavLink key={item.href} item={item} pathname={pathname} />
+        ))}
         {role === "admin" && (
           <NavLink
             item={{ label: "Admin", href: "/admin/dashboard", icon: Shield }}

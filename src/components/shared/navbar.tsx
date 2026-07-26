@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { UserSearch } from "@/components/shared/user-search"
-import { NotificationsPopover } from "@/components/shared/notifications-popover"
 
 export function Navbar() {
   const { data: session } = useSession()
@@ -44,8 +43,6 @@ export function Navbar() {
 
       <div className="flex items-center gap-1 sm:gap-2">
         <ThemeToggle />
-
-        <NotificationsPopover />
 
         <DropdownMenu>
           <DropdownMenuTrigger

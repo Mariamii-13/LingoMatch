@@ -3,19 +3,10 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  BarChart3,
-  CreditCard,
-  Database,
-  FileText,
-  FileWarning,
   Files,
-  Flag,
   LayoutDashboard,
   type LucideIcon,
-  MessageSquare,
   Mic,
-  Paintbrush,
-  Radio,
   Shield,
   Users,
 } from "lucide-react"
@@ -26,15 +17,6 @@ const adminNav: { label: string; href: string; icon: LucideIcon }[] = [
   { label: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "Files", href: "/admin/files", icon: Files },
-  { label: "Sessions", href: "/admin/sessions", icon: Radio },
-  { label: "Reports", href: "/admin/reports", icon: FileWarning },
-  { label: "Feedback", href: "/admin/feedback", icon: MessageSquare },
-  { label: "Analytics", href: "/admin/analytics", icon: BarChart3 },
-  { label: "Feature Flags", href: "/admin/flags", icon: Flag },
-  { label: "Theme", href: "/admin/theme", icon: Paintbrush },
-  { label: "Content", href: "/admin/content", icon: FileText },
-  { label: "Database", href: "/admin/database", icon: Database },
-  { label: "Billing", href: "/admin/billing", icon: CreditCard },
 ]
 
 export function AdminSidebar() {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { Check, Clock, Loader2, Search, Sparkles, UserCheck, UserPlus, Users } from "lucide-react"
+import { Check, Clock, Loader2, MessageSquare, Search, UserCheck, UserPlus, Users, Video } from "lucide-react"
 import { toast } from "sonner"
 
 import { avatarGradient } from "@/lib/utils"
@@ -258,23 +258,39 @@ export default function ExplorePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4 sm:p-6">
       <div>
-        <h1 className="text-2xl font-bold">Explore</h1>
-        <p className="text-sm text-muted-foreground">Discover language partners</p>
+        <h1 className="text-2xl font-bold">Find Partners</h1>
+        <p className="text-sm text-muted-foreground">
+          Discover people to practise with, or start a new match.
+        </p>
       </div>
 
-      {/* Recommended For You — AI matching placeholder */}
-      <section>
-        <div className="mb-3 flex items-center gap-2">
-          <Sparkles className="size-4 text-primary" />
-          <h2 className="font-semibold">Recommended For You</h2>
-          <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+      <section className="grid gap-3 sm:grid-cols-2">
+        <div className="flex items-center gap-4 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+            <MessageSquare className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold">Text Practice</h2>
+            <p className="text-sm text-muted-foreground">
+              Find a partner for an instant text conversation.
+            </p>
+          </div>
+          <Button render={<Link href="/match/chat" />}>Start</Button>
         </div>
-        <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center">
-          <Sparkles className="mx-auto mb-2 size-8 text-muted-foreground/40" />
-          <p className="text-sm font-medium text-muted-foreground">AI-powered recommendations coming soon</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            We&apos;ll match you based on your language goals, interests, and communication style.
-          </p>
+        <div className="flex items-center gap-4 rounded-xl border bg-card p-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <Video className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold">Live Practice</h2>
+              <Badge variant="outline">Optional</Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Practise live with camera and microphone controls.
+            </p>
+          </div>
+          <Button variant="outline" render={<Link href="/match/video" />}>Choose</Button>
         </div>
       </section>
 

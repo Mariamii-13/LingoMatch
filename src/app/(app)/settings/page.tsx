@@ -1,13 +1,11 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
-import { Sparkles, Upload } from "lucide-react"
+import { Upload } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -56,7 +54,6 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = React.useState("")
   const [username, setUsername] = React.useState("")
   const [email, setEmail] = React.useState("")
-  const [plan, setPlan] = React.useState("free")
   const [aiProfile, setAIProfile] = React.useState<Partial<AIProfile>>()
   const [aiLearningLanguages, setAILearningLanguages] = React.useState<
     { code: string; name: string; flag: string }[]
@@ -77,7 +74,6 @@ export default function SettingsPage() {
         setDisplayName(u.displayName ?? "")
         setUsername(u.username ?? "")
         setEmail(u.email ?? "")
-        setPlan(u.plan ?? "free")
         if (u.aiProfile) setAIProfile(u.aiProfile)
         if (u.spokenLanguages?.length) setSpoken(u.spokenLanguages as LanguageLevelEntry[])
         if (u.learningLanguages?.length) {
@@ -227,7 +223,6 @@ export default function SettingsPage() {
           <TabsTrigger value="privacy">Privacy</TabsTrigger>
           <TabsTrigger value="ai">AI Preferences</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="subscription">Subscription</TabsTrigger>
           <TabsTrigger value="setup" className="relative">
             {completionPct < 100 && (
               <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary" />
@@ -406,38 +401,6 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        {/* Subscription */}
-        <TabsContent value="subscription" className="mt-6">
-          <div className="rounded-xl border bg-card p-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Sparkles className="size-5 text-primary" />
-                <div>
-                  <p className="font-semibold">Current plan</p>
-                  <p className="text-sm text-muted-foreground capitalize">{plan}</p>
-                </div>
-              </div>
-              <Badge variant={plan === "premium" ? "default" : "secondary"} className="capitalize">
-                {plan}
-              </Badge>
-            </div>
-
-            <div className="mt-6 rounded-lg bg-muted p-4">
-              <div className="flex items-center justify-between text-sm">
-                <span>Conversations this month</span>
-                <span className="font-medium">Unlimited</span>
-              </div>
-              <div className="mt-2 flex items-center justify-between text-sm">
-                <span>Renews on</span>
-                <span className="font-medium">Jun 30, 2026</span>
-              </div>
-            </div>
-
-            <Button className="mt-6" render={<Link href="/subscription" />}>
-              Manage subscription
-            </Button>
-          </div>
-        </TabsContent>
         {/* Profile Setup */}
         <TabsContent value="setup" className="mt-6">
           <div className="rounded-xl border bg-card p-6 shadow-sm">
