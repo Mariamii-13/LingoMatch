@@ -530,7 +530,7 @@ export default function ConversationPage({
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
         <p className="font-semibold">Could not load this conversation</p>
-        <Button variant="outline" render={<Link href="/match/chat" />}>
+        <Button variant="outline" nativeButton={false} render={<Link href="/match/chat" />}>
           Find a new partner
         </Button>
       </div>
@@ -545,6 +545,7 @@ export default function ConversationPage({
         <Button
           variant="ghost"
           size="icon-sm"
+          nativeButton={false}
           render={<Link href="/messages" />}
           aria-label="Back to messages"
           className="sm:hidden"
@@ -575,6 +576,7 @@ export default function ConversationPage({
           variant="ghost"
           size="sm"
           className="shrink-0"
+          nativeButton={false}
           render={<Link href="/match/video" />}
         >
           <Video className="size-4" />

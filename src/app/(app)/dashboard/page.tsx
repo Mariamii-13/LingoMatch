@@ -89,7 +89,7 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <Button size="lg" render={<Link href="/ai-practice" />}>
+              <Button size="lg" nativeButton={false} render={<Link href="/ai-practice" />}>
                 Explore AI Practice <ArrowRight className="size-4" />
               </Button>
             </div>
@@ -103,7 +103,7 @@ export default function DashboardPage() {
             <p className="mt-2 flex-1 text-sm text-muted-foreground">
               Match with a language partner for an instant text conversation.
             </p>
-            <Button className="mt-5" variant="outline" render={<Link href="/match/chat" />}>
+            <Button className="mt-5" variant="outline" nativeButton={false} render={<Link href="/match/chat" />}>
               Find a text match
             </Button>
           </article>
@@ -119,7 +119,7 @@ export default function DashboardPage() {
             <p className="mt-2 flex-1 text-sm text-muted-foreground">
               Practise live with a partner when you want to. Camera use is always your choice.
             </p>
-            <Button className="mt-5" variant="outline" render={<Link href="/match/video" />}>
+            <Button className="mt-5" variant="outline" nativeButton={false} render={<Link href="/match/video" />}>
               Choose live practice
             </Button>
           </article>

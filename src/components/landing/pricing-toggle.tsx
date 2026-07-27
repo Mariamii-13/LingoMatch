@@ -47,7 +47,7 @@ export function PricingToggle() {
             <span className="text-4xl font-bold">$0</span>
             <span className="mb-1 text-sm text-muted-foreground">/forever</span>
           </div>
-          <Button variant="outline" className="mt-6" render={<Link href="/register" />}>
+          <Button variant="outline" className="mt-6" nativeButton={false} render={<Link href="/register" />}>
             Get Started
           </Button>
           <ul className="mt-6 space-y-3 text-sm">
@@ -75,7 +75,7 @@ export function PricingToggle() {
               /{yearly ? "year" : "month"}
             </span>
           </div>
-          <Button className="mt-6" render={<Link href="/register" />}>
+          <Button className="mt-6" nativeButton={false} render={<Link href="/register" />}>
             Start Free Trial
           </Button>
           <ul className="mt-6 space-y-3 text-sm">

@@ -109,7 +109,7 @@ function AddFriendButton({ userId, initial }: { userId: string; initial: FriendS
   }
   if (status === "pending_received") {
     return (
-      <Button variant="outline" size="sm" className="w-full" render={<Link href={`/friends`} />}>
+      <Button variant="outline" size="sm" className="w-full" nativeButton={false} render={<Link href={`/friends`} />}>
         <Check className="size-4" /> Accept Request
       </Button>
     )
@@ -181,7 +181,7 @@ function UserCard({ user }: { user: ExploreUser }) {
       )}
 
       <div className="mt-auto flex gap-2">
-        <Button variant="outline" size="sm" className="flex-1" render={<Link href={`/profile/${user.username}`} />}>
+        <Button variant="outline" size="sm" className="flex-1" nativeButton={false} render={<Link href={`/profile/${user.username}`} />}>
           <Users className="size-4" /> Profile
         </Button>
         <div className="flex-1">
@@ -275,7 +275,7 @@ export default function ExplorePage() {
               Find a partner for an instant text conversation.
             </p>
           </div>
-          <Button render={<Link href="/match/chat" />}>Start</Button>
+          <Button nativeButton={false} render={<Link href="/match/chat" />}>Start</Button>
         </div>
         <div className="flex items-center gap-4 rounded-xl border bg-card p-4">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
@@ -290,7 +290,7 @@ export default function ExplorePage() {
               Practise live with camera and microphone controls.
             </p>
           </div>
-          <Button variant="outline" render={<Link href="/match/video" />}>Choose</Button>
+          <Button variant="outline" nativeButton={false} render={<Link href="/match/video" />}>Choose</Button>
         </div>
       </section>
 

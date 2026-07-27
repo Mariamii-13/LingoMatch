@@ -81,8 +81,8 @@ export default function LandingPage() {
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" render={<Link href="/login" />}>Login</Button>
-            <Button render={<Link href="/register" />}>Get Started</Button>
+            <Button variant="ghost" nativeButton={false} render={<Link href="/login" />}>Login</Button>
+            <Button nativeButton={false} render={<Link href="/register" />}>Get Started</Button>
           </div>
         </div>
       </header>
@@ -104,10 +104,10 @@ export default function LandingPage() {
               LingoMatch brings AI-guided practice, text conversations, and optional live practice with language partners into one place.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button size="lg" className="h-12 px-6 text-base" render={<Link href="/register" />}>
+              <Button size="lg" className="h-12 px-6 text-base" nativeButton={false} render={<Link href="/register" />}>
                 Get Started <ArrowRight className="size-4" />
               </Button>
-              <Button size="lg" variant="outline" className="h-12 px-6 text-base" render={<a href="#modes" />}>
+              <Button size="lg" variant="outline" className="h-12 px-6 text-base" nativeButton={false} render={<a href="#modes" />}>
                 Explore Practice Modes
               </Button>
             </div>
@@ -170,7 +170,7 @@ export default function LandingPage() {
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
               LingoMatch is currently available for preview. Paid plans and subscription benefits are not being offered at this stage.
             </p>
-            <Button className="mt-8" size="lg" render={<Link href="/register" />}>
+            <Button className="mt-8" size="lg" nativeButton={false} render={<Link href="/register" />}>
               Create your account
             </Button>
           </div>
@@ -183,7 +183,7 @@ export default function LandingPage() {
               <p className="mx-auto mt-4 max-w-xl text-white/90">
                 Practise independently, exchange messages, or choose an optional live conversation when you are ready.
               </p>
-              <Button size="lg" variant="secondary" className="mt-8" render={<Link href="/register" />}>
+              <Button size="lg" variant="secondary" className="mt-8" nativeButton={false} render={<Link href="/register" />}>
                 Get Started <ArrowRight className="size-4" />
               </Button>
             </div>

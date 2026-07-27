@@ -136,7 +136,7 @@ export default function PublicProfilePage({
       <div className="flex flex-col items-center gap-3 py-20 text-center">
         <p className="text-lg font-semibold">User not found</p>
         <p className="text-sm text-muted-foreground">@{username} doesn&apos;t exist or has been removed.</p>
-        <Button variant="outline" render={<Link href="/explore" />}>Browse users</Button>
+        <Button variant="outline" nativeButton={false} render={<Link href="/explore" />}>Browse users</Button>
       </div>
     )
   }
@@ -186,7 +186,7 @@ export default function PublicProfilePage({
           {/* Action buttons */}
           <div className="mt-4 flex gap-2 sm:mb-2 sm:mt-0">
             {profile.friendStatus === "self" && (
-              <Button variant="outline" render={<Link href="/settings" />}>
+              <Button variant="outline" nativeButton={false} render={<Link href="/settings" />}>
                 Edit Profile
               </Button>
             )}

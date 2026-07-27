@@ -96,6 +96,7 @@ export function DashboardHero({ firstName }: { firstName: string }) {
         <Button
           size="lg"
           className="h-12 gap-2 bg-foreground px-7 text-base font-semibold text-background hover:bg-foreground/90 dark:bg-white dark:text-black dark:hover:bg-white/90"
+          nativeButton={false}
           render={<Link href={matchHref} />}
         >
           <Mic className="size-4" />

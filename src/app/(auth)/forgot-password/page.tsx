@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
           <Label htmlFor="email">Email</Label>
           <Input id="email" type="email" placeholder="you@example.com" />
         </div>
-        <Button className="w-full" render={<Link href="/login" />}>
+        <Button className="w-full" nativeButton={false} render={<Link href="/login" />}>
           Send reset link
         </Button>
       </form>

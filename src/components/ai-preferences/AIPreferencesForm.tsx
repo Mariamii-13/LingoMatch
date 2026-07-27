@@ -496,7 +496,7 @@ export function AIPreferencesForm({
       {/* Actions */}
       {mode === "onboarding" ? (
         <div className="flex items-center justify-between">
-          <Button variant="ghost" render={<Link href={backHref} />}>
+          <Button variant="ghost" nativeButton={false} render={<Link href={backHref} />}>
             Back
           </Button>
           <div className="flex items-center gap-3">

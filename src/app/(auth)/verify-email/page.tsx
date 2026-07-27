@@ -19,7 +19,7 @@ export default function VerifyEmailPage() {
         <Button variant="outline" className="w-full">
           Resend verification email
         </Button>
-        <Button className="w-full" render={<Link href="/profile" />}>
+        <Button className="w-full" nativeButton={false} render={<Link href="/profile" />}>
           I&apos;ve verified — continue
         </Button>
       </div>

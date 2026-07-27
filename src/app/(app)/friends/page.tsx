@@ -248,7 +248,7 @@ export default function FriendsPage() {
               <p className="text-sm text-muted-foreground">
                 Explore users and send friend requests to start connecting.
               </p>
-              <Button render={<Link href="/explore" />}>
+              <Button nativeButton={false} render={<Link href="/explore" />}>
                 <UserPlus className="size-4" /> Find People
               </Button>
             </div>
