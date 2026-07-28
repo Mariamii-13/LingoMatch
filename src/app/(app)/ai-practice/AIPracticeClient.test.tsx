@@ -169,6 +169,48 @@ describe('AIPracticeClient — error and retry', () => {
       expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
     })
   })
+
+  it('offers a retry when a burst limit says the wait is short', async () => {
+    mockFetch(
+      {
+        error: 'You are sending messages very quickly. Please wait a moment and try again.',
+        code: 'BURST_LIMIT_REACHED',
+        retryable: true,
+      },
+      429,
+    )
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/sending messages very quickly/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    })
+  })
+
+  it('hides retry when the server says a spent allowance will not recover', async () => {
+    mockFetch(
+      {
+        error: 'You have reached your 80 tutor messages for today. Your practice resets tomorrow.',
+        code: 'DAILY_LIMIT_REACHED',
+        retryable: false,
+      },
+      429,
+    )
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/resets tomorrow/i)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument()
+    })
+  })
 })
 
 describe('AIPracticeClient — duplicate submission prevention', () => {

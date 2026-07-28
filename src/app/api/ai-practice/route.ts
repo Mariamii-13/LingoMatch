@@ -4,6 +4,7 @@ import { aiPracticeRequestSchema } from '@/lib/validations/ai-practice'
 import { callTutor, OpenRouterError } from '@/lib/ai/openrouter'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { buildTutorContext } from '@/lib/ai/tutor-context'
+import { checkTutorBudget } from '@/lib/ai/tutor-budget'
 
 const FORBIDDEN_CLIENT_FIELDS = [
   'model',
@@ -58,6 +59,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Target language is not in your language profile', code: 'INVALID_TARGET_LANGUAGE' },
         { status: 400 },
+      )
+    }
+
+    // Metered only once the request is known to be valid, so malformed or
+    // misdirected calls never consume a user's allowance or the shared budget.
+    const budget = await checkTutorBudget(session.user.id)
+    if (!budget.allowed) {
+      return NextResponse.json(
+        { error: budget.message, code: budget.code, retryable: budget.retryable },
+        { status: 429 },
       )
     }
 

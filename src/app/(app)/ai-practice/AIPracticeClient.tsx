@@ -94,7 +94,7 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
         return
       }
 
-      let data: { reply?: string; error?: string; code?: string }
+      let data: { reply?: string; error?: string; code?: string; retryable?: boolean }
       try {
         data = await res.json()
       } catch {
@@ -107,7 +107,10 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
         setError({
           message: data.error ?? 'Something went wrong. Please try again.',
           code: data.code,
-          retryable: res.status !== 400 && res.status !== 401,
+          // The server knows when retrying cannot help — a spent daily
+          // allowance will not recover for hours, so do not offer a Retry
+          // button that is guaranteed to fail.
+          retryable: data.retryable ?? (res.status !== 400 && res.status !== 401),
         })
         setIsLoading(false)
         return
@@ -296,7 +299,7 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {messages.length === 0 && !isLoading && (
+        {messages.length === 0 && !isLoading && !error && (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Starting your session…
           </div>
