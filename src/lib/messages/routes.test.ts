@@ -1,16 +1,13 @@
-import assert from "node:assert/strict"
-import test from "node:test"
+import { expect, test } from "vitest"
 
-// @ts-expect-error Node's strip-types test runner loads the TypeScript source directly.
-import { canonicalConversationPath } from "./routes.ts"
+import { canonicalConversationPath } from "./routes"
 
 test("legacy conversation IDs map to the canonical messages route", () => {
-  assert.equal(
-    canonicalConversationPath("507f1f77bcf86cd799439011"),
+  expect(canonicalConversationPath("507f1f77bcf86cd799439011")).toBe(
     "/messages/507f1f77bcf86cd799439011"
   )
 })
 
 test("conversation IDs are encoded before redirecting", () => {
-  assert.equal(canonicalConversationPath("a/b"), "/messages/a%2Fb")
+  expect(canonicalConversationPath("a/b")).toBe("/messages/a%2Fb")
 })

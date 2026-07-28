@@ -22,6 +22,8 @@ type LanguageFormProps = {
   user: UserProfileData
   backHref: string
   backLabel: string
+  showBack: boolean
+  isFirstRun: boolean
   buttonLabel: string
   stepStatus: Record<OnboardingStep, boolean>
   buildRedirect: (savedUser: UserProfileData) => string | null
@@ -45,6 +47,8 @@ function LanguageProfileForm({
   user,
   backHref,
   backLabel,
+  showBack,
+  isFirstRun,
   buttonLabel,
   stepStatus,
   buildRedirect,
@@ -164,13 +168,24 @@ function LanguageProfileForm({
 
   return (
     <div>
-      <OnboardingStepBar currentStep="languages" stepStatus={stepStatus} />
+      {isFirstRun ? (
+        <p className="mb-6 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          One quick step and you can start practising. Everything else is optional and
+          can wait.
+        </p>
+      ) : (
+        <OnboardingStepBar currentStep="languages" stepStatus={stepStatus} />
+      )}
 
-      <button type="button" onClick={handleBack} className="mb-4 text-sm text-primary hover:underline">
-        {backLabel}
-      </button>
+      {showBack && (
+        <button type="button" onClick={handleBack} className="mb-4 text-sm text-primary hover:underline">
+          {backLabel}
+        </button>
+      )}
 
-      <h1 className="text-2xl font-semibold">Your language profile</h1>
+      <h1 className="text-2xl font-semibold">
+        {isFirstRun ? "Which languages are you learning?" : "Your language profile"}
+      </h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Tell us what you speak and what you are learning so lessons can adapt to you.
       </p>
@@ -241,6 +256,8 @@ function OnboardingLanguagesContent() {
       user={setup.user}
       backHref={setup.backHref}
       backLabel={setup.backLabel}
+      showBack={setup.showBack}
+      isFirstRun={setup.isFirstRun}
       buttonLabel={setup.buttonLabel}
       stepStatus={setup.stepStatus}
       buildRedirect={setup.buildRedirect}

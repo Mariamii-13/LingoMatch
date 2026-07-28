@@ -84,6 +84,8 @@ interface AIPreferencesFormProps {
   onDelete?: () => Promise<void>
   backHref?: string
   skipHref?: string
+  showBack?: boolean
+  saveLabel?: string
 }
 
 export function AIPreferencesForm({
@@ -96,6 +98,8 @@ export function AIPreferencesForm({
   onDelete,
   backHref = "/profile",
   skipHref = "/dashboard",
+  showBack = true,
+  saveLabel = "Save & Continue",
 }: AIPreferencesFormProps) {
   const router = useRouter()
   const [profile, setProfile] = React.useState<AIProfile>({
@@ -496,9 +500,13 @@ export function AIPreferencesForm({
       {/* Actions */}
       {mode === "onboarding" ? (
         <div className="flex items-center justify-between">
-          <Button variant="ghost" nativeButton={false} render={<Link href={backHref} />}>
-            Back
-          </Button>
+          {showBack ? (
+            <Button variant="ghost" nativeButton={false} render={<Link href={backHref} />}>
+              Back
+            </Button>
+          ) : (
+            <span />
+          )}
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -514,7 +522,7 @@ export function AIPreferencesForm({
                   Saving…
                 </>
               ) : (
-                "Save & Continue"
+                saveLabel
               )}
             </Button>
           </div>

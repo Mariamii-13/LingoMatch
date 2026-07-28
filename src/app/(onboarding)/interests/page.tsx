@@ -24,7 +24,7 @@ function buildInterestsObj(
 
 function OnboardingInterestsContent() {
   const router = useRouter()
-  const { backHref, backLabel, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
+  const { backHref, backLabel, showBack, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("interests")
 
   const [selectedCategories, setSelectedCategories] = React.useState<string[]>([])
@@ -103,13 +103,15 @@ function OnboardingInterestsContent() {
     <div>
       <OnboardingStepBar currentStep="interests" stepStatus={stepStatus} />
 
-      <button
-        type="button"
-        onClick={handleBack}
-        className="mb-4 text-sm text-primary hover:underline"
-      >
-        {backLabel}
-      </button>
+      {showBack && (
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mb-4 text-sm text-primary hover:underline"
+        >
+          {backLabel}
+        </button>
+      )}
 
       <h1 className="text-2xl font-semibold">What are you into?</h1>
       <p className="mt-1 text-sm text-muted-foreground">

@@ -47,7 +47,19 @@ export default function RegisterPage() {
         setError(data.error || "Registration failed")
         return
       }
-      router.push("/login?registered=true")
+
+      // Sign the new account in straight away — asking for the same password
+      // again on a separate login screen is pure friction.
+      const signInResult = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      })
+      if (!signInResult || signInResult.error) {
+        router.push("/login?registered=true")
+        return
+      }
+      router.push("/languages")
     } catch {
       setError("Something went wrong. Please try again.")
     } finally {

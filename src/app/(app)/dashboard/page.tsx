@@ -16,6 +16,7 @@ import { useSession } from "next-auth/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ProfileCompletionCard } from "@/components/profile-completion-card"
+import { getLanguage } from "@/constants/languages"
 import type { UserProfileData } from "@/lib/onboarding-progress"
 
 const secondaryLinks = [
@@ -43,6 +44,11 @@ export default function DashboardPage() {
   const { data: session } = useSession()
   const firstName = session?.user?.name?.split(" ")[0] ?? "there"
   const [profileData, setProfileData] = React.useState<UserProfileData | null>(null)
+
+  const primaryTarget =
+    profileData?.languageProfile?.learningLanguages.find((language) => language.isPrimary) ??
+    profileData?.languageProfile?.learningLanguages[0]
+  const targetLanguageName = primaryTarget ? getLanguage(primaryTarget.code).name : null
 
   React.useEffect(() => {
     fetch("/api/user/me")
@@ -81,16 +87,21 @@ export default function DashboardPage() {
                 </span>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-xl font-semibold">Practice with AI</h3>
-                    <Badge variant="secondary">Preview</Badge>
+                    <h3 className="text-xl font-semibold">
+                      {targetLanguageName
+                        ? `Practise ${targetLanguageName} with your AI tutor`
+                        : "Practise with your AI tutor"}
+                    </h3>
+                    <Badge variant="secondary">Available now</Badge>
                   </div>
                   <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                    Explore the AI Practice area and see the guided experiences being prepared for LingoMatch.
+                    Chat any time, at your level. Pick a topic like travel or job interviews and
+                    your tutor corrects you as you go — no partner needed, no waiting.
                   </p>
                 </div>
               </div>
               <Button size="lg" nativeButton={false} render={<Link href="/ai-practice" />}>
-                Explore AI Practice <ArrowRight className="size-4" />
+                Start practising <ArrowRight className="size-4" />
               </Button>
             </div>
           </article>

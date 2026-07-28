@@ -14,7 +14,7 @@ import type { AIProfile } from "@/types"
 
 function OnboardingAIPreferencesContent() {
   const router = useRouter()
-  const { backHref, user, loading, stepStatus, buildRedirect, buildSkipRedirect } =
+  const { backHref, showBack, buttonLabel, user, loading, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("ai-preferences")
 
   const initialProfile = user?.aiProfile as Partial<AIProfile> | undefined
@@ -77,6 +77,8 @@ function OnboardingAIPreferencesContent() {
           mode="onboarding"
           onSave={handleSave}
           backHref={backHref}
+          showBack={showBack}
+          saveLabel={buttonLabel}
           skipHref={buildSkipRedirect()}
         />
       </div>

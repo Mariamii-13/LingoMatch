@@ -14,7 +14,7 @@ export function OnboardingStepBar({ currentStep, stepStatus }: OnboardingStepBar
   return (
     <div className="mb-6 space-y-2.5">
       <p className="text-sm text-muted-foreground">
-        {completedCount} of 5 sections completed
+        {completedCount} of {STEP_ORDER.length} sections completed
       </p>
       <div className="flex items-end gap-1.5">
         {STEP_ORDER.map((step) => {

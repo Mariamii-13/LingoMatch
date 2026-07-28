@@ -1,8 +1,10 @@
-import assert from "node:assert/strict"
-import test from "node:test"
+import { expect, test } from "vitest"
 
-// @ts-expect-error Node's strip-types test runner loads the TypeScript source directly.
-import { applyMessageToConversations, reconcileMessages, type CanonicalMessage } from "./reconcile.ts"
+import {
+  applyMessageToConversations,
+  reconcileMessages,
+  type CanonicalMessage,
+} from "./reconcile"
 
 const older: CanonicalMessage = {
   id: "message-1",
@@ -21,11 +23,11 @@ const newer: CanonicalMessage = {
 }
 
 test("reconcileMessages deduplicates by stable database message ID", () => {
-  assert.deepEqual(reconcileMessages([older], [older]), [older])
+  expect(reconcileMessages([older], [older])).toEqual([older])
 })
 
 test("reconcileMessages keeps messages in chronological order", () => {
-  assert.deepEqual(reconcileMessages([newer], [older]), [older, newer])
+  expect(reconcileMessages([newer], [older])).toEqual([older, newer])
 })
 
 test("applyMessageToConversations updates the preview and promotes the conversation", () => {
@@ -36,8 +38,8 @@ test("applyMessageToConversations updates the preview and promotes the conversat
 
   const result = applyMessageToConversations(conversations, newer)
 
-  assert.equal(result[0].id, "conversation-1")
-  assert.deepEqual(result[0].lastMessage, {
+  expect(result[0].id).toBe("conversation-1")
+  expect(result[0].lastMessage).toEqual({
     content: "Second",
     createdAt: newer.createdAt,
   })

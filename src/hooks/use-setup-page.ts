@@ -4,11 +4,13 @@
 import * as React from "react"
 import { useSearchParams } from "next/navigation"
 import {
+  areRequiredStepsComplete,
+  buildSetupRedirect,
+  buildSkipTarget,
   getCompletedCount,
-  getFirstIncompleteStep,
   getStepStatus,
+  resolveSetupNav,
   STEP_ORDER,
-  STEP_PATHS,
   type OnboardingStep,
   type UserProfileData,
 } from "@/lib/onboarding-progress"
@@ -21,6 +23,10 @@ interface UseSetupPageResult {
   stepStatus: Record<OnboardingStep, boolean>
   backHref: string
   backLabel: string
+  /** False while required setup is unfinished — every back target would bounce straight back here. */
+  showBack: boolean
+  /** True until the user has finished the required setup. */
+  isFirstRun: boolean
   buttonLabel: string
   from: string
   buildRedirect: (savedUser: UserProfileData) => string | null
@@ -47,29 +53,24 @@ export function useSetupPage(currentStep: OnboardingStep): UseSetupPageResult {
     ? getStepStatus(user)
     : { profile: false, "ai-preferences": false, languages: false, interests: false, modes: false }
 
-  const backHref = from === "settings" ? "/settings" : "/dashboard"
-  const backLabel = from === "settings" ? "← Settings" : "← Dashboard"
+  const { backHref, backLabel, showBack } = resolveSetupNav(from, user)
+  const isFirstRun = user ? !areRequiredStepsComplete(user) : false
 
   const otherStepsAllDone = user
-    ? STEP_ORDER.filter((s) => s !== currentStep).every(
-        (s) => getStepStatus(user)[s]
-      )
+    ? STEP_ORDER.filter((s) => s !== currentStep).every((s) => stepStatus[s])
     : false
-  const buttonLabel = otherStepsAllDone
+  const buttonLabel = isFirstRun
+    ? "Save & Start Practising"
+    : otherStepsAllDone
     ? "Save & Return to Dashboard"
     : "Save & Continue"
 
   function buildRedirect(savedUser: UserProfileData): string | null {
-    const next = getFirstIncompleteStep(savedUser)
-    if (!next) return "/dashboard"
-    if (next === currentStep) return null
-    return `${STEP_PATHS[next]}?from=${from}`
+    return buildSetupRedirect({ currentStep, savedUser, wasFirstRun: isFirstRun, from })
   }
 
   function buildSkipRedirect(): string {
-    const next = STEP_ORDER[currentStepIndex + 1]
-    if (!next) return from === "settings" ? "/settings" : "/dashboard"
-    return `${STEP_PATHS[next]}?from=${from}`
+    return buildSkipTarget(currentStep, from)
   }
 
   return {
@@ -80,6 +81,8 @@ export function useSetupPage(currentStep: OnboardingStep): UseSetupPageResult {
     stepStatus,
     backHref,
     backLabel,
+    showBack,
+    isFirstRun,
     buttonLabel,
     from,
     buildRedirect,

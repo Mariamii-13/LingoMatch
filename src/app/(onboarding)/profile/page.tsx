@@ -37,7 +37,7 @@ function calcAge(dob: Date): number {
 
 function OnboardingProfileContent() {
   const router = useRouter()
-  const { backHref, backLabel, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
+  const { backHref, backLabel, showBack, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("profile")
 
   const [name, setName] = React.useState("")
@@ -114,13 +114,15 @@ function OnboardingProfileContent() {
     <div>
       <OnboardingStepBar currentStep="profile" stepStatus={stepStatus} />
 
-      <button
-        type="button"
-        onClick={handleBack}
-        className="mb-4 text-sm text-primary hover:underline"
-      >
-        {backLabel}
-      </button>
+      {showBack && (
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mb-4 text-sm text-primary hover:underline"
+        >
+          {backLabel}
+        </button>
+      )}
 
       <h1 className="text-2xl font-semibold">Set up your profile</h1>
       <p className="mt-1 text-sm text-muted-foreground">

@@ -15,7 +15,7 @@ import { OnboardingStepBar } from "@/components/onboarding/OnboardingStepBar"
 
 function OnboardingModeContent() {
   const router = useRouter()
-  const { backHref, backLabel, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
+  const { backHref, backLabel, showBack, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
     useSetupPage("modes")
 
   const [selected, setSelected] = React.useState<string[]>([])
@@ -69,13 +69,15 @@ function OnboardingModeContent() {
     <div>
       <OnboardingStepBar currentStep="modes" stepStatus={stepStatus} />
 
-      <button
-        type="button"
-        onClick={handleBack}
-        className="mb-4 text-sm text-primary hover:underline"
-      >
-        {backLabel}
-      </button>
+      {showBack && (
+        <button
+          type="button"
+          onClick={handleBack}
+          className="mb-4 text-sm text-primary hover:underline"
+        >
+          {backLabel}
+        </button>
+      )}
 
       <h1 className="text-2xl font-semibold">Pick your modes</h1>
       <p className="mt-1 text-sm text-muted-foreground">

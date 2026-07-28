@@ -7,13 +7,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    include: [
-      'src/lib/ai/**/*.test.ts',
-      'src/lib/validations/**/*.test.ts',
-      'src/lib/language-profile.test.ts',
-      'src/lib/onboarding-access.test.ts',
-      'src/app/**/*.test.tsx',
-    ],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     pool: 'threads',
     maxWorkers: 2,
     setupFiles: ['./src/test/setup.ts'],

@@ -24,13 +24,19 @@ export type OnboardingStep =
   | "interests"
   | "modes"
 
+// Languages comes first: it is the only step the app gates on, so a new user's
+// forced entry point must also be step 1 of the visible sequence.
 export const STEP_ORDER: OnboardingStep[] = [
-  "profile",
-  "ai-preferences",
   "languages",
+  "profile",
   "interests",
   "modes",
+  "ai-preferences",
 ]
+
+// Everything except the language profile is optional and can be finished later
+// from the dashboard card or settings.
+export const REQUIRED_STEPS: OnboardingStep[] = ["languages"]
 
 export const STEP_PATHS: Record<OnboardingStep, string> = {
   "profile": "/profile",
@@ -95,4 +101,68 @@ export function getCompletedCount(user: UserProfileData): number {
 
 export function getCompletionPercentage(user: UserProfileData): number {
   return Math.round((getCompletedCount(user) / STEP_ORDER.length) * 100)
+}
+
+export function areRequiredStepsComplete(user: UserProfileData): boolean {
+  const status = getStepStatus(user)
+  return REQUIRED_STEPS.every((step) => status[step])
+}
+
+export function getFirstIncompleteRequiredStep(
+  user: UserProfileData
+): OnboardingStep | null {
+  const status = getStepStatus(user)
+  return REQUIRED_STEPS.find((step) => !status[step]) ?? null
+}
+
+function entryHref(from: string): string {
+  return from === "settings" ? "/settings" : "/dashboard"
+}
+
+/**
+ * While required setup is unfinished the app redirects every other page back to
+ * the outstanding step, so a "back" link would be a dead end. Hide it instead.
+ */
+export function resolveSetupNav(
+  from: string,
+  user: UserProfileData | null
+): { backHref: string; backLabel: string; showBack: boolean } {
+  return {
+    backHref: entryHref(from),
+    backLabel: from === "settings" ? "← Settings" : "← Dashboard",
+    showBack: user ? areRequiredStepsComplete(user) : false,
+  }
+}
+
+/**
+ * Where to go after a step is saved.
+ * First-time users leave setup as soon as the required step is done, so they
+ * reach real practice in one screen. Returning users keep walking the
+ * remaining optional steps they opted into.
+ */
+export function buildSetupRedirect(args: {
+  currentStep: OnboardingStep
+  savedUser: UserProfileData
+  wasFirstRun: boolean
+  from: string
+}): string | null {
+  const { currentStep, savedUser, wasFirstRun, from } = args
+
+  if (wasFirstRun) {
+    if (areRequiredStepsComplete(savedUser)) return "/dashboard"
+    const nextRequired = getFirstIncompleteRequiredStep(savedUser)
+    if (!nextRequired || nextRequired === currentStep) return null
+    return `${STEP_PATHS[nextRequired]}?from=${from}`
+  }
+
+  const next = getFirstIncompleteStep(savedUser)
+  if (!next) return "/dashboard"
+  if (next === currentStep) return null
+  return `${STEP_PATHS[next]}?from=${from}`
+}
+
+export function buildSkipTarget(currentStep: OnboardingStep, from: string): string {
+  const next = STEP_ORDER[STEP_ORDER.indexOf(currentStep) + 1]
+  if (!next) return entryHref(from)
+  return `${STEP_PATHS[next]}?from=${from}`
 }
