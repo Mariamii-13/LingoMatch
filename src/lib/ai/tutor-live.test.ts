@@ -40,7 +40,9 @@ async function sample(userMessage: string, level: 'A2' | 'B1' | 'B2' = 'B1') {
   const replies: string[] = []
   for (let i = 0; i < SAMPLES; i++) {
     const { reply } = await callTutor({
-      language: 'English',
+      targetLanguage: 'English',
+      nativeLanguages: ['Georgian'],
+      explanationLanguage: 'Georgian',
       level,
       mode: 'Free Conversation',
       history: [],

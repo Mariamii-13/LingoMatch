@@ -2,8 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { aiPracticeRequestSchema } from '@/lib/validations/ai-practice'
 import { callTutor, OpenRouterError } from '@/lib/ai/openrouter'
+import { getUserLanguageProfile } from '@/lib/language-profile.server'
+import { buildTutorContext } from '@/lib/ai/tutor-context'
 
-const FORBIDDEN_CLIENT_FIELDS = ['model', 'provider', 'systemPrompt', 'system_prompt', 'modelRole']
+const FORBIDDEN_CLIENT_FIELDS = [
+  'model',
+  'provider',
+  'systemPrompt',
+  'system_prompt',
+  'modelRole',
+  'language',
+  'level',
+  'nativeLanguages',
+  'explanationLanguage',
+]
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -34,9 +46,23 @@ export async function POST(req: NextRequest) {
   const parsed = result.data
 
   try {
+    const languageResult = await getUserLanguageProfile(session.user.id)
+    if (!languageResult?.complete) {
+      return NextResponse.json(
+        { error: 'Complete your language profile before starting a tutor session', code: 'LANGUAGE_PROFILE_REQUIRED' },
+        { status: 409 },
+      )
+    }
+    const tutorContext = buildTutorContext(languageResult.profile, parsed.targetLanguageCode)
+    if (!tutorContext) {
+      return NextResponse.json(
+        { error: 'Target language is not in your language profile', code: 'INVALID_TARGET_LANGUAGE' },
+        { status: 400 },
+      )
+    }
+
     const tutorResponse = await callTutor({
-      language: parsed.language as Parameters<typeof callTutor>[0]['language'],
-      level: parsed.level as Parameters<typeof callTutor>[0]['level'],
+      ...tutorContext,
       mode: parsed.mode as Parameters<typeof callTutor>[0]['mode'],
       history: (parsed.history ?? []) as Parameters<typeof callTutor>[0]['history'],
       userMessage: parsed.action === 'message' ? parsed.message : undefined,

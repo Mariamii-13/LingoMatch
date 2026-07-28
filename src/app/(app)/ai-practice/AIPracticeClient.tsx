@@ -6,15 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
-  SUPPORTED_LANGUAGES,
-  CEFR_LEVELS,
   PRACTICE_MODES,
   MODE_DESCRIPTIONS,
-  LEVEL_LABELS,
-  type SupportedLanguage,
-  type CEFRLevel,
   type PracticeMode,
 } from '@/config/ai-practice'
+import { formatLevel, getLanguage } from '@/constants/languages'
+import type { LanguageProfileInput } from '@/lib/language-profile'
 
 type Message = {
   id: string
@@ -23,8 +20,7 @@ type Message = {
 }
 
 type SessionSettings = {
-  language: SupportedLanguage
-  level: CEFRLevel
+  targetLanguageCode: string
   mode: PracticeMode
 }
 
@@ -34,11 +30,13 @@ type ChatError = {
   retryable: boolean
 }
 
-export function AIPracticeClient() {
+export function AIPracticeClient({ profile }: { profile: LanguageProfileInput }) {
+  const primaryTarget =
+    profile.learningLanguages.find((language) => language.isPrimary) ??
+    profile.learningLanguages[0]
   const [view, setView] = useState<'setup' | 'chat'>('setup')
   const [settings, setSettings] = useState<SessionSettings>({
-    language: 'English',
-    level: 'B1',
+    targetLanguageCode: primaryTarget.code,
     mode: 'Free Conversation',
   })
   const [messages, setMessages] = useState<Message[]>([])
@@ -49,6 +47,11 @@ export function AIPracticeClient() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const selectedTarget =
+    profile.learningLanguages.find(
+      (language) => language.code === settings.targetLanguageCode,
+    ) ?? primaryTarget
+  const selectedLanguage = getLanguage(selectedTarget.code)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -65,11 +68,14 @@ export function AIPracticeClient() {
       const lastMsg = !isStart ? currentMessages[currentMessages.length - 1] : null
 
       const body = isStart
-        ? { action: 'start', language: settings.language, level: settings.level, mode: settings.mode }
+        ? {
+            action: 'start',
+            targetLanguageCode: settings.targetLanguageCode,
+            mode: settings.mode,
+          }
         : {
             action: 'message',
-            language: settings.language,
-            level: settings.level,
+            targetLanguageCode: settings.targetLanguageCode,
             mode: settings.mode,
             history: historyToSend,
             message: lastMsg!.content,
@@ -183,7 +189,7 @@ export function AIPracticeClient() {
           </div>
           <h1 className="text-2xl font-bold sm:text-3xl">AI Conversation Practice</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Choose your language, level, and what you want to practise. Your tutor will guide you through a real conversation.
+            Choose a saved target language and what you want to practise. Your tutor will adapt to your profile automatically.
           </p>
         </div>
 
@@ -195,39 +201,25 @@ export function AIPracticeClient() {
             <select
               id="language-select"
               aria-label="Target language"
-              value={settings.language}
+              value={settings.targetLanguageCode}
               onChange={(e) =>
-                setSettings((s) => ({ ...s, language: e.target.value as SupportedLanguage }))
+                setSettings((s) => ({ ...s, targetLanguageCode: e.target.value }))
               }
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              {SUPPORTED_LANGUAGES.map((l) => (
-                <option key={l} value={l}>
-                  {l}
+              {profile.learningLanguages.map(({ code, level }) => (
+                <option key={code} value={code}>
+                  {getLanguage(code).name} · {formatLevel(level)}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="space-y-1.5">
-            <label htmlFor="level-select" className="text-sm font-medium">
-              Your Level
-            </label>
-            <select
-              id="level-select"
-              aria-label="CEFR level"
-              value={settings.level}
-              onChange={(e) =>
-                setSettings((s) => ({ ...s, level: e.target.value as CEFRLevel }))
-              }
-              className="w-full rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {CEFR_LEVELS.map((l) => (
-                <option key={l} value={l}>
-                  {LEVEL_LABELS[l]}
-                </option>
-              ))}
-            </select>
+            <span className="text-sm font-medium">Current level</span>
+            <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+              {formatLevel(selectedTarget.level)}
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -267,8 +259,8 @@ export function AIPracticeClient() {
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-sm">{settings.language}</span>
-          <Badge variant="secondary">{settings.level}</Badge>
+          <span className="font-semibold text-sm">{selectedLanguage.name}</span>
+          <Badge variant="secondary">{formatLevel(selectedTarget.level)}</Badge>
           <Badge variant="outline">{settings.mode}</Badge>
         </div>
         <div className="flex items-center gap-2">

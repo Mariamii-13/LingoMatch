@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildSystemPrompt } from './prompts'
-import { CEFR_LEVELS, PRACTICE_MODES, SUPPORTED_LANGUAGES } from '@/config/ai-practice'
+import { CEFR_LEVELS, PRACTICE_MODES } from '@/config/ai-practice'
 
 const B1 = buildSystemPrompt('English', 'B1', 'Free Conversation')
 
@@ -15,6 +15,25 @@ describe('buildSystemPrompt — teacher role', () => {
     expect(B1).toContain('English')
     expect(B1).toContain('LEARNER LEVEL: B1')
     expect(B1).toContain('PRACTICE MODE: Free Conversation')
+  })
+
+  it('includes native and preferred explanation languages', () => {
+    const prompt = buildSystemPrompt(
+      'Spanish',
+      'B1',
+      'Free Conversation',
+      ['English', 'Georgian'],
+      'Georgian',
+    )
+    expect(prompt).toContain('NATIVE LANGUAGES: English, Georgian')
+    expect(prompt).toContain('EXPLANATION LANGUAGE: Georgian')
+    expect(prompt).toMatch(/Georgian.*explanations/i)
+  })
+
+  it('handles an unsure level conservatively', () => {
+    const prompt = buildSystemPrompt('German', 'unsure', 'Free Conversation', ['English'], 'English')
+    expect(prompt).toContain('LEARNER LEVEL: Not sure')
+    expect(prompt).toMatch(/beginner-safe|simple vocabulary/i)
   })
 })
 
@@ -143,6 +162,7 @@ describe('buildSystemPrompt — CEFR calibration', () => {
     B1: '3–6 sentences',
     B2: '3–6 sentences',
     C1: '4–7 sentences',
+    C2: '4–7 sentences',
   }
 
   it('states the per-level default reply length', () => {
@@ -174,7 +194,7 @@ describe('buildSystemPrompt — CEFR calibration', () => {
 
 describe('buildSystemPrompt — coverage across inputs', () => {
   it('produces a prompt for every language, level, and mode', () => {
-    for (const language of SUPPORTED_LANGUAGES) {
+    for (const language of ['English', 'Spanish', 'Japanese', 'Georgian']) {
       for (const level of CEFR_LEVELS) {
         for (const mode of PRACTICE_MODES) {
           const prompt = buildSystemPrompt(language, level, mode)

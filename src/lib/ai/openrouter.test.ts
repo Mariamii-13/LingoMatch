@@ -15,7 +15,9 @@ function mockFetch(body: unknown, status = 200) {
 }
 
 const BASE_REQ = {
-  language: 'Spanish' as const,
+  targetLanguage: 'Spanish',
+  nativeLanguages: ['English'],
+  explanationLanguage: 'English',
   level: 'B1' as const,
   mode: 'Free Conversation' as const,
   history: [] as { role: 'user' | 'assistant'; content: string }[],

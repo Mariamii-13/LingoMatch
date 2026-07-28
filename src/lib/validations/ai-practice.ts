@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { SUPPORTED_LANGUAGES, CEFR_LEVELS, PRACTICE_MODES } from '@/config/ai-practice'
+import { PRACTICE_MODES } from '@/config/ai-practice'
+import { isSupportedLanguageCode, normalizeLanguageCode } from '@/lib/language-profile'
 
 const MAX_MESSAGE_LENGTH = 1000
 const MAX_HISTORY_MESSAGES = 20
@@ -16,8 +17,11 @@ export const historyMessageSchema = z.object({
 export const aiPracticeRequestSchema = z
   .object({
     action: z.enum(['start', 'message'] as [string, ...string[]]),
-    language: z.enum(SUPPORTED_LANGUAGES as unknown as [string, ...string[]]),
-    level: z.enum(CEFR_LEVELS as unknown as [string, ...string[]]),
+    targetLanguageCode: z
+      .string()
+      .trim()
+      .transform(normalizeLanguageCode)
+      .refine(isSupportedLanguageCode, { message: 'Unsupported target language' }),
     mode: z.enum(PRACTICE_MODES as unknown as [string, ...string[]]),
     history: z.array(historyMessageSchema).max(MAX_HISTORY_MESSAGES).optional().default([]),
     message: z.string().trim().max(MAX_MESSAGE_LENGTH).optional(),

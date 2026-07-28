@@ -1,7 +1,7 @@
 import 'server-only'
 import { resolveModel } from './models'
 import { buildSystemPrompt } from './prompts'
-import type { CEFRLevel, PracticeMode, SupportedLanguage } from '@/config/ai-practice'
+import type { PracticeMode, SupportedLanguage, TutorLevel } from '@/config/ai-practice'
 
 export type HistoryMessage = {
   role: 'user' | 'assistant'
@@ -9,8 +9,10 @@ export type HistoryMessage = {
 }
 
 export type TutorRequest = {
-  language: SupportedLanguage
-  level: CEFRLevel
+  targetLanguage: SupportedLanguage
+  nativeLanguages: string[]
+  explanationLanguage: string
+  level: TutorLevel
   mode: PracticeMode
   history: HistoryMessage[]
   userMessage?: string
@@ -55,7 +57,13 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
   } catch {
     throw new OpenRouterError('AI model is not configured', 'MISSING_CONFIG')
   }
-  const systemPrompt = buildSystemPrompt(req.language, req.level, req.mode)
+  const systemPrompt = buildSystemPrompt(
+    req.targetLanguage,
+    req.level,
+    req.mode,
+    req.nativeLanguages,
+    req.explanationLanguage,
+  )
 
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: systemPrompt },

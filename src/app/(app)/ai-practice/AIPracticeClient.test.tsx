@@ -5,6 +5,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { AIPracticeClient } from './AIPracticeClient'
 
+const PROFILE = {
+  nativeLanguages: ['en'],
+  learningLanguages: [
+    { code: 'es', level: 'b1' as const, isPrimary: true },
+    { code: 'de', level: 'unsure' as const, isPrimary: false },
+  ],
+  preferredExplanationLanguage: 'en',
+}
+
+function renderClient() {
+  return render(<AIPracticeClient profile={PROFILE} />)
+}
+
 function mockFetch(body: unknown, status = 200) {
   return vi.spyOn(global, 'fetch').mockResolvedValueOnce(
     new Response(JSON.stringify(body), {
@@ -25,15 +38,15 @@ afterEach(() => {
 
 describe('AIPracticeClient — setup view', () => {
   it('renders all selectors and start button', () => {
-    render(<AIPracticeClient />)
+    renderClient()
     expect(screen.getByLabelText('Target language')).toBeInTheDocument()
-    expect(screen.getByLabelText('CEFR level')).toBeInTheDocument()
+    expect(screen.getByText('B1')).toBeInTheDocument()
     expect(screen.getByLabelText('Practice mode')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /start practice/i })).toBeInTheDocument()
   })
 
   it('shows mode description', () => {
-    render(<AIPracticeClient />)
+    renderClient()
     expect(screen.getByText(/open-ended conversation/i)).toBeInTheDocument()
   })
 })
@@ -45,7 +58,7 @@ describe('AIPracticeClient — loading state', () => {
       new Promise<Response>((resolve) => { resolveFetch = resolve }),
     )
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -68,7 +81,7 @@ describe('AIPracticeClient — loading state', () => {
       new Promise<Response>((resolve) => { resolveFetch = resolve }),
     )
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -89,7 +102,7 @@ describe('AIPracticeClient — session start', () => {
   it('transitions to chat view and shows AI reply', async () => {
     mockFetch({ reply: 'Hola! ¿Cómo te llamas?' })
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -102,7 +115,7 @@ describe('AIPracticeClient — session start', () => {
   it('shows error alert on failed start', async () => {
     mockFetch({ error: 'AI service is not configured', code: 'MISSING_CONFIG' }, 503)
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -117,7 +130,7 @@ describe('AIPracticeClient — timeout error', () => {
   it('shows retryable error on timeout response', async () => {
     mockFetch({ error: 'The AI tutor took too long to respond. Please try again.', code: 'TIMEOUT' }, 504)
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -133,7 +146,7 @@ describe('AIPracticeClient — error and retry', () => {
   it('shows retry button for retryable errors', async () => {
     mockFetch({ error: 'Provider error', code: 'PROVIDER_ERROR' }, 502)
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -146,7 +159,7 @@ describe('AIPracticeClient — error and retry', () => {
   it('does not show retry button for 401 errors', async () => {
     mockFetch({ error: 'Unauthorized' }, 401)
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -165,7 +178,7 @@ describe('AIPracticeClient — duplicate submission prevention', () => {
       new Promise<Response>((resolve) => { resolveFetch = resolve }),
     )
 
-    render(<AIPracticeClient />)
+    renderClient()
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
@@ -189,7 +202,7 @@ describe('AIPracticeClient — message sending', () => {
   it('sends user message and shows AI reply', async () => {
     mockFetch({ reply: 'Hola!' })
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -212,7 +225,7 @@ describe('AIPracticeClient — message sending', () => {
 
   it('Enter key submits message', async () => {
     mockFetch({ reply: 'Hello!' })
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
@@ -233,7 +246,7 @@ describe('AIPracticeClient — new session', () => {
   it('shows confirmation when session has messages', async () => {
     mockFetch({ reply: 'Hello!' })
 
-    render(<AIPracticeClient />)
+    renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
