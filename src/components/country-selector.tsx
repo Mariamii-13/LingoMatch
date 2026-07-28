@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { countries } from "@/lib/mock-data"
+import { countries } from "@/constants/countries"
 import { cn } from "@/lib/utils"
 
 export interface CountrySelectorProps {

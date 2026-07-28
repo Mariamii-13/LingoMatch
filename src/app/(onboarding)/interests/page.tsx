@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { interestCategories } from "@/lib/mock-data"
+import { interestCategories } from "@/constants/interests"
 import { InterestCategoryCard } from "./_components/InterestCategoryCard"
 import { getCompletionPercentage } from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"

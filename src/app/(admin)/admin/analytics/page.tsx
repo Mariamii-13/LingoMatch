@@ -27,7 +27,7 @@ import {
   roadmapSuggestions,
   sentimentData,
   sessionsByMode,
-} from "@/lib/mock-data"
+} from "@/lib/admin-placeholder-data"
 
 const tooltipStyle = {
   background: "var(--popover)",

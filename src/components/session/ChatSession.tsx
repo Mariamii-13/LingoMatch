@@ -3,7 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
-import { Calendar, PhoneOff, Send, UserPlus } from "lucide-react"
+import { PhoneOff, Send, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { Message, MatchResult } from "@/types"
@@ -86,14 +86,6 @@ export function ChatSession({ conversationId, partner }: ChatSessionProps) {
             onClick={handleAddFriend}
           >
             <UserPlus className="size-4" /> Add Friend
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-white/70 hover:bg-white/10 hover:text-white"
-            onClick={() => router.push("/schedule")}
-          >
-            <Calendar className="size-4" /> Schedule
           </Button>
           <button
             onClick={handleEnd}

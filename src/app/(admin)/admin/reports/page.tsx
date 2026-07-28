@@ -5,7 +5,7 @@ import { AlertTriangle, Ban, Check, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { adminReports } from "@/lib/mock-data"
+import { adminReports } from "@/lib/admin-placeholder-data"
 
 type Status = "pending" | "reviewed" | "dismissed"
 

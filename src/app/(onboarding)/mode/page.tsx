@@ -7,7 +7,7 @@ import { toast } from "sonner"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { conversationModes } from "@/lib/mock-data"
+import { conversationModes } from "@/constants/conversation-modes"
 import { getCompletionPercentage } from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"

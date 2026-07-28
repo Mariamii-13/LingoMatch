@@ -16,7 +16,6 @@ import {
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 type NavItem = { label: string; href: string; icon: LucideIcon }
@@ -55,7 +54,6 @@ export function Sidebar() {
 
   const name = session?.user?.name ?? "User"
   const username = (session?.user as { username?: string })?.username ?? "me"
-  const plan = (session?.user as { plan?: string })?.plan ?? "free"
   const role = (session?.user as { role?: string })?.role
   const image = session?.user?.image ?? ""
   const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
@@ -96,9 +94,7 @@ export function Sidebar() {
           </Avatar>
           <div className="hidden min-w-0 flex-1 lg:block">
             <p className="truncate text-sm font-medium">{name}</p>
-            <Badge variant={plan === "premium" ? "default" : "secondary"} className="mt-0.5 capitalize">
-              {plan}
-            </Badge>
+            <p className="truncate text-xs text-muted-foreground">@{username}</p>
           </div>
         </Link>
       </div>
