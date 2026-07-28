@@ -5,6 +5,8 @@ import MatchRequest from '@/lib/models/MatchRequest'
 import Conversation from '@/lib/models/Conversation'
 import User from '@/lib/models/User'
 import { createRoom } from '@/lib/livekit'
+import { matchRequestSchema } from '@/lib/validations/match'
+import { checkRateLimit } from '@/lib/rateLimit'
 
 // Requests not polled within this window are considered ghost/disconnected
 const GHOST_THRESHOLD_MS = 12_000
@@ -55,9 +57,25 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { targetLanguage, nativeLanguage, interests = [] } = await req.json()
-  if (!targetLanguage || !nativeLanguage)
-    return NextResponse.json({ error: 'targetLanguage and nativeLanguage required' }, { status: 400 })
+  const body = await req.json().catch(() => ({}))
+  const parsed = matchRequestSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? 'Invalid match request' },
+      { status: 400 },
+    )
+  }
+  // Codes arrive normalised, so the reciprocal lookup below compares like with like.
+  const { targetLanguage, nativeLanguage, interests } = parsed.data
+
+  // Same queue-spam guard the chat route already had; video creates rooms too.
+  const { allowed } = await checkRateLimit('match-queue-video', session.user.id, 5, 60)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Too many match requests. Wait a moment before trying again.' },
+      { status: 429 },
+    )
+  }
 
   await connectDB()
   const userId = session.user.id

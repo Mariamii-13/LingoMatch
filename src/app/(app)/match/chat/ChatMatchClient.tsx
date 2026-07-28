@@ -1,0 +1,140 @@
+"use client"
+
+import * as React from "react"
+import { useRouter } from "next/navigation"
+import { MessageSquare } from "lucide-react"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { MatchConfigForm } from "@/components/match/MatchConfigForm"
+import { SearchingState } from "@/components/match/SearchingState"
+import { MatchFoundModal } from "@/components/match/MatchFoundModal"
+import type { MatchDefaults } from "@/lib/match-defaults"
+import type { MatchPhase, MatchResult } from "@/types"
+
+export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
+  const router = useRouter()
+  const [phase, setPhase] = React.useState<MatchPhase>("idle")
+  const [targetLanguage, setTargetLanguage] = React.useState(defaults.targetLanguage)
+  const [nativeLanguage, setNativeLanguage] = React.useState(defaults.nativeLanguage)
+  const [interests, setInterests] = React.useState<string[]>([])
+  const [countryPreference, setCountryPreference] = React.useState("")
+  const [matchResult, setMatchResult] = React.useState<MatchResult | null>(null)
+  const [requestId, setRequestId] = React.useState<string | null>(null)
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopPolling = () => {
+    if (pollRef.current) clearInterval(pollRef.current)
+  }
+
+  async function cancelQueue() {
+    stopPolling()
+    if (requestId) {
+      await fetch(`/api/match/chat/cancel?requestId=${requestId}`, { method: "DELETE" }).catch(() => {})
+    }
+    setRequestId(null)
+    setPhase("idle")
+  }
+
+  const handleFind = async () => {
+    setPhase("searching")
+    try {
+      const res = await fetch("/api/match/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetLanguage, nativeLanguage, interests, countryPreference }),
+      })
+      if (!res.ok) {
+        // The server explains exactly what is wrong (unsupported language,
+        // same language on both sides, queueing too fast) — show that instead
+        // of a generic failure.
+        const failure = await res.json().catch(() => ({}))
+        setPhase("idle")
+        toast.error(failure.error ?? "Failed to join queue. Please try again.")
+        return
+      }
+      const data = await res.json()
+
+      if (data.matched) {
+        setMatchResult(data)
+        setPhase("found")
+        return
+      }
+
+      setRequestId(data.requestId)
+
+      pollRef.current = setInterval(async () => {
+        const poll = await fetch(`/api/match/chat?requestId=${data.requestId}`)
+        const pollData = await poll.json()
+
+        if (pollData.expired || pollData.cancelled) {
+          stopPolling()
+          setRequestId(null)
+          setPhase("idle")
+          toast.info("No match found. Try again!")
+          return
+        }
+
+        if (pollData.matched) {
+          stopPolling()
+          setMatchResult(pollData)
+          setPhase("found")
+        }
+      }, 2000)
+    } catch {
+      setPhase("idle")
+      toast.error("Failed to join queue. Please try again.")
+    }
+  }
+
+  React.useEffect(() => () => stopPolling(), [])
+
+  if (phase === "searching") {
+    return <SearchingState onCancel={cancelQueue} />
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/15 text-blue-500">
+            <MessageSquare className="size-5" />
+          </div>
+          <h1 className="text-2xl font-bold">Chat Match</h1>
+        </div>
+        <p className="mt-1 text-muted-foreground">Find a text conversation partner</p>
+      </div>
+
+      <div className="rounded-2xl border bg-card p-6">
+        <MatchConfigForm
+          targetLanguage={targetLanguage}
+          nativeLanguage={nativeLanguage}
+          interests={interests}
+          countryPreference={countryPreference}
+          onTargetLanguage={setTargetLanguage}
+          onNativeLanguage={setNativeLanguage}
+          onInterests={setInterests}
+          onCountryPreference={setCountryPreference}
+        />
+
+        <div className="mt-6 border-t pt-5">
+          <Button
+            size="lg"
+            className="h-12 w-full bg-blue-600 text-base hover:bg-blue-700"
+            disabled={!targetLanguage || !nativeLanguage}
+            onClick={handleFind}
+          >
+            <MessageSquare className="size-5" /> Find Chat Partner
+          </Button>
+        </div>
+      </div>
+
+      {matchResult && phase === "found" && (
+        <MatchFoundModal
+          result={matchResult}
+          onStartChat={() => router.push(`/messages/${matchResult.conversationId}`)}
+          onSkip={() => { setMatchResult(null); setPhase("idle") }}
+        />
+      )}
+    </div>
+  )
+}

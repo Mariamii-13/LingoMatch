@@ -1,131 +1,21 @@
-"use client"
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 
-import * as React from "react"
-import { useRouter } from "next/navigation"
-import { MessageSquare } from "lucide-react"
-import { toast } from "sonner"
-import { Button } from "@/components/ui/button"
-import { MatchConfigForm } from "@/components/match/MatchConfigForm"
-import { SearchingState } from "@/components/match/SearchingState"
-import { MatchFoundModal } from "@/components/match/MatchFoundModal"
-import type { MatchPhase, MatchResult } from "@/types"
+import { auth } from "@/auth"
+import { getUserLanguageProfile } from "@/lib/language-profile.server"
+import { resolveMatchDefaults } from "@/lib/match-defaults"
+import { ChatMatchClient } from "./ChatMatchClient"
 
-export default function ChatMatchPage() {
-  const router = useRouter()
-  const [phase, setPhase] = React.useState<MatchPhase>("idle")
-  const [targetLanguage, setTargetLanguage] = React.useState("KO")
-  const [nativeLanguage, setNativeLanguage] = React.useState("EN")
-  const [interests, setInterests] = React.useState<string[]>([])
-  const [countryPreference, setCountryPreference] = React.useState("")
-  const [matchResult, setMatchResult] = React.useState<MatchResult | null>(null)
-  const [requestId, setRequestId] = React.useState<string | null>(null)
-  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
+export const metadata: Metadata = { title: "Text match" }
 
-  const stopPolling = () => {
-    if (pollRef.current) clearInterval(pollRef.current)
-  }
+export default async function ChatMatchPage() {
+  const session = await auth()
+  if (!session?.user?.id) redirect("/login")
 
-  async function cancelQueue() {
-    stopPolling()
-    if (requestId) {
-      await fetch(`/api/match/chat/cancel?requestId=${requestId}`, { method: "DELETE" }).catch(() => {})
-    }
-    setRequestId(null)
-    setPhase("idle")
-  }
+  // Seeding from the saved profile on the server means the form is already
+  // correct on first paint, with no flash of the wrong languages.
+  const result = await getUserLanguageProfile(session.user.id)
+  if (!result?.complete) redirect("/languages")
 
-  const handleFind = async () => {
-    setPhase("searching")
-    try {
-      const res = await fetch("/api/match/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetLanguage, nativeLanguage, interests, countryPreference }),
-      })
-      if (!res.ok) throw new Error()
-      const data = await res.json()
-
-      if (data.matched) {
-        setMatchResult(data)
-        setPhase("found")
-        return
-      }
-
-      setRequestId(data.requestId)
-
-      pollRef.current = setInterval(async () => {
-        const poll = await fetch(`/api/match/chat?requestId=${data.requestId}`)
-        const pollData = await poll.json()
-
-        if (pollData.expired || pollData.cancelled) {
-          stopPolling()
-          setRequestId(null)
-          setPhase("idle")
-          toast.info("No match found. Try again!")
-          return
-        }
-
-        if (pollData.matched) {
-          stopPolling()
-          setMatchResult(pollData)
-          setPhase("found")
-        }
-      }, 2000)
-    } catch {
-      setPhase("idle")
-      toast.error("Failed to join queue. Please try again.")
-    }
-  }
-
-  React.useEffect(() => () => stopPolling(), [])
-
-  if (phase === "searching") {
-    return <SearchingState onCancel={cancelQueue} />
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/15 text-blue-500">
-            <MessageSquare className="size-5" />
-          </div>
-          <h1 className="text-2xl font-bold">Chat Match</h1>
-        </div>
-        <p className="mt-1 text-muted-foreground">Find a text conversation partner</p>
-      </div>
-
-      <div className="rounded-2xl border bg-card p-6">
-        <MatchConfigForm
-          targetLanguage={targetLanguage}
-          nativeLanguage={nativeLanguage}
-          interests={interests}
-          countryPreference={countryPreference}
-          onTargetLanguage={setTargetLanguage}
-          onNativeLanguage={setNativeLanguage}
-          onInterests={setInterests}
-          onCountryPreference={setCountryPreference}
-        />
-
-        <div className="mt-6 border-t pt-5">
-          <Button
-            size="lg"
-            className="h-12 w-full bg-blue-600 text-base hover:bg-blue-700"
-            disabled={!targetLanguage || !nativeLanguage}
-            onClick={handleFind}
-          >
-            <MessageSquare className="size-5" /> Find Chat Partner
-          </Button>
-        </div>
-      </div>
-
-      {matchResult && phase === "found" && (
-        <MatchFoundModal
-          result={matchResult}
-          onStartChat={() => router.push(`/messages/${matchResult.conversationId}`)}
-          onSkip={() => { setMatchResult(null); setPhase("idle") }}
-        />
-      )}
-    </div>
-  )
+  return <ChatMatchClient defaults={resolveMatchDefaults(result.profile)} />
 }

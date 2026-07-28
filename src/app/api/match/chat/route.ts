@@ -7,6 +7,7 @@ import User from '@/lib/models/User'
 import { avatarGradient } from '@/lib/utils'
 import { getLanguage, migrateLegacyLevel, formatLevel } from '@/constants/languages'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { matchRequestSchema } from '@/lib/validations/match'
 import { activeProvider, type MatchCandidate } from '@/lib/matching'
 
 function buildPartner(doc: Record<string, unknown>) {
@@ -84,13 +85,15 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))
-  const { targetLanguage, nativeLanguage, interests = [], countryPreference = '' } = body
-
-  if (!targetLanguage || !nativeLanguage)
+  const parsed = matchRequestSchema.safeParse(body)
+  if (!parsed.success) {
     return NextResponse.json(
-      { error: 'targetLanguage and nativeLanguage required' },
-      { status: 400 }
+      { error: parsed.error.issues[0]?.message ?? 'Invalid match request' },
+      { status: 400 },
     )
+  }
+  // Codes arrive normalised, so the reciprocal lookup below compares like with like.
+  const { targetLanguage, nativeLanguage, interests, countryPreference } = parsed.data
 
   // Rate limit: 5 queue joins per minute
   const { allowed } = await checkRateLimit('match-queue', session.user.id, 5, 60)
