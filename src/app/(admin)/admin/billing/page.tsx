@@ -68,7 +68,7 @@ const EMPTY_PLAN = {
 export default function AdminBillingPage() {
   // ── User billing ──────────────────────────────────────────────────────────
   const [usersResult, setUsersResult] = React.useState<UsersResult | null>(null)
-  const [usersLoading, setUsersLoading] = React.useState(true)
+  const [loadedUsersKey, setLoadedUsersKey] = React.useState<string | null>(null)
   const [planFilter, setPlanFilter] = React.useState("all")
   const [userPage, setUserPage] = React.useState(1)
 
@@ -87,16 +87,32 @@ export default function AdminBillingPage() {
   const [planSubmitting, setPlanSubmitting] = React.useState(false)
 
   // ── Load users ────────────────────────────────────────────────────────────
+  // Identifies which page+filter the held users belong to, so loading is derived
+  // instead of tracked by a flag set synchronously in the effect.
+  const usersKey = `${userPage}:${planFilter}`
+  const usersLoading = loadedUsersKey !== usersKey
+
   React.useEffect(() => {
-    setUsersLoading(true)
+    // Changing filter and page quickly must not let an earlier response land last.
+    let cancelled = false
     const params = new URLSearchParams({ page: String(userPage) })
     if (planFilter !== "all") params.set("plan", planFilter)
     fetch(`/api/admin/billing?${params.toString()}`)
       .then((r) => r.json())
-      .then((data) => setUsersResult(data))
-      .catch(() => toast.error("Failed to load users"))
-      .finally(() => setUsersLoading(false))
-  }, [userPage, planFilter])
+      .then((data) => {
+        if (cancelled) return
+        setUsersResult(data)
+        setLoadedUsersKey(usersKey)
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error("Failed to load users")
+        setLoadedUsersKey(usersKey)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [userPage, planFilter, usersKey])
 
   // ── Load plans ────────────────────────────────────────────────────────────
   React.useEffect(() => {

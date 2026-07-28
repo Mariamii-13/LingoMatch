@@ -28,6 +28,12 @@ interface ExploreUser {
   friendStatus: FriendStatus
 }
 
+interface ExploreResponse {
+  users: ExploreUser[]
+  total: number
+  hasMore: boolean
+}
+
 const INTERESTS = [
   { key: "anime", label: "Anime" },
   { key: "books", label: "Books" },
@@ -205,17 +211,28 @@ export default function ExplorePage() {
   const [hasMore, setHasMore] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  /** Pure I/O: fetches a page of results and touches no state. */
+  const loadUsers = useCallback(
+    async (q: string, c: string, l: string, i: string, p: number): Promise<ExploreResponse> => {
+      const res = await fetch(buildUrl(q, c, l, i, p))
+      if (!res.ok) throw new Error("Failed to load users")
+      return res.json()
+    },
+    []
+  )
+
+  const applyResults = useCallback((data: ExploreResponse, append: boolean) => {
+    setUsers((prev) => (append ? [...prev, ...data.users] : data.users))
+    setTotal(data.total)
+    setHasMore(data.hasMore)
+  }, [])
+
   const fetchUsers = useCallback(
     async (q: string, c: string, l: string, i: string, p: number, append = false) => {
       if (append) setLoadingMore(true)
       else setLoading(true)
       try {
-        const res = await fetch(buildUrl(q, c, l, i, p))
-        if (!res.ok) throw new Error()
-        const data = await res.json()
-        setUsers((prev) => (append ? [...prev, ...data.users] : data.users))
-        setTotal(data.total)
-        setHasMore(data.hasMore)
+        applyResults(await loadUsers(q, c, l, i, p), append)
       } catch {
         if (!append) setUsers([])
       } finally {
@@ -223,12 +240,18 @@ export default function ExplorePage() {
         else setLoading(false)
       }
     },
-    []
+    [loadUsers, applyResults]
   )
 
+  // `loading` already starts true, and every state update below happens in a
+  // promise callback rather than synchronously in the effect body, which is
+  // what avoids the cascading render on mount.
   useEffect(() => {
-    fetchUsers("", "", "", "", 1)
-  }, [fetchUsers])
+    loadUsers("", "", "", "", 1)
+      .then((data) => applyResults(data, false))
+      .catch(() => setUsers([]))
+      .finally(() => setLoading(false))
+  }, [loadUsers, applyResults])
 
   function handleQueryChange(e: React.ChangeEvent<HTMLInputElement>) {
     const val = e.target.value

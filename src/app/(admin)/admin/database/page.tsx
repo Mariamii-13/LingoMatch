@@ -23,7 +23,7 @@ export default function AdminDatabasePage() {
 
   const [selected, setSelected] = React.useState<string | null>(null)
   const [docsResult, setDocsResult] = React.useState<DocsResult | null>(null)
-  const [docsLoading, setDocsLoading] = React.useState(false)
+  const [loadedKey, setLoadedKey] = React.useState<string | null>(null)
   const [page, setPage] = React.useState(1)
 
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -32,27 +32,60 @@ export default function AdminDatabasePage() {
   const [jsonError, setJsonError] = React.useState("")
   const [submitting, setSubmitting] = React.useState(false)
 
-  function loadCollections() {
-    setCollectionsLoading(true)
-    fetch("/api/admin/db")
-      .then((r) => r.json())
-      .then((data) => setCollections(Array.isArray(data) ? data : []))
-      .catch(() => toast.error("Failed to load collections"))
-      .finally(() => setCollectionsLoading(false))
-  }
+  /** Pure I/O: touches no state, so it is safe to call from an effect body. */
+  const fetchCollections = React.useCallback(async (): Promise<CollectionInfo[]> => {
+    const res = await fetch("/api/admin/db")
+    const data = await res.json()
+    return Array.isArray(data) ? data : []
+  }, [])
 
-  React.useEffect(() => { loadCollections() }, [])
+  const applyCollections = React.useCallback(
+    (promise: Promise<CollectionInfo[]>) =>
+      promise
+        .then(setCollections)
+        .catch(() => toast.error("Failed to load collections"))
+        .finally(() => setCollectionsLoading(false)),
+    [],
+  )
+
+  /** Used by the refresh button and after a document is created or deleted. */
+  const loadCollections = React.useCallback(() => {
+    setCollectionsLoading(true)
+    applyCollections(fetchCollections())
+  }, [applyCollections, fetchCollections])
 
   React.useEffect(() => {
-    if (!selected) return
-    setDocsLoading(true)
-    setDocsResult(null)
+    // collectionsLoading already starts true, and every update here happens in a
+    // promise callback rather than synchronously in the effect body.
+    applyCollections(fetchCollections())
+  }, [applyCollections, fetchCollections])
+
+  // Identifies which collection+page the held documents belong to, so loading
+  // is derived instead of tracked by a flag set synchronously in the effect.
+  const docsKey = selected ? `${selected}:${page}` : null
+  const docsLoading = docsKey !== null && loadedKey !== docsKey
+  const visibleDocs = loadedKey === docsKey ? docsResult : null
+
+  React.useEffect(() => {
+    if (!docsKey || !selected) return
+    // Switching collection quickly must not let an earlier response land last.
+    let cancelled = false
     fetch(`/api/admin/db/${selected}?page=${page}&limit=20`)
       .then((r) => r.json())
-      .then((data) => setDocsResult(data))
-      .catch(() => toast.error("Failed to load documents"))
-      .finally(() => setDocsLoading(false))
-  }, [selected, page])
+      .then((data) => {
+        if (cancelled) return
+        setDocsResult(data)
+        setLoadedKey(docsKey)
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error("Failed to load documents")
+        setLoadedKey(docsKey)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [docsKey, selected, page])
 
   function selectCollection(name: string) {
     setSelected(name)
@@ -234,7 +267,7 @@ export default function AdminDatabasePage() {
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     Loading…
                   </div>
-                ) : docsResult?.docs.length === 0 ? (
+                ) : visibleDocs?.docs.length === 0 ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     No documents found.
                   </div>
@@ -248,7 +281,7 @@ export default function AdminDatabasePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {docsResult?.docs.map((doc) => {
+                      {visibleDocs?.docs.map((doc) => {
                         const previewKeys = Object.keys(doc)
                           .filter((k) => k !== "_id")
                           .slice(0, 3)
@@ -304,10 +337,10 @@ export default function AdminDatabasePage() {
                 )}
               </div>
 
-              {docsResult && docsResult.pages > 1 && (
+              {visibleDocs && visibleDocs.pages > 1 && (
                 <div className="flex items-center justify-between border-t px-4 py-3">
                   <span className="text-xs text-muted-foreground">
-                    {docsResult.total} docs · Page {docsResult.page} of {docsResult.pages}
+                    {visibleDocs.total} docs · Page {visibleDocs.page} of {visibleDocs.pages}
                   </span>
                   <div className="flex gap-1">
                     <Button
@@ -322,9 +355,9 @@ export default function AdminDatabasePage() {
                       variant="outline"
                       size="icon-sm"
                       onClick={() =>
-                        setPage((p) => Math.min(docsResult.pages, p + 1))
+                        setPage((p) => Math.min(visibleDocs.pages, p + 1))
                       }
-                      disabled={page >= docsResult.pages}
+                      disabled={page >= visibleDocs.pages}
                     >
                       <ChevronRight className="size-3.5" />
                     </Button>

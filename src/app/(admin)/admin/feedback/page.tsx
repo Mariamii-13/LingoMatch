@@ -31,16 +31,29 @@ function Stars({ rating }: { rating?: number }) {
 
 export default function AdminFeedbackPage() {
   const [result, setResult] = React.useState<DocsResult | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [loadedPage, setLoadedPage] = React.useState<number | null>(null)
   const [page, setPage] = React.useState(1)
 
+  // Derived rather than a flag — see the note in the sessions page.
+  const loading = loadedPage !== page
+
   React.useEffect(() => {
-    setLoading(true)
+    let cancelled = false
     fetch(`/api/admin/db/conversationfeedbacks?page=${page}&limit=20`)
       .then((r) => r.json())
-      .then((data) => setResult(data))
-      .catch(() => toast.error("Failed to load feedback"))
-      .finally(() => setLoading(false))
+      .then((data) => {
+        if (cancelled) return
+        setResult(data)
+        setLoadedPage(page)
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error("Failed to load feedback")
+        setLoadedPage(page)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [page])
 
   return (

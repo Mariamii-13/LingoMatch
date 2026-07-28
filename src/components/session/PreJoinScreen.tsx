@@ -13,26 +13,67 @@ interface PreJoinScreenProps {
 export function PreJoinScreen({ onFindPartner, onCancel }: PreJoinScreenProps) {
   const [cameraEnabled, setCameraEnabled] = React.useState(true)
   const [micEnabled, setMicEnabled] = React.useState(true)
-  const [stream, setStream] = React.useState<MediaStream | null>(null)
+  const [previewReady, setPreviewReady] = React.useState(false)
   const videoRef = React.useRef<HTMLVideoElement>(null)
+  const streamRef = React.useRef<MediaStream | null>(null)
 
+  /*
+   * The camera preview is owned entirely by this effect, so every path that
+   * acquires a stream also releases it.
+   *
+   * The stream lives in a ref rather than state because nothing renders from
+   * the object itself — only from `previewReady` — and keeping it out of state
+   * removes the synchronous setState that caused a cascading render on every
+   * camera toggle.
+   *
+   * `cancelled` matters for privacy, not tidiness: getUserMedia can resolve
+   * after the user has toggled the camera off or left the screen, and the
+   * previous code dropped that late stream on the floor, leaving the camera
+   * light on with no way to turn it off.
+   */
   React.useEffect(() => {
-    if (!cameraEnabled) {
-      stream?.getVideoTracks().forEach((t) => t.stop())
-      setStream(null)
-      return
-    }
+    if (!cameraEnabled) return
+
+    let cancelled = false
+
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: false })
-      .then((s) => {
-        setStream(s)
-        if (videoRef.current) videoRef.current.srcObject = s
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
+        streamRef.current = stream
+        setPreviewReady(true)
       })
-      .catch(() => setCameraEnabled(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => {
+        if (!cancelled) setCameraEnabled(false)
+      })
+
+    return () => {
+      cancelled = true
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+      setPreviewReady(false)
+    }
   }, [cameraEnabled])
 
-  React.useEffect(() => () => { stream?.getTracks().forEach((t) => t.stop()) }, [stream])
+  /*
+   * Attaching the stream needs its own effect because the <video> element only
+   * renders once `previewReady` is true. The previous code assigned srcObject
+   * in the same tick it flipped that flag, so videoRef.current was still null
+   * and the assignment silently did nothing — the preview stayed black.
+   */
+  React.useEffect(() => {
+    if (!previewReady) return
+    const video = videoRef.current
+    const stream = streamRef.current
+    if (!video || !stream) return
+    video.srcObject = stream
+    return () => {
+      video.srcObject = null
+    }
+  }, [previewReady])
 
   const bothOff = !cameraEnabled && !micEnabled
 
@@ -47,7 +88,7 @@ export function PreJoinScreen({ onFindPartner, onCancel }: PreJoinScreenProps) {
         {/* Camera preview */}
         <div className="space-y-2">
           <div className="relative aspect-video overflow-hidden rounded-xl border bg-zinc-900">
-            {cameraEnabled && stream ? (
+            {cameraEnabled && previewReady ? (
               <video ref={videoRef} autoPlay muted playsInline className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2">

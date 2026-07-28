@@ -19,16 +19,33 @@ type DocsResult = { docs: Session[]; total: number; page: number; pages: number 
 
 export default function AdminSessionsPage() {
   const [result, setResult] = React.useState<DocsResult | null>(null)
-  const [loading, setLoading] = React.useState(true)
+  const [loadedPage, setLoadedPage] = React.useState<number | null>(null)
   const [page, setPage] = React.useState(1)
 
+  // Derived rather than a flag: we are loading precisely while the data we hold
+  // is not for the page we want. Nothing to set synchronously in the effect, and
+  // no separate boolean that can fall out of sync.
+  const loading = loadedPage !== page
+
   React.useEffect(() => {
-    setLoading(true)
+    // Without this guard, quickly paging could let a slow earlier response
+    // overwrite a newer one.
+    let cancelled = false
     fetch(`/api/admin/db/conversations?page=${page}&limit=20`)
       .then((r) => r.json())
-      .then((data) => setResult(data))
-      .catch(() => toast.error("Failed to load sessions"))
-      .finally(() => setLoading(false))
+      .then((data) => {
+        if (cancelled) return
+        setResult(data)
+        setLoadedPage(page)
+      })
+      .catch(() => {
+        if (cancelled) return
+        toast.error("Failed to load sessions")
+        setLoadedPage(page)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [page])
 
   return (

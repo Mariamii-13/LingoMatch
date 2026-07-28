@@ -15,7 +15,6 @@ import {
 import { FileStack, MessageSquare, Network, Users } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { Badge } from "@/components/ui/badge"
 import { adminReports, dauTrend, sessionsByMode } from "@/lib/admin-placeholder-data"
 
 type Stats = {
