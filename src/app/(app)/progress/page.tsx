@@ -1,6 +1,9 @@
+import type { Metadata } from "next"
 import { BarChart3, BookOpen, Clock3, MessageSquare } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+
+export const metadata: Metadata = { title: "Progress" }
 
 const futureMetrics = [
   { label: "Practice sessions", icon: MessageSquare },

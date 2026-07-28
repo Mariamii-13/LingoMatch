@@ -1,7 +1,10 @@
+import type { Metadata } from "next"
 import { AIPracticeClient } from './AIPracticeClient'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
+
+export const metadata: Metadata = { title: "AI Practice" }
 
 export default async function AIPracticePage() {
   const session = await auth()

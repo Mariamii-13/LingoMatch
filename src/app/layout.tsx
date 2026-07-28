@@ -12,9 +12,15 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: "LingoMatch — Speak Any Language. Connect Anywhere.",
+  // `template` applies to child segments, so every page can name itself while
+  // `default` covers the landing page. Without this, each route reused one
+  // title and browser tabs were indistinguishable.
+  title: {
+    default: "LingoMatch — practise a language your way",
+    template: "%s · LingoMatch",
+  },
   description:
-    "Practice languages through real voice conversations. AI matches you with your perfect partner.",
+    "Practise a language with an AI tutor, exchange messages with real partners, or go live when you choose. Video is always optional.",
 }
 
 export default function RootLayout({
