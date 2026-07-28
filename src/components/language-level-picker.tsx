@@ -94,7 +94,11 @@ export function LanguageLevelPicker({
               {lang.flag}
             </span>
             <span className="flex-1 text-sm font-medium">{lang.name}</span>
-            {levels.length === 2 ? (
+            {levels.length === 1 ? (
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                {formatLevel(levels[0])}
+              </span>
+            ) : levels.length === 2 ? (
               <button
                 type="button"
                 onClick={() => setLevel(code, level === levels[0] ? levels[1] : levels[0])}

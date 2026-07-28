@@ -7,6 +7,11 @@ export interface UserProfileData {
   country?: string
   spokenLanguages?: { code: string; level: string }[]
   learningLanguages?: { code: string; level: string }[]
+  languageProfile?: {
+    nativeLanguages: string[]
+    learningLanguages: { code: string; level: string; isPrimary: boolean }[]
+    preferredExplanationLanguage: string
+  }
   interests?: Record<string, string[]>
   aiProfile?: Partial<AIProfile>
   conversationModes?: string[]
@@ -64,9 +69,14 @@ export function getStepStatus(
         user.country?.trim()
       ),
     "ai-preferences": hasAIPrefs,
-    languages:
-      (user.spokenLanguages?.length ?? 0) > 0 &&
-      (user.learningLanguages?.length ?? 0) > 0,
+    languages: user.languageProfile
+      ? user.languageProfile.nativeLanguages.length > 0 &&
+        user.languageProfile.learningLanguages.length > 0 &&
+        user.languageProfile.nativeLanguages.includes(
+          user.languageProfile.preferredExplanationLanguage,
+        )
+      : (user.spokenLanguages?.length ?? 0) > 0 &&
+        (user.learningLanguages?.length ?? 0) > 0,
     interests: hasAnyInterest,
     modes: (user.conversationModes?.length ?? 0) > 0,
   }

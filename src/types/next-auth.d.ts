@@ -9,6 +9,7 @@ declare module 'next-auth' {
       plan?: string
       role?: string
       onboardingCompleted?: boolean
+      languageProfileComplete?: boolean
     } & DefaultSession['user']
   }
 
@@ -17,6 +18,7 @@ declare module 'next-auth' {
     plan?: string
     role?: string
     onboardingCompleted?: boolean
+    languageProfileComplete?: boolean
   }
 }
 
@@ -27,5 +29,6 @@ declare module 'next-auth/jwt' {
     plan?: string
     role?: string
     onboardingCompleted?: boolean
+    languageProfileComplete?: boolean
   }
 }

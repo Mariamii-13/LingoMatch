@@ -8,96 +8,181 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { LanguageLevelPicker, type LanguageLevelEntry } from "@/components/language-level-picker"
-import { SPOKEN_LEVELS, LEARNING_LEVELS } from "@/constants/languages"
-import { getCompletionPercentage } from "@/lib/onboarding-progress"
+import { LEARNING_LEVELS, getLanguage } from "@/constants/languages"
+import {
+  getCompletionPercentage,
+  type OnboardingStep,
+  type UserProfileData,
+} from "@/lib/onboarding-progress"
 import { useSetupPage } from "@/hooks/use-setup-page"
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes"
 import { OnboardingStepBar } from "@/components/onboarding/OnboardingStepBar"
 
-function OnboardingLanguagesContent() {
-  const router = useRouter()
-  const { backHref, backLabel, buttonLabel, user, stepStatus, buildRedirect, buildSkipRedirect } =
-    useSetupPage("languages")
+type LanguageFormProps = {
+  user: UserProfileData
+  backHref: string
+  backLabel: string
+  buttonLabel: string
+  stepStatus: Record<OnboardingStep, boolean>
+  buildRedirect: (savedUser: UserProfileData) => string | null
+}
 
-  const [spoken, setSpoken] = React.useState<LanguageLevelEntry[]>([])
-  const [learning, setLearning] = React.useState<LanguageLevelEntry[]>([])
+function initialNativeLanguages(user: UserProfileData): LanguageLevelEntry[] {
+  if (user.languageProfile) {
+    return user.languageProfile.nativeLanguages.map((code) => ({ code, level: "native" }))
+  }
+  return (user.spokenLanguages ?? []).filter((language) => language.level === "native")
+}
+
+function initialLearningLanguages(user: UserProfileData): LanguageLevelEntry[] {
+  if (user.languageProfile) {
+    return user.languageProfile.learningLanguages.map(({ code, level }) => ({ code, level }))
+  }
+  return user.learningLanguages ?? []
+}
+
+function LanguageProfileForm({
+  user,
+  backHref,
+  backLabel,
+  buttonLabel,
+  stepStatus,
+  buildRedirect,
+}: LanguageFormProps) {
+  const router = useRouter()
+  const [nativeLanguages, setNativeLanguages] = React.useState<LanguageLevelEntry[]>(
+    () => initialNativeLanguages(user),
+  )
+  const [learningLanguages, setLearningLanguages] = React.useState<LanguageLevelEntry[]>(
+    () => initialLearningLanguages(user),
+  )
+  const [explanationLanguage, setExplanationLanguage] = React.useState(
+    () => user.languageProfile?.preferredExplanationLanguage ?? initialNativeLanguages(user)[0]?.code ?? "",
+  )
   const [saving, setSaving] = React.useState(false)
 
-  const isDirty = spoken.length > 0 || learning.length > 0
+  const [initialSnapshot, setInitialSnapshot] = React.useState(() => JSON.stringify({
+    nativeLanguages: initialNativeLanguages(user),
+    learningLanguages: initialLearningLanguages(user),
+    explanationLanguage:
+      user.languageProfile?.preferredExplanationLanguage ??
+      initialNativeLanguages(user)[0]?.code ??
+      "",
+  }))
+  const currentSnapshot = JSON.stringify({
+    nativeLanguages,
+    learningLanguages,
+    explanationLanguage,
+  })
+  const isDirty = currentSnapshot !== initialSnapshot
   const { confirmNavigation } = useUnsavedChanges(isDirty)
-  const spokenCodes = spoken.map((s) => s.code)
+  const nativeCodes = nativeLanguages.map((language) => language.code)
+
+  function handleNativeLanguagesChange(next: LanguageLevelEntry[]) {
+    setNativeLanguages(next)
+    setExplanationLanguage((current) =>
+      next.some((language) => language.code === current) ? current : (next[0]?.code ?? ""),
+    )
+  }
 
   async function handleSave() {
-    if (spoken.length === 0) {
-      toast.error("Add at least one language you speak")
+    if (nativeLanguages.length === 0) {
+      toast.error("Add at least one native language")
       return
     }
-    if (learning.length === 0) {
+    if (learningLanguages.length === 0) {
       toast.error("Add at least one language you want to learn")
       return
     }
+    if (!nativeLanguages.some((language) => language.code === explanationLanguage)) {
+      toast.error("Choose an explanation language")
+      return
+    }
+
     setSaving(true)
     try {
-      const updatedUser = { ...(user ?? {}), spokenLanguages: spoken, learningLanguages: learning }
+      const languageProfile = {
+        nativeLanguages: nativeCodes,
+        learningLanguages: learningLanguages.map((language, index) => ({
+          ...language,
+          isPrimary: index === 0,
+        })),
+        preferredExplanationLanguage: explanationLanguage,
+      }
+      const updatedUser = {
+        ...user,
+        languageProfile,
+        spokenLanguages: nativeLanguages,
+        learningLanguages,
+      }
       const allDone = getCompletionPercentage(updatedUser) === 100
 
-      const res = await fetch("/api/user/me", {
-        method: "PATCH",
+      const response = await fetch("/api/user/me/language-profile", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          spokenLanguages: spoken,
-          learningLanguages: learning,
-          ...(allDone && { onboardingCompleted: true }),
-        }),
+        body: JSON.stringify(languageProfile),
       })
-      if (!res.ok) { toast.error("Failed to save"); return }
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        toast.error(data.error ?? "Failed to save language profile")
+        return
+      }
+
+      if (allDone) {
+        const completionResponse = await fetch("/api/user/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ onboardingCompleted: true }),
+        })
+        if (!completionResponse.ok) {
+          const data = await completionResponse.json().catch(() => ({}))
+          toast.error(data.error ?? "Language profile saved, but onboarding could not be completed")
+          return
+        }
+      }
+
+      setInitialSnapshot(currentSnapshot)
 
       const redirect = buildRedirect(updatedUser)
-      if (!redirect) { toast.success("Saved"); return }
-      if (redirect === "/dashboard") {
+      if (!redirect) {
+        toast.success("Language profile saved")
+      } else if (redirect === "/dashboard") {
         window.location.href = "/dashboard"
       } else {
         router.push(redirect)
       }
     } catch {
-      toast.error("Failed to save")
+      toast.error("Failed to save language profile")
     } finally {
       setSaving(false)
     }
   }
 
   function handleBack() {
-    if (!confirmNavigation()) return
-    router.push(backHref)
+    if (confirmNavigation()) router.push(backHref)
   }
 
   return (
     <div>
       <OnboardingStepBar currentStep="languages" stepStatus={stepStatus} />
 
-      <button
-        type="button"
-        onClick={handleBack}
-        className="mb-4 text-sm text-primary hover:underline"
-      >
+      <button type="button" onClick={handleBack} className="mb-4 text-sm text-primary hover:underline">
         {backLabel}
       </button>
 
-      <h1 className="text-2xl font-semibold">Your languages</h1>
+      <h1 className="text-2xl font-semibold">Your language profile</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Add the languages you speak and the ones you want to learn.
+        Tell us what you speak and what you are learning so lessons can adapt to you.
       </p>
 
       <div className="mt-8 space-y-8">
         <div className="space-y-3">
-          <Label>Languages I speak</Label>
-          <p className="text-xs text-muted-foreground">
-            Include your native language and any others you speak well.
-          </p>
+          <Label>My native languages</Label>
+          <p className="text-xs text-muted-foreground">Add every language you grew up speaking fluently.</p>
           <LanguageLevelPicker
-            value={spoken}
-            onChange={setSpoken}
-            levels={SPOKEN_LEVELS}
+            value={nativeLanguages}
+            onChange={handleNativeLanguagesChange}
+            levels={["native"]}
             defaultLevel="native"
             placeholder="Add a language…"
           />
@@ -105,33 +190,61 @@ function OnboardingLanguagesContent() {
 
         <div className="space-y-3">
           <Label>Languages I want to learn</Label>
-          <p className="text-xs text-muted-foreground">
-            Add languages you are currently learning or plan to learn.
-          </p>
+          <p className="text-xs text-muted-foreground">The first language is your primary learning target.</p>
           <LanguageLevelPicker
-            value={learning}
-            onChange={setLearning}
+            value={learningLanguages}
+            onChange={setLearningLanguages}
             levels={LEARNING_LEVELS}
-            defaultLevel="beginner"
-            excludeCodes={spokenCodes}
+            defaultLevel="unsure"
+            excludeCodes={nativeCodes}
             placeholder="Add a language…"
           />
         </div>
+
+        <div className="space-y-3">
+          <Label htmlFor="explanation-language">Explain new concepts in</Label>
+          <p className="text-xs text-muted-foreground">
+            Your tutor uses this language for short grammar explanations when needed.
+          </p>
+          <select
+            id="explanation-language"
+            value={explanationLanguage}
+            onChange={(event) => setExplanationLanguage(event.target.value)}
+            disabled={nativeLanguages.length === 0}
+            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+          >
+            <option value="">Select a language</option>
+            {nativeLanguages.map(({ code }) => (
+              <option key={code} value={code}>{getLanguage(code).name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="mt-8 flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => router.push(buildSkipRedirect())}
-          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          Skip this step
-        </button>
+      <div className="mt-8 flex items-center justify-end">
         <Button onClick={handleSave} disabled={saving}>
           {saving ? <Loader2 className="size-4 animate-spin" /> : buttonLabel}
         </Button>
       </div>
     </div>
+  )
+}
+
+function OnboardingLanguagesContent() {
+  const setup = useSetupPage("languages")
+  if (setup.loading || !setup.user) {
+    return <div className="flex justify-center py-12"><Loader2 className="size-6 animate-spin text-muted-foreground" /></div>
+  }
+
+  return (
+    <LanguageProfileForm
+      user={setup.user}
+      backHref={setup.backHref}
+      backLabel={setup.backLabel}
+      buttonLabel={setup.buttonLabel}
+      stepStatus={setup.stepStatus}
+      buildRedirect={setup.buildRedirect}
+    />
   )
 }
 

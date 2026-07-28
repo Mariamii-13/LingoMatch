@@ -4,6 +4,28 @@ import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import {
+  buildLanguageProfileUpdate,
+  isLanguageProfileComplete,
+  resolveLanguageProfile,
+} from '@/lib/language-profile'
+
+async function resolveLanguageProfileCompletion(
+  userId: string,
+  rawUser: Record<string, unknown>,
+): Promise<boolean> {
+  const profile = resolveLanguageProfile(rawUser)
+  const complete = isLanguageProfileComplete(profile)
+  if (complete && !rawUser.languageProfile) {
+    const update = buildLanguageProfileUpdate(
+      profile,
+      (rawUser.spokenLanguages as { code: string; level: string }[]) ?? [],
+      profile.completedAt,
+    )
+    await User.updateOne({ _id: userId, languageProfile: null }, { $set: update })
+  }
+  return complete
+}
 
 async function generateUniqueUsername(email: string): Promise<string> {
   const base = email
@@ -59,6 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           plan: user.plan,
           role: user.role,
           onboardingCompleted: user.onboardingCompleted,
+          languageProfileComplete: isLanguageProfileComplete(resolveLanguageProfile(user)),
         }
       },
     }),
@@ -95,21 +118,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         await connectDB()
         const dbUser = await User.findOne({ email: token.email })
         if (dbUser) {
+          const rawUser = dbUser.toObject() as Record<string, unknown>
           token.id = dbUser._id.toString()
           token.username = dbUser.username
           token.plan = dbUser.plan
           token.role = dbUser.role
           token.onboardingCompleted = dbUser.onboardingCompleted
+          token.languageProfileComplete = await resolveLanguageProfileCompletion(
+            dbUser._id.toString(),
+            rawUser,
+          )
           if (dbUser.displayName) token.name = dbUser.displayName
         }
       } else if (token.id) {
         await connectDB()
-        const dbUser = await User.findById(token.id).select('role plan isBanned onboardingCompleted displayName').lean() as { role?: string; plan?: string; isBanned?: boolean; onboardingCompleted?: boolean; displayName?: string } | null
+        const dbUser = await User.findById(token.id)
+          .select('role plan isBanned onboardingCompleted displayName languageProfile nativeLanguages spokenLanguages learningLanguages')
+          .lean() as Record<string, unknown> | null
         if (dbUser) {
-          token.role = dbUser.role
-          token.plan = dbUser.plan
-          token.onboardingCompleted = dbUser.onboardingCompleted
-          if (dbUser.displayName) token.name = dbUser.displayName
+          token.role = dbUser.role as string
+          token.plan = dbUser.plan as string
+          token.onboardingCompleted = dbUser.onboardingCompleted as boolean
+          token.languageProfileComplete = await resolveLanguageProfileCompletion(
+            token.id as string,
+            dbUser,
+          )
+          if (dbUser.displayName) token.name = dbUser.displayName as string
         }
       }
       return token
@@ -122,6 +156,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ;(session.user as { role?: string }).role = token.role as string
         ;(session.user as { onboardingCompleted?: boolean }).onboardingCompleted =
           token.onboardingCompleted as boolean
+        ;(session.user as { languageProfileComplete?: boolean }).languageProfileComplete =
+          token.languageProfileComplete as boolean
       }
       return session
     },

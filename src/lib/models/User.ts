@@ -25,6 +25,30 @@ const LearningLanguageSchema = new Schema(
   { _id: false }
 )
 
+const LanguageProfileLearningSchema = new Schema(
+  {
+    code: { type: String, required: true, lowercase: true, trim: true },
+    level: {
+      type: String,
+      enum: ['unsure', 'a1', 'a2', 'b1', 'b2', 'c1', 'c2'],
+      required: true,
+    },
+    isPrimary: { type: Boolean, required: true, default: false },
+  },
+  { _id: false }
+)
+
+const LanguageProfileSchema = new Schema(
+  {
+    version: { type: Number, required: true, default: 1 },
+    nativeLanguages: { type: [String], required: true, default: [] },
+    learningLanguages: { type: [LanguageProfileLearningSchema], required: true, default: [] },
+    preferredExplanationLanguage: { type: String, required: true, default: '' },
+    completedAt: { type: Date, required: true },
+  },
+  { _id: false }
+)
+
 const InterestsSchema = new Schema(
   {
     entertainment: { type: [String], default: [] },
@@ -68,6 +92,7 @@ const UserSchema = new Schema(
     // Structured spoken languages with CEFR / Native levels
     spokenLanguages: { type: [LearningLanguageSchema], default: [] },
     learningLanguages: { type: [LearningLanguageSchema], default: [] },
+    languageProfile: { type: LanguageProfileSchema, default: null },
     interests: {
       type: InterestsSchema,
       default: () => ({}),
@@ -111,5 +136,11 @@ const UserSchema = new Schema(
 // prefix-regex queries (^pattern) on those fields are index-backed.
 // friendRequests.from index supports the sent-requests reverse lookup.
 UserSchema.index({ 'friendRequests.from': 1 })
+UserSchema.index({ 'languageProfile.nativeLanguages': 1 })
+UserSchema.index({ 'languageProfile.learningLanguages.code': 1 })
+UserSchema.index({
+  'languageProfile.learningLanguages.code': 1,
+  'languageProfile.learningLanguages.isPrimary': 1,
+})
 
 export default mongoose.models.User || mongoose.model('User', UserSchema)

@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AIPreferencesForm } from "@/components/ai-preferences/AIPreferencesForm"
 import { LanguageLevelPicker, type LanguageLevelEntry } from "@/components/language-level-picker"
-import { getLanguage, SPOKEN_LEVELS, LEARNING_LEVELS } from "@/constants/languages"
+import { getLanguage, LEARNING_LEVELS } from "@/constants/languages"
 import type { AIProfile } from "@/types"
 import { useRouter } from "next/navigation"
 import {
@@ -61,6 +61,7 @@ export default function SettingsPage() {
   const [aiInterestTags, setAIInterestTags] = React.useState<string[]>([])
   const [spoken, setSpoken] = React.useState<LanguageLevelEntry[]>([])
   const [learning, setLearning] = React.useState<LanguageLevelEntry[]>([])
+  const [explanationLanguage, setExplanationLanguage] = React.useState("")
   const [langSaving, setLangSaving] = React.useState(false)
   const router = useRouter()
   const [completionPct, setCompletionPct] = React.useState(0)
@@ -75,11 +76,23 @@ export default function SettingsPage() {
         setUsername(u.username ?? "")
         setEmail(u.email ?? "")
         if (u.aiProfile) setAIProfile(u.aiProfile)
-        if (u.spokenLanguages?.length) setSpoken(u.spokenLanguages as LanguageLevelEntry[])
-        if (u.learningLanguages?.length) {
-          const ll = u.learningLanguages as LanguageLevelEntry[]
+        if (u.languageProfile) {
+          setSpoken(
+            u.languageProfile.nativeLanguages.map((code: string) => ({ code, level: "native" })),
+          )
+          setExplanationLanguage(u.languageProfile.preferredExplanationLanguage)
+        } else if (u.spokenLanguages?.length) {
+          const native = (u.spokenLanguages as LanguageLevelEntry[]).filter(
+            (language) => language.level === "native",
+          )
+          setSpoken(native)
+          setExplanationLanguage(native[0]?.code ?? "")
+        }
+        const storedLearning = u.languageProfile?.learningLanguages ?? u.learningLanguages
+        if (storedLearning?.length) {
+          const ll = storedLearning.map(({ code, level }: LanguageLevelEntry) => ({ code, level }))
           setLearning(ll)
-          setAILearningLanguages(ll.map((l) => getLanguage(l.code)))
+          setAILearningLanguages(ll.map((l: LanguageLevelEntry) => getLanguage(l.code)))
         }
         if (u.interests) {
           const tags = Object.values(u.interests as Record<string, string[]>).flat()
@@ -185,22 +198,45 @@ export default function SettingsPage() {
   }
 
   async function handleLangSave() {
-    if (spoken.length === 0) { toast.error("Add at least one language you speak"); return }
+    if (spoken.length === 0) { toast.error("Add at least one native language"); return }
+    if (learning.length === 0) { toast.error("Add at least one target language"); return }
+    if (!spoken.some((language) => language.code === explanationLanguage)) {
+      toast.error("Choose an explanation language")
+      return
+    }
     setLangSaving(true)
     try {
-      const res = await fetch("/api/user/me", {
-        method: "PATCH",
+      const languageProfile = {
+        nativeLanguages: spoken.map((language) => language.code),
+        learningLanguages: learning.map((language, index) => ({
+          ...language,
+          isPrimary: index === 0,
+        })),
+        preferredExplanationLanguage: explanationLanguage,
+      }
+      const res = await fetch("/api/user/me/language-profile", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ spokenLanguages: spoken, learningLanguages: learning }),
+        body: JSON.stringify(languageProfile),
       })
       if (!res.ok) { toast.error("Failed to save languages"); return }
       setAILearningLanguages(learning.map((l) => getLanguage(l.code)))
+      const nextProfile = { ...(profileData ?? {}), languageProfile }
+      setProfileData(nextProfile)
+      setCompletionPct(getCompletionPercentage(nextProfile))
       toast.success("Languages saved!")
     } catch {
       toast.error("Failed to save languages")
     } finally {
       setLangSaving(false)
     }
+  }
+
+  function handleNativeLanguagesChange(next: LanguageLevelEntry[]) {
+    setSpoken(next)
+    setExplanationLanguage((current) =>
+      next.some((language) => language.code === current) ? current : (next[0]?.code ?? ""),
+    )
   }
 
   const initials = displayName
@@ -306,15 +342,15 @@ export default function SettingsPage() {
             <div className="space-y-6">
               <div className="space-y-3">
                 <div>
-                  <Label>Languages I speak</Label>
+                  <Label>My native languages</Label>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Include your native language and any others you speak well.
+                    Add every language you grew up speaking fluently.
                   </p>
                 </div>
                 <LanguageLevelPicker
                   value={spoken}
-                  onChange={setSpoken}
-                  levels={SPOKEN_LEVELS}
+                  onChange={handleNativeLanguagesChange}
+                  levels={["native"]}
                   defaultLevel="native"
                   placeholder="Add a language…"
                 />
@@ -331,10 +367,31 @@ export default function SettingsPage() {
                   value={learning}
                   onChange={setLearning}
                   levels={LEARNING_LEVELS}
-                  defaultLevel="beginner"
+                  defaultLevel="unsure"
                   excludeCodes={spoken.map((s) => s.code)}
                   placeholder="Add a language…"
                 />
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="settings-explanation-language">Explain new concepts in</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Used for short tutor explanations when the target language is not enough.
+                  </p>
+                </div>
+                <select
+                  id="settings-explanation-language"
+                  value={explanationLanguage}
+                  onChange={(event) => setExplanationLanguage(event.target.value)}
+                  disabled={spoken.length === 0}
+                  className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Select a language</option>
+                  {spoken.map(({ code }) => (
+                    <option key={code} value={code}>{getLanguage(code).name}</option>
+                  ))}
+                </select>
               </div>
 
               <Button onClick={handleLangSave} disabled={langSaving}>

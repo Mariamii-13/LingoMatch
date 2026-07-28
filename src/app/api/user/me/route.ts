@@ -3,6 +3,11 @@ import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
 import { migrateLegacyLevel } from '@/constants/languages'
+import {
+  buildLanguageProfileUpdate,
+  isLanguageProfileComplete,
+  resolveLanguageProfile,
+} from '@/lib/language-profile'
 
 function applyMigrations(raw: Record<string, unknown>): Record<string, unknown> {
   // Synthesize spokenLanguages from legacy nativeLanguages if not yet migrated
@@ -40,7 +45,21 @@ export async function GET() {
   const user = await User.findById(session.user.id).select('-passwordHash').lean()
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  return NextResponse.json(applyMigrations(user as Record<string, unknown>))
+  const raw = user as Record<string, unknown>
+  const profile = resolveLanguageProfile(raw)
+  if (isLanguageProfileComplete(profile)) {
+    raw.languageProfile = profile
+    if (!user.languageProfile) {
+      const update = buildLanguageProfileUpdate(
+        profile,
+        (raw.spokenLanguages as { code: string; level: string }[]) ?? [],
+        profile.completedAt,
+      )
+      await User.updateOne({ _id: session.user.id, languageProfile: null }, { $set: update })
+    }
+  }
+
+  return NextResponse.json(applyMigrations(raw))
 }
 
 export async function PATCH(req: NextRequest) {
@@ -50,6 +69,13 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json()
+  const legacyLanguageFields = ['nativeLanguages', 'spokenLanguages', 'learningLanguages']
+  if (legacyLanguageFields.some((field) => field in body)) {
+    return NextResponse.json(
+      { error: 'Use /api/user/me/language-profile to update languages' },
+      { status: 400 },
+    )
+  }
   const allowed = [
     'displayName',
     'bio',
@@ -58,9 +84,6 @@ export async function PATCH(req: NextRequest) {
     'age',
     'timezone',
     'avatar',
-    'nativeLanguages',    // kept for legacy clients
-    'spokenLanguages',
-    'learningLanguages',
     'interests',
     'conversationModes',
     'onboardingCompleted',

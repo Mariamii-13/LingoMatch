@@ -5,7 +5,7 @@ export const SPOKEN_LEVELS = ["native", "other"] as const
 export type SpokenLevel = (typeof SPOKEN_LEVELS)[number]
 
 /** Levels for languages the user is learning. Stored lowercase in DB. */
-export const LEARNING_LEVELS = ["beginner", "a1", "a2", "b1", "b2", "c1", "c2"] as const
+export const LEARNING_LEVELS = ["unsure", "a1", "a2", "b1", "b2", "c1", "c2"] as const
 export type LearningLevel = (typeof LEARNING_LEVELS)[number]
 
 export type ProficiencyLevel = SpokenLevel | LearningLevel
@@ -20,6 +20,7 @@ const LEVEL_LABELS: Record<string, string> = {
   a2:       "A2",
   a1:       "A1",
   beginner: "Complete Beginner",
+  unsure:   "I'm not sure",
 }
 
 /** Human-readable label for a stored level string. */
@@ -33,7 +34,7 @@ export function formatLevel(level: string): string {
  */
 export function migrateLegacyLevel(level: string): string {
   const map: Record<string, string> = {
-    beginner:     "beginner",
+    beginner:     "unsure",
     intermediate: "b1",
     advanced:     "c1",
     native:       "native",
