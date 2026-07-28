@@ -79,7 +79,7 @@ function LanguageProfileForm({
     explanationLanguage,
   })
   const isDirty = currentSnapshot !== initialSnapshot
-  const { confirmNavigation } = useUnsavedChanges(isDirty)
+  const { confirmNavigation, releaseGuard } = useUnsavedChanges(isDirty)
   const nativeCodes = nativeLanguages.map((language) => language.code)
 
   function handleNativeLanguagesChange(next: LanguageLevelEntry[]) {
@@ -146,6 +146,7 @@ function LanguageProfileForm({
       }
 
       setInitialSnapshot(currentSnapshot)
+      releaseGuard()
 
       const redirect = buildRedirect(updatedUser)
       if (!redirect) {

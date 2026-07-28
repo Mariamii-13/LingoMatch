@@ -22,7 +22,7 @@ function OnboardingModeContent() {
   const [saving, setSaving] = React.useState(false)
 
   const isDirty = selected.length > 0
-  const { confirmNavigation } = useUnsavedChanges(isDirty)
+  const { confirmNavigation, releaseGuard } = useUnsavedChanges(isDirty)
 
   const toggle = (id: string) =>
     setSelected((prev) =>
@@ -45,6 +45,8 @@ function OnboardingModeContent() {
         }),
       })
       if (!res.ok) { toast.error("Failed to save"); return }
+
+      releaseGuard()
 
       const redirect = buildRedirect(updatedUser)
       if (!redirect) { toast.success("Saved"); return }

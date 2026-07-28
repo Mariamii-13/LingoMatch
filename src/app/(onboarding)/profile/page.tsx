@@ -49,7 +49,7 @@ function OnboardingProfileContent() {
   const [saving, setSaving] = React.useState(false)
 
   const isDirty = !!(name || username || country || gender || dob || bio)
-  const { confirmNavigation } = useUnsavedChanges(isDirty)
+  const { confirmNavigation, releaseGuard } = useUnsavedChanges(isDirty)
 
   const today = new Date()
   const minDob = new Date(today.getFullYear() - 100, 0, 1)
@@ -90,6 +90,8 @@ function OnboardingProfileContent() {
         toast.error(data.error ?? "Failed to save")
         return
       }
+
+      releaseGuard()
 
       const redirect = buildRedirect(updatedUser)
       if (!redirect) { toast.success("Saved"); return }

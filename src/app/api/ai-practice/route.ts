@@ -76,6 +76,14 @@ export async function POST(req: NextRequest) {
             { error: 'AI service is not configured', code: err.code },
             { status: 503 },
           )
+        case 'NO_CREDITS':
+          return NextResponse.json(
+            {
+              error: 'The AI tutor is temporarily unavailable. Please try again shortly.',
+              code: err.code,
+            },
+            { status: 503 },
+          )
         case 'TIMEOUT':
           return NextResponse.json(
             { error: 'The AI tutor took too long to respond. Please try again.', code: err.code },

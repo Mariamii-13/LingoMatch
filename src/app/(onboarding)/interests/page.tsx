@@ -33,7 +33,7 @@ function OnboardingInterestsContent() {
   const [saving, setSaving] = React.useState(false)
 
   const isDirty = selectedCategories.length > 0
-  const { confirmNavigation } = useUnsavedChanges(isDirty)
+  const { confirmNavigation, releaseGuard } = useUnsavedChanges(isDirty)
 
   function selectCategory(key: string) {
     setSelectedCategories((prev) => [...prev, key])
@@ -79,6 +79,8 @@ function OnboardingInterestsContent() {
         }),
       })
       if (!res.ok) { toast.error("Failed to save"); return }
+
+      releaseGuard()
 
       const redirect = buildRedirect(updatedUser)
       if (!redirect) { toast.success("Saved"); return }

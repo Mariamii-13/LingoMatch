@@ -1,5 +1,5 @@
 import 'server-only'
-import { resolveModel } from './models'
+import { resolveModelChain } from './models'
 import { buildSystemPrompt } from './prompts'
 import type { PracticeMode, SupportedLanguage, TutorLevel } from '@/config/ai-practice'
 
@@ -27,6 +27,7 @@ export type OpenRouterErrorCode =
   | 'PROVIDER_ERROR'
   | 'MALFORMED_RESPONSE'
   | 'MISSING_CONFIG'
+  | 'NO_CREDITS'
   | 'TIMEOUT'
 
 export class OpenRouterError extends Error {
@@ -43,7 +44,51 @@ export class OpenRouterError extends Error {
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const MAX_OUTPUT_TOKENS = 400
-const TIMEOUT_MS = 10_000
+const TIMEOUT_MS = 25_000
+const ERROR_BODY_LOG_LIMIT = 400
+
+/**
+ * Statuses that mean "this model can't serve the request" rather than "the
+ * request is wrong". Only these advance to the next model in the chain: an
+ * empty credit balance, a retired model id, or an upstream capacity problem is
+ * survivable by trying a different model, and each fails in well under a second.
+ *
+ * Timeouts and malformed replies deliberately do NOT advance — the model did
+ * respond, and walking a three-model chain of 25s timeouts would strand the
+ * user for over a minute.
+ */
+function isModelUnavailable(status: number): boolean {
+  return status === 402 || status === 404 || status === 429 || status >= 500
+}
+
+function classifyStatus(status: number): OpenRouterErrorCode {
+  if (status === 402) return 'NO_CREDITS'
+  if (status === 429) return 'RATE_LIMIT'
+  return 'PROVIDER_ERROR'
+}
+
+function describeStatus(status: number, modelId: string): string {
+  switch (classifyStatus(status)) {
+    case 'NO_CREDITS':
+      return `Model ${modelId} requires credits this account does not have`
+    case 'RATE_LIMIT':
+      return 'AI provider rate limit reached. Please wait a moment.'
+    default:
+      return `AI provider returned an error (${status})`
+  }
+}
+
+/**
+ * Logs why one model attempt failed. The provider's own error body is the only
+ * place the real cause appears (an empty credit balance surfaces as a generic
+ * 502 to the user), so it is worth recording — truncated, and never alongside
+ * the request headers that carry the API key.
+ */
+function logAttemptFailure(modelId: string, status: number, body: string): void {
+  console.error(
+    `[AI] model ${modelId} failed with ${status}: ${body.slice(0, ERROR_BODY_LOG_LIMIT)}`,
+  )
+}
 
 export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
   const apiKey = process.env.OPENROUTER_API_KEY
@@ -51,12 +96,11 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
     throw new OpenRouterError('OPENROUTER_API_KEY is not configured', 'MISSING_CONFIG')
   }
 
-  let modelId: string
-  try {
-    modelId = resolveModel('defaultTutor')
-  } catch {
-    throw new OpenRouterError('AI model is not configured', 'MISSING_CONFIG')
+  const chain = resolveModelChain('defaultTutor')
+  if (chain.length === 0) {
+    throw new OpenRouterError('No AI model is configured', 'MISSING_CONFIG')
   }
+
   const systemPrompt = buildSystemPrompt(
     req.targetLanguage,
     req.level,
@@ -73,62 +117,79 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
     messages.push({ role: 'user', content: req.userMessage })
   }
 
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  let lastError: OpenRouterError | null = null
 
-  let response: Response
-  try {
-    response = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages,
-        max_tokens: MAX_OUTPUT_TOKENS,
-      }),
-      signal: controller.signal,
-    })
-  } catch (err) {
-    clearTimeout(timeoutId)
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new OpenRouterError('Request timed out after 10 seconds', 'TIMEOUT')
+  for (const modelId of chain) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+    let response: Response
+    try {
+      response = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          max_tokens: MAX_OUTPUT_TOKENS,
+        }),
+        signal: controller.signal,
+      })
+    } catch (err) {
+      clearTimeout(timeoutId)
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new OpenRouterError(
+          `Request to ${modelId} timed out after ${TIMEOUT_MS / 1000} seconds`,
+          'TIMEOUT',
+        )
+      }
+      lastError = new OpenRouterError(
+        'Network error communicating with AI provider',
+        'PROVIDER_ERROR',
+      )
+      logAttemptFailure(modelId, 0, err instanceof Error ? err.message : String(err))
+      continue
     }
-    throw new OpenRouterError('Network error communicating with AI provider', 'PROVIDER_ERROR')
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      logAttemptFailure(modelId, response.status, body)
+
+      const error = new OpenRouterError(
+        describeStatus(response.status, modelId),
+        classifyStatus(response.status),
+        response.status,
+      )
+
+      if (!isModelUnavailable(response.status)) throw error
+      lastError = error
+      continue
+    }
+
+    let data: unknown
+    try {
+      data = await response.json()
+    } catch {
+      throw new OpenRouterError('Malformed response from AI provider', 'MALFORMED_RESPONSE')
+    }
+
+    const reply = extractReply(data)
+    if (!reply) {
+      throw new OpenRouterError('AI provider returned an empty response', 'MALFORMED_RESPONSE')
+    }
+
+    return { reply }
   }
 
-  clearTimeout(timeoutId)
-
-  if (response.status === 429) {
-    throw new OpenRouterError(
-      'AI provider rate limit reached. Please wait a moment.',
-      'RATE_LIMIT',
-      429,
-    )
-  }
-  if (!response.ok) {
-    throw new OpenRouterError(
-      `AI provider returned an error (${response.status})`,
-      'PROVIDER_ERROR',
-      response.status,
-    )
-  }
-
-  let data: unknown
-  try {
-    data = await response.json()
-  } catch {
-    throw new OpenRouterError('Malformed response from AI provider', 'MALFORMED_RESPONSE')
-  }
-
-  const reply = extractReply(data)
-  if (!reply) {
-    throw new OpenRouterError('AI provider returned an empty response', 'MALFORMED_RESPONSE')
-  }
-
-  return { reply }
+  throw (
+    lastError ??
+    new OpenRouterError('No AI model was able to answer', 'PROVIDER_ERROR')
+  )
 }
 
 function extractReply(data: unknown): string | null {
