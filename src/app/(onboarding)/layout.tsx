@@ -1,5 +1,4 @@
-import Link from "next/link"
-import { Mic } from "lucide-react"
+import { BrandMark } from "@/components/shared/brand-mark"
 
 export default function OnboardingLayout({
   children,
@@ -10,12 +9,7 @@ export default function OnboardingLayout({
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b">
         <div className="mx-auto flex max-w-2xl items-center px-4 py-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Mic className="size-4" />
-            </span>
-            <span className="font-semibold">LingoMatch</span>
-          </Link>
+          <BrandMark href="/" size="sm" />
         </div>
       </header>
 

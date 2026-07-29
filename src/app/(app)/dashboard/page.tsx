@@ -1,7 +1,5 @@
-"use client"
-
-import * as React from "react"
 import Link from "next/link"
+import { redirect } from "next/navigation"
 import {
   ArrowRight,
   BarChart3,
@@ -11,12 +9,13 @@ import {
   MessageSquare,
   Video,
 } from "lucide-react"
-import { useSession } from "next-auth/react"
 
+import { auth } from "@/auth"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ProfileCompletionCard } from "@/components/profile-completion-card"
 import { getLanguage } from "@/constants/languages"
+import { getUserProfileData, toPlainProfile } from "@/lib/user-profile.server"
 import type { UserProfileData } from "@/lib/onboarding-progress"
 
 const secondaryLinks = [
@@ -40,22 +39,24 @@ const secondaryLinks = [
   },
 ]
 
-export default function DashboardPage() {
-  const { data: session } = useSession()
-  const firstName = session?.user?.name?.split(" ")[0] ?? "there"
-  const [profileData, setProfileData] = React.useState<UserProfileData | null>(null)
+/*
+ * Rendered on the server. This page used to fetch the profile from the browser
+ * in an effect, so the greeting, the target language and the setup card all
+ * arrived after first paint and shifted the layout as they landed.
+ */
+export default async function DashboardPage() {
+  const session = await auth()
+  if (!session?.user?.id) redirect("/login")
 
+  const profileData = toPlainProfile(
+    await getUserProfileData(session.user.id),
+  ) as UserProfileData | null
+
+  const firstName = session.user.name?.split(" ")[0] ?? "there"
   const primaryTarget =
     profileData?.languageProfile?.learningLanguages.find((language) => language.isPrimary) ??
     profileData?.languageProfile?.learningLanguages[0]
   const targetLanguageName = primaryTarget ? getLanguage(primaryTarget.code).name : null
-
-  React.useEffect(() => {
-    fetch("/api/user/me")
-      .then((response) => response.json())
-      .then((data: UserProfileData) => setProfileData(data))
-      .catch(() => {})
-  }, [])
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">

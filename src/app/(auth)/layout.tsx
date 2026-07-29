@@ -1,5 +1,4 @@
-import Link from "next/link"
-import { Mic } from "lucide-react"
+import { BrandMark } from "@/components/shared/brand-mark"
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,12 +8,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="absolute -right-20 bottom-0 size-80 rounded-full bg-fuchsia-500/20 blur-3xl" />
       </div>
 
-      <Link href="/" className="mb-8 flex items-center gap-2">
-        <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Mic className="size-5" />
-        </span>
-        <span className="text-xl font-semibold">LingoMatch</span>
-      </Link>
+      <BrandMark href="/" size="lg" className="mb-8" />
 
       <div className="w-full max-w-sm">{children}</div>
     </div>

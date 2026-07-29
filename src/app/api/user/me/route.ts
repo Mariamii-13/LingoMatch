@@ -2,38 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
-import { migrateLegacyLevel } from '@/constants/languages'
-import {
-  buildLanguageProfileUpdate,
-  isLanguageProfileComplete,
-  resolveLanguageProfile,
-} from '@/lib/language-profile'
+import { applyProfileMigrations, getUserProfileData } from '@/lib/user-profile.server'
 
-function applyMigrations(raw: Record<string, unknown>): Record<string, unknown> {
-  // Synthesize spokenLanguages from legacy nativeLanguages if not yet migrated
-  if (
-    !(raw.spokenLanguages as unknown[])?.length &&
-    (raw.nativeLanguages as string[])?.length
-  ) {
-    raw.spokenLanguages = (raw.nativeLanguages as string[]).map((code) => ({
-      code,
-      level: 'native',
-    }))
-  }
-  // Collapse any CEFR spoken levels to "other" (spoken section no longer uses CEFR)
-  if ((raw.spokenLanguages as unknown[])?.length) {
-    raw.spokenLanguages = (raw.spokenLanguages as { code: string; level: string }[]).map(
-      (l) => ({ ...l, level: l.level === 'native' ? 'native' : 'other' })
-    )
-  }
-  // Normalise old Beginner/Intermediate/Advanced levels to CEFR
-  if ((raw.learningLanguages as unknown[])?.length) {
-    raw.learningLanguages = (
-      raw.learningLanguages as { code: string; level: string }[]
-    ).map((l) => ({ ...l, level: migrateLegacyLevel(l.level) }))
-  }
-  return raw
-}
 
 export async function GET() {
   const session = await auth()
@@ -41,25 +11,10 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  await connectDB()
-  const user = await User.findById(session.user.id).select('-passwordHash').lean()
-  if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  const profile = await getUserProfileData(session.user.id)
+  if (!profile) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  const raw = user as Record<string, unknown>
-  const profile = resolveLanguageProfile(raw)
-  if (isLanguageProfileComplete(profile)) {
-    raw.languageProfile = profile
-    if (!user.languageProfile) {
-      const update = buildLanguageProfileUpdate(
-        profile,
-        (raw.spokenLanguages as { code: string; level: string }[]) ?? [],
-        profile.completedAt,
-      )
-      await User.updateOne({ _id: session.user.id, languageProfile: null }, { $set: update })
-    }
-  }
-
-  return NextResponse.json(applyMigrations(raw))
+  return NextResponse.json(profile)
 }
 
 export async function PATCH(req: NextRequest) {
@@ -113,5 +68,5 @@ export async function PATCH(req: NextRequest) {
 
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-  return NextResponse.json(applyMigrations(user as Record<string, unknown>))
+  return NextResponse.json(applyProfileMigrations(user as Record<string, unknown>))
 }

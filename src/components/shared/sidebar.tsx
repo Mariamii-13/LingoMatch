@@ -2,13 +2,11 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useSession } from "next-auth/react"
 import {
   BarChart3,
   Bot,
   Compass,
   Inbox,
-  Languages,
   LayoutDashboard,
   type LucideIcon,
   Settings,
@@ -18,6 +16,8 @@ import {
 
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { BrandMark } from "@/components/shared/brand-mark"
+import { navInitials, type NavIdentity } from "@/components/shared/nav-identity"
 
 type NavItem = { label: string; href: string; icon: LucideIcon }
 
@@ -74,25 +74,21 @@ function NavLink({
   )
 }
 
-export function Sidebar({ pendingFriendRequests = 0 }: { pendingFriendRequests?: number }) {
+export function Sidebar({
+  identity,
+  pendingFriendRequests = 0,
+}: {
+  identity: NavIdentity
+  pendingFriendRequests?: number
+}) {
   const pathname = usePathname()
-  const { data: session } = useSession()
-
-  const name = session?.user?.name ?? "User"
-  const username = (session?.user as { username?: string })?.username ?? "me"
-  const role = (session?.user as { role?: string })?.role
-  const image = session?.user?.image ?? ""
-  const initials = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()
+  const { name, username, image, role } = identity
+  const initials = navInitials(name)
 
   return (
     <aside className="sticky top-0 hidden h-screen w-16 shrink-0 flex-col border-r bg-sidebar lg:flex lg:w-64">
       <div className="flex h-14 items-center border-b px-4">
-        <Link href="/dashboard" className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer">
-          <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Languages className="size-4" />
-          </span>
-          <span className="hidden text-base font-semibold lg:inline">LingoMatch</span>
-        </Link>
+        <BrandMark href="/dashboard" size="sm" hideWordmarkUntilLarge />
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2 lg:p-3">

@@ -5,7 +5,6 @@ import {
   Bot,
   Compass,
   MessageSquare,
-  Mic,
   Sparkles,
   Video,
   type LucideIcon,
@@ -14,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
+import { BrandMark } from "@/components/shared/brand-mark"
 
 const features: { title: string; description: string; icon: LucideIcon }[] = [
   {
@@ -69,12 +69,7 @@ export default function LandingPage() {
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Mic className="size-4" />
-            </span>
-            <span className="text-lg font-semibold">LingoMatch</span>
-          </Link>
+          <BrandMark href="/" />
           <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground md:flex">
             <a href="#features" className="hover:text-foreground">Features</a>
             <a href="#modes" className="hover:text-foreground">Practice Modes</a>
@@ -194,12 +189,7 @@ export default function LandingPage() {
       <footer className="border-t bg-muted/30">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-10 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
           <div>
-            <Link href="/" className="flex items-center gap-2">
-              <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Mic className="size-4" />
-              </span>
-              <span className="text-lg font-semibold">LingoMatch</span>
-            </Link>
+            <BrandMark href="/" />
             <p className="mt-3 text-sm text-muted-foreground">AI-guided and partner-based language practice.</p>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground">

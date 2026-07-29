@@ -5,6 +5,7 @@ import Link from "next/link"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
+  areRequiredStepsComplete,
   getStepStatus,
   getCompletionPercentage,
   getFirstIncompleteStep,
@@ -24,6 +25,22 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
   const percentage = getCompletionPercentage(user)
   const status = getStepStatus(user)
   const firstIncomplete = getFirstIncompleteStep(user)
+
+  /*
+   * Only the language step is required, and the app forces it before the
+   * dashboard is reachable — so this card almost always describes optional
+   * extras. It used to announce "Complete your profile — 20%" the moment a new
+   * user finished setup, framing them as 80% failed at something they had in
+   * fact completed. Once the required step is done, this speaks about optional
+   * additions and counts what is left instead of leading with a low percentage.
+   */
+  const requiredDone = areRequiredStepsComplete(user)
+  const remaining = STEP_ORDER.filter((step) => !status[step]).length
+  const heading = requiredDone ? "Get better matches" : "Finish setting up"
+  const subheading = requiredDone
+    ? `${remaining} optional ${remaining === 1 ? "step" : "steps"} left — add interests, a photo or tutor preferences.`
+    : "One quick step and you can start practising."
+  const actionLabel = requiredDone ? "Add details" : "Continue setup"
   const continueHref = firstIncomplete
     ? `${STEP_PATHS[firstIncomplete]}?from=dashboard`
     : "/dashboard"
@@ -54,9 +71,11 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
   if (collapsed) {
     return (
       <div className="flex items-center justify-between rounded-xl border bg-card px-4 py-3 shadow-sm">
-        <p className="text-sm font-medium">Complete your profile</p>
+        <p className="text-sm font-medium">{heading}</p>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-primary font-semibold">{percentage}%</span>
+          {!requiredDone && (
+            <span className="text-sm font-semibold text-primary">{percentage}%</span>
+          )}
           <Link
             href={continueHref}
             className="text-sm text-primary hover:underline"
@@ -81,13 +100,13 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-semibold">Complete your profile</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Improve matching quality and recommendations
-          </p>
+          <p className="font-semibold">{heading}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{subheading}</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-sm font-semibold text-primary">{percentage}%</span>
+        <div className="flex shrink-0 items-center gap-2">
+          {!requiredDone && (
+            <span className="text-sm font-semibold text-primary">{percentage}%</span>
+          )}
           <button
             type="button"
             onClick={() => setCollapsedAtPct(percentage)}
@@ -99,13 +118,16 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
+      {/* A progress bar implies a task that must be finished, so it only
+          appears while a required step is genuinely outstanding. */}
+      {!requiredDone && (
+        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary transition-all"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+      )}
 
       {/* Step pills */}
       <div className="mt-3 flex flex-wrap gap-2">
@@ -133,7 +155,7 @@ export function ProfileCompletionCard({ user }: ProfileCompletionCardProps) {
           href={continueHref}
           className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
-          Continue Setup
+          {actionLabel}
         </Link>
         <button
           type="button"

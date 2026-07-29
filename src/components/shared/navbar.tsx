@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { LogOut, Mic, Settings, User as UserIcon } from "lucide-react"
-import { signOut, useSession } from "next-auth/react"
+import { LogOut, Settings, User as UserIcon } from "lucide-react"
+import { signOut } from "next-auth/react"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
@@ -17,27 +17,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { UserSearch } from "@/components/shared/user-search"
+import { BrandMark } from "@/components/shared/brand-mark"
+import { navInitials, type NavIdentity } from "@/components/shared/nav-identity"
 
-export function Navbar() {
-  const { data: session } = useSession()
-  const displayName = session?.user?.name ?? "User"
-  const username = (session?.user as { username?: string })?.username ?? "me"
-  const image = session?.user?.image ?? ""
-  const initials = displayName
-    .split(" ")
-    .map((w: string) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
+export function Navbar({ identity }: { identity: NavIdentity }) {
+  const { name: displayName, username, image } = identity
+  const initials = navInitials(displayName)
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
-      <Link href="/dashboard" className="flex items-center gap-2 lg:hidden">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Mic className="size-4" />
-        </span>
-        <span className="text-base font-semibold">LingoMatch</span>
-      </Link>
+      <BrandMark href="/dashboard" size="sm" className="lg:hidden" />
 
       <UserSearch />
 
