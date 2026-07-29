@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getLanguage, formatLevel } from "@/constants/languages"
+import { FlagImage } from "@/components/shared/flag-image"
 
 interface PublicProfile {
   id: string
@@ -256,7 +257,7 @@ export default function PublicProfilePage({
                     const lang = getLanguage(code)
                     return (
                       <Badge key={code} variant="secondary">
-                        {lang.flag} {lang.name}{level === "native" ? " — Native" : ""}
+                        <FlagImage flag={lang.flag} /> {lang.name}{level === "native" ? " — Native" : ""}
                       </Badge>
                     )
                   })}
@@ -273,7 +274,7 @@ export default function PublicProfilePage({
                     const lang = getLanguage(code)
                     return (
                       <Badge key={code} variant="outline">
-                        {lang.flag} {lang.name} — {formatLevel(level)}
+                        <FlagImage flag={lang.flag} /> {lang.name} — {formatLevel(level)}
                       </Badge>
                     )
                   })}

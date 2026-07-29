@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Slider } from "@/components/ui/slider"
 import type { AIProfile, ConversationGoal, MatchingPriority, PreferredTrait, TopicToAvoid } from "@/types"
+import { FlagImage } from "@/components/shared/flag-image"
 
 const CONVERSATION_GOALS: ConversationGoal[] = [
   "Language Practice",
@@ -205,7 +206,7 @@ export function AIPreferencesForm({
                     key={lang.code}
                     className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs text-primary"
                   >
-                    <span>{lang.flag}</span>
+                    <FlagImage flag={lang.flag} />
                     {lang.name}
                   </span>
                 ))}

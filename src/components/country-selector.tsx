@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/popover"
 import { countries } from "@/constants/countries"
 import { cn } from "@/lib/utils"
+import { FlagImage } from "@/components/shared/flag-image"
 
 export interface CountrySelectorProps {
   value: string
@@ -27,29 +28,6 @@ export interface CountrySelectorProps {
   allowClear?: boolean
   disabled?: boolean
   className?: string
-}
-
-// Derives 2-letter ISO code from a regional-indicator emoji (e.g. 🇩🇪 → "de")
-function flagToISO(flag: string): string {
-  return [...flag]
-    .map(c => String.fromCharCode((c.codePointAt(0) ?? 0) - 127397))
-    .join("")
-    .toLowerCase()
-}
-
-function CountryFlag({ flag, name }: { flag: string; name: string }) {
-  const iso = flagToISO(flag)
-  return (
-    <img
-      src={`https://flagcdn.com/w20/${iso}.png`}
-      srcSet={`https://flagcdn.com/w40/${iso}.png 2x`}
-      width={20}
-      height={15}
-      alt={name}
-      loading="lazy"
-      className="rounded-[2px] object-cover shrink-0"
-    />
-  )
 }
 
 function HighlightMatch({ text, query }: { text: string; query: string }) {
@@ -106,7 +84,7 @@ export function CountrySelector({
       >
         {selected ? (
           <span className="flex items-center gap-2">
-            <CountryFlag flag={selected.flag} name={selected.name} />
+            <FlagImage flag={selected.flag} />
             <span>{selected.name}</span>
           </span>
         ) : (
@@ -145,7 +123,7 @@ export function CountrySelector({
                   onSelect={() => handleSelect(c.name)}
                   data-checked={value === c.name ? "true" : undefined}
                 >
-                  <CountryFlag flag={c.flag} name={c.name} />
+                  <FlagImage flag={c.flag} />
                   <HighlightMatch text={c.name} query={search} />
                 </CommandItem>
               ))}

@@ -4,6 +4,7 @@ import { MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { MatchResult } from "@/types"
+import { FlagImage } from "@/components/shared/flag-image"
 
 interface MatchFoundModalProps {
   result: MatchResult
@@ -43,7 +44,7 @@ export function MatchFoundModal({ result, onStartChat, onSkip }: MatchFoundModal
                 key={l.name}
                 className="rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground"
               >
-                {l.flag} {l.name} · Native
+                <FlagImage flag={l.flag} /> {l.name} · Native
               </span>
             ))}
             {(partner.learning as { name: string; flag: string }[]).map((l) => (
@@ -51,7 +52,7 @@ export function MatchFoundModal({ result, onStartChat, onSkip }: MatchFoundModal
                 key={l.name}
                 className="rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs text-muted-foreground"
               >
-                {l.flag} {l.name}
+                <FlagImage flag={l.flag} /> {l.name}
               </span>
             ))}
           </div>

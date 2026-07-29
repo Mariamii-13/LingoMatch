@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatLevel, getLanguage, migrateLegacyLevel } from "@/constants/languages"
+import { FlagImage } from "@/components/shared/flag-image"
 
 interface UserCard {
   id: string
@@ -51,7 +52,7 @@ function LanguageBadges({ user }: { user: UserCard }) {
         const l = getLanguage(code)
         return (
           <Badge key={`n-${code}`} variant="secondary" className="text-xs">
-            {l.flag} {l.name}
+            <FlagImage flag={l.flag} /> {l.name}
           </Badge>
         )
       })}
@@ -59,7 +60,7 @@ function LanguageBadges({ user }: { user: UserCard }) {
         const l = getLanguage(code)
         return (
           <Badge key={`l-${code}`} variant="outline" className="text-xs">
-            {l.flag} {l.name} · {formatLevel(migrateLegacyLevel(level))}
+            <FlagImage flag={l.flag} /> {l.name} · {formatLevel(migrateLegacyLevel(level))}
           </Badge>
         )
       })}

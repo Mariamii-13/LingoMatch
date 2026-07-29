@@ -25,6 +25,7 @@ import {
   getLanguage,
   searchLanguages,
 } from "@/constants/languages"
+import { FlagImage } from "@/components/shared/flag-image"
 
 export type { LanguageLevelEntry }
 
@@ -91,7 +92,7 @@ export function LanguageLevelPicker({
             className="flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5"
           >
             <span className="shrink-0 text-lg" aria-hidden>
-              {lang.flag}
+              <FlagImage flag={lang.flag} />
             </span>
             <span className="flex-1 text-sm font-medium">{lang.name}</span>
             {levels.length === 1 ? (
@@ -166,7 +167,7 @@ export function LanguageLevelPicker({
                     onSelect={() => add(lang.code)}
                   >
                     <span className="shrink-0 text-base" aria-hidden>
-                      {lang.flag}
+                      <FlagImage flag={lang.flag} />
                     </span>
                     <span className="flex-1">{formatLanguageFull(lang)}</span>
                     {selectedCodes.has(lang.code) && (

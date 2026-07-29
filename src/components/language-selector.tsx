@@ -19,6 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { formatLanguageFull, getLanguage, searchLanguages } from "@/constants/languages"
+import { FlagImage } from "@/components/shared/flag-image"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ export function LanguageSelector(props: LanguageSelectorProps) {
               key={code}
               className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm text-primary"
             >
-              <span aria-hidden>{lang.flag}</span>
+              <FlagImage flag={lang.flag} />
               <span>{lang.name}</span>
               <button
                 type="button"
@@ -123,7 +124,7 @@ export function LanguageSelector(props: LanguageSelectorProps) {
                       value={lang.code}
                       onSelect={() => toggle(lang.code)}
                     >
-                      <span className="shrink-0 text-base" aria-hidden>{lang.flag}</span>
+                      <FlagImage flag={lang.flag} />
                       <span className="flex-1">{formatLanguageFull(lang)}</span>
                       {value.includes(lang.code) && (
                         <Check className="ml-2 size-4 shrink-0 text-primary" />
@@ -154,7 +155,7 @@ export function LanguageSelector(props: LanguageSelectorProps) {
       >
         {selected ? (
           <span className="flex items-center gap-2">
-            <span aria-hidden>{selected.flag}</span>
+            <FlagImage flag={selected.flag} />
             <span>{formatLanguageFull(selected)}</span>
           </span>
         ) : (
@@ -183,7 +184,7 @@ export function LanguageSelector(props: LanguageSelectorProps) {
                   }}
                   data-checked={value === lang.code ? "true" : undefined}
                 >
-                  <span className="shrink-0 text-base" aria-hidden>{lang.flag}</span>
+                  <FlagImage flag={lang.flag} />
                   <span className="flex-1 font-medium">{lang.name}</span>
                   <span className="text-xs text-muted-foreground">{lang.nativeName}</span>
                 </CommandItem>

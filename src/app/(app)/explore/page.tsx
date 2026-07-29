@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { LANGUAGES, getLanguage, formatLevel, migrateLegacyLevel } from "@/constants/languages"
 import { CountrySelector } from "@/components/country-selector"
+import { FlagImage } from "@/components/shared/flag-image"
 
 type FriendStatus = "none" | "pending_sent" | "pending_received" | "friends"
 
@@ -159,7 +160,7 @@ function UserCard({ user }: { user: ExploreUser }) {
           const l = getLanguage(code)
           return (
             <Badge key={`s-${code}`} variant="secondary" className="text-xs">
-              {l.flag} {l.name}
+              <FlagImage flag={l.flag} /> {l.name}
             </Badge>
           )
         })}
@@ -167,7 +168,7 @@ function UserCard({ user }: { user: ExploreUser }) {
           const l = getLanguage(code)
           return (
             <Badge key={`l-${code}`} variant="outline" className="text-xs">
-              {l.flag} {l.name} · {formatLevel(migrateLegacyLevel(level))}
+              <FlagImage flag={l.flag} /> {l.name} · {formatLevel(migrateLegacyLevel(level))}
             </Badge>
           )
         })}
@@ -345,8 +346,10 @@ export default function ExplorePage() {
           >
             <option value="">All languages</option>
             {LANGUAGES.map((l) => (
+              // A native <option> can only contain text, so no flag here — and
+              // an emoji flag would render as bare letters on Windows anyway.
               <option key={l.code} value={l.code}>
-                {l.flag} {l.name}
+                {l.name}
               </option>
             ))}
           </select>
