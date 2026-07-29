@@ -111,7 +111,9 @@ export default async function ProgressPage() {
     {
       label: "Days practised",
       value: summary.daysPractised,
-      detail: summary.daysPractised === 1 ? "so far" : "distinct days",
+      // Says the window explicitly: the streak only looks back 30 days, so this
+      // is not an all-time figure and should not imply one.
+      detail: "in the last 30 days",
       icon: CalendarCheck,
     },
     {

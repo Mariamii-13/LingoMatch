@@ -5,6 +5,8 @@ import {
   BarChart3,
   Bot,
   Compass,
+  Flame,
+  History,
   Inbox,
   MessageSquare,
   Video,
@@ -16,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { ProfileCompletionCard } from "@/components/profile-completion-card"
 import { getLanguage } from "@/constants/languages"
 import { getUserProfileData, toPlainProfile } from "@/lib/user-profile.server"
+import { getProgressSummary } from "@/lib/progress.server"
 import type { UserProfileData } from "@/lib/onboarding-progress"
 
 const secondaryLinks = [
@@ -33,7 +36,7 @@ const secondaryLinks = [
   },
   {
     title: "Progress",
-    description: "View your practice activity as it becomes available.",
+    description: "See your sessions, languages practised and current streak.",
     href: "/progress",
     icon: BarChart3,
   },
@@ -48,9 +51,16 @@ export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  const profileData = toPlainProfile(
-    await getUserProfileData(session.user.id),
-  ) as UserProfileData | null
+  const [rawProfile, summary] = await Promise.all([
+    getUserProfileData(session.user.id),
+    getProgressSummary(session.user.id),
+  ])
+  const profileData = toPlainProfile(rawProfile) as UserProfileData | null
+
+  const lastPractice = summary.recent[0] ?? null
+  const lastPracticeLanguage = lastPractice?.languageCode
+    ? getLanguage(lastPractice.languageCode).name
+    : null
 
   const firstName = session.user.name?.split(" ")[0] ?? "there"
   const primaryTarget =
@@ -136,12 +146,46 @@ export default async function DashboardPage() {
             </Button>
           </article>
 
-          <article className="flex flex-col justify-center rounded-2xl border border-dashed bg-muted/20 p-5">
-            <p className="font-medium">Your recent practice will appear here</p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              There is no recorded practice activity to show yet. Start with any practice mode when you are ready.
-            </p>
-          </article>
+          {/* Promised recent practice for as long as this card existed; now that
+              sessions are recorded, it can actually show it. */}
+          {lastPractice ? (
+            <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <span className="flex size-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+                  <History className="size-5" />
+                </span>
+                {summary.currentStreak > 0 && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Flame className="size-3" />
+                    {summary.currentStreak}-day streak
+                  </Badge>
+                )}
+              </div>
+              <h3 className="mt-4 text-lg font-semibold">Pick up where you left off</h3>
+              <p className="mt-2 flex-1 text-sm text-muted-foreground">
+                Last practice: {lastPracticeLanguage ?? "a session"}
+                {lastPractice.kind === "tutor" && lastPractice.mode
+                  ? ` · ${lastPractice.mode}`
+                  : " · with a partner"}
+                .
+              </p>
+              <Button
+                className="mt-5"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href="/progress" />}
+              >
+                View progress
+              </Button>
+            </article>
+          ) : (
+            <article className="flex flex-col justify-center rounded-2xl border border-dashed bg-muted/20 p-5">
+              <p className="font-medium">Your recent practice will appear here</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                There is no recorded practice activity to show yet. Start with any practice mode when you are ready.
+              </p>
+            </article>
+          )}
         </div>
       </section>
 

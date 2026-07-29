@@ -1,4 +1,5 @@
 import 'server-only'
+import mongoose from 'mongoose'
 import { connectDB } from '@/lib/db'
 import TutorSession from '@/lib/models/TutorSession'
 import Conversation from '@/lib/models/Conversation'
@@ -55,90 +56,125 @@ function computeStreak(days: Set<string>): number {
   return streak
 }
 
-type TutorDoc = {
+type RecentTutorDoc = {
   _id: { toString(): string }
   targetLanguageCode: string
   mode: string
-  messages?: { createdAt?: Date }[]
-  createdAt: Date
+  messages?: unknown[]
   updatedAt: Date
 }
 
-type ConversationDoc = {
+type RecentConversationDoc = {
   _id: { toString(): string }
-  language: string
+  language?: string
   startedAt?: Date
   createdAt?: Date
   updatedAt?: Date
 }
 
 /**
- * Everything the progress page shows, derived from records the app already
- * keeps: persisted tutor sessions and partner conversations. Nothing here is
+ * Everything the progress page and dashboard show, derived from records the app
+ * already keeps: persisted tutor sessions and partner conversations. Nothing is
  * estimated — if a number cannot be counted, it is not displayed.
+ *
+ * Deliberately built from aggregations and bounded queries rather than loading a
+ * user's whole history. This runs on the two most-visited pages, and a learner
+ * with hundreds of sessions should not cost more to serve than a new one.
  */
 export async function getProgressSummary(userId: string): Promise<ProgressSummary> {
   await connectDB()
+  const userObjectId = new mongoose.Types.ObjectId(userId)
+  const streakSince = new Date(Date.now() - STREAK_LOOKBACK_DAYS * 86_400_000)
 
-  const [tutorDocs, conversationDocs, partnerMessages] = await Promise.all([
+  const [
+    tutorSessions,
+    partnerConversations,
+    tutorTotals,
+    partnerMessages,
+    tutorLanguages,
+    conversationLanguages,
+    recentTutor,
+    recentConversations,
+    recentTutorDays,
+    recentConversationDays,
+  ] = await Promise.all([
+    TutorSession.countDocuments({ userId }),
+    Conversation.countDocuments({ participants: userId }),
+    // One pass for the message total instead of pulling every transcript.
+    TutorSession.aggregate<{ total: number }>([
+      { $match: { userId: userObjectId } },
+      { $group: { _id: null, total: { $sum: { $size: { $ifNull: ['$messages', []] } } } } },
+    ]),
+    Message.countDocuments({ senderId: userId }),
+    TutorSession.distinct('targetLanguageCode', { userId }),
+    Conversation.distinct('language', { participants: userId }),
     TutorSession.find({ userId })
-      .select('targetLanguageCode mode messages createdAt updatedAt')
+      .select('targetLanguageCode mode messages updatedAt')
       .sort({ updatedAt: -1 })
-      .lean<TutorDoc[]>(),
+      .limit(RECENT_LIMIT)
+      .lean<RecentTutorDoc[]>(),
     Conversation.find({ participants: userId })
       .select('language startedAt createdAt updatedAt')
       .sort({ updatedAt: -1 })
-      .lean<ConversationDoc[]>(),
-    Message.countDocuments({ senderId: userId }),
+      .limit(RECENT_LIMIT)
+      .lean<RecentConversationDoc[]>(),
+    // Streak only needs the recent window, which bounds this regardless of how
+    // much history the user has.
+    TutorSession.find({ userId, updatedAt: { $gte: streakSince } })
+      .select('messages.createdAt createdAt')
+      .lean<{ messages?: { createdAt?: Date }[]; createdAt: Date }[]>(),
+    Conversation.find({ participants: userId, updatedAt: { $gte: streakSince } })
+      .select('updatedAt startedAt createdAt')
+      .lean<RecentConversationDoc[]>(),
   ])
 
-  const languageCodes = new Set<string>()
   const practiceDays = new Set<string>()
-  let tutorMessages = 0
-  const recent: RecentPractice[] = []
-
-  for (const doc of tutorDocs) {
-    languageCodes.add(doc.targetLanguageCode)
-    const messages = doc.messages ?? []
-    tutorMessages += messages.length
-
-    // Every turn counts towards the streak, not just when the session started.
-    for (const message of messages) {
+  for (const doc of recentTutorDays) {
+    for (const message of doc.messages ?? []) {
       if (message.createdAt) practiceDays.add(dayKey(new Date(message.createdAt)))
     }
-    practiceDays.add(dayKey(new Date(doc.createdAt)))
-
-    recent.push({
-      id: doc._id.toString(),
-      kind: 'tutor',
-      languageCode: doc.targetLanguageCode,
-      mode: doc.mode,
-      messageCount: messages.length,
-      at: new Date(doc.updatedAt).toISOString(),
-    })
+    if (doc.createdAt) practiceDays.add(dayKey(new Date(doc.createdAt)))
   }
-
-  for (const doc of conversationDocs) {
-    if (doc.language) languageCodes.add(doc.language.toLowerCase())
+  for (const doc of recentConversationDays) {
     const at = doc.updatedAt ?? doc.startedAt ?? doc.createdAt
     if (at) practiceDays.add(dayKey(new Date(at)))
-
-    recent.push({
-      id: doc._id.toString(),
-      kind: 'partner',
-      languageCode: (doc.language ?? '').toLowerCase(),
-      mode: null,
-      messageCount: 0,
-      at: new Date(at ?? Date.now()).toISOString(),
-    })
   }
 
+  const languageCodes = new Set<string>()
+  for (const code of tutorLanguages as string[]) {
+    if (code) languageCodes.add(code.toLowerCase())
+  }
+  for (const code of conversationLanguages as string[]) {
+    if (code) languageCodes.add(code.toLowerCase())
+  }
+
+  const recent: RecentPractice[] = [
+    ...recentTutor.map((doc) => ({
+      id: doc._id.toString(),
+      kind: 'tutor' as const,
+      languageCode: doc.targetLanguageCode,
+      mode: doc.mode,
+      messageCount: (doc.messages ?? []).length,
+      at: new Date(doc.updatedAt).toISOString(),
+    })),
+    ...recentConversations.map((doc) => {
+      const at = doc.updatedAt ?? doc.startedAt ?? doc.createdAt
+      return {
+        id: doc._id.toString(),
+        kind: 'partner' as const,
+        languageCode: (doc.language ?? '').toLowerCase(),
+        mode: null,
+        messageCount: 0,
+        at: new Date(at ?? Date.now()).toISOString(),
+      }
+    }),
+  ]
   recent.sort((a, b) => b.at.localeCompare(a.at))
 
   return {
-    tutorSessions: tutorDocs.length,
-    partnerConversations: conversationDocs.length,
-    tutorMessages,
+    tutorSessions,
+    partnerConversations,
+    tutorMessages: tutorTotals[0]?.total ?? 0,
     partnerMessages,
     languageCodes: [...languageCodes],
     daysPractised: practiceDays.size,
