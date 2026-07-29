@@ -9,16 +9,18 @@ import type { NavIdentity } from "@/components/shared/nav-identity"
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
-  // Counted here so the navigation can advertise pending requests without the
-  // client polling for them.
-  const pendingFriendRequests = session?.user?.id
-    ? await countIncomingFriendRequests(session.user.id)
-    : 0
 
-  // Rendered into the HTML rather than fetched and injected after hydration, so
-  // the app never paints in the default palette first. The read is cached, so
-  // this does not add a query per page load.
-  const theme = await getAppTheme()
+  // Together rather than in sequence: the theme read is cached, but on a miss
+  // these are two independent database round trips and there is no reason to
+  // pay for them one after the other.
+  const [pendingFriendRequests, theme] = await Promise.all([
+    // Counted here so the navigation can advertise pending requests without the
+    // client polling for them.
+    session?.user?.id ? countIncomingFriendRequests(session.user.id) : Promise.resolve(0),
+    // Rendered into the HTML rather than fetched and injected after hydration,
+    // so the app never paints in the default palette first.
+    getAppTheme(),
+  ])
 
   // Resolved here rather than from useSession in each component, so the
   // navigation never renders a placeholder identity before correcting itself.
