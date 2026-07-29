@@ -3,9 +3,19 @@ import bcrypt from 'bcryptjs'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
 import { RegisterSchema } from '@/lib/validations/auth'
+import { allowRegistration } from '@/lib/auth-throttle'
+import { getClientIp } from '@/lib/request-identity'
 
 export async function POST(req: NextRequest) {
   try {
+    // Checked before bcrypt runs, which is the expensive part of this handler.
+    if (!(await allowRegistration(getClientIp(req.headers)))) {
+      return NextResponse.json(
+        { error: 'Too many accounts created from here. Please try again later.' },
+        { status: 429 },
+      )
+    }
+
     const body = await req.json()
     const parsed = RegisterSchema.safeParse(body)
     if (!parsed.success) {

@@ -4,6 +4,8 @@ import Credentials from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import { allowLoginAttempt } from '@/lib/auth-throttle'
+import { getClientIp } from '@/lib/request-identity'
 import {
   buildLanguageProfileUpdate,
   isLanguageProfileComplete,
@@ -57,13 +59,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         if (!credentials?.email || !credentials?.password) return null
 
+        const email = (credentials.email as string).toLowerCase()
+
+        /*
+         * Throttled before the password is compared. bcrypt costs about a
+         * quarter-second of CPU per attempt by design, so an unlimited endpoint
+         * is both a brute-force oracle and a cheap way to saturate the server.
+         * Credentials sign-in cannot return a custom message, so exceeding the
+         * limit fails the attempt like any bad password.
+         */
+        const ip = getClientIp(new Headers(request?.headers ?? {}))
+        if (!(await allowLoginAttempt(email, ip))) return null
+
         await connectDB()
-        const user = await User.findOne({
-          email: (credentials.email as string).toLowerCase(),
-        })
+        const user = await User.findOne({ email })
         if (!user || !user.passwordHash) return null
         if (user.isBanned) return null
 

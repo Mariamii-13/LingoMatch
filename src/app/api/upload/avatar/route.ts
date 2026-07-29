@@ -4,6 +4,7 @@ import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
 import Upload from '@/lib/models/Upload'
 import cloudinary from '@/lib/cloudinary'
+import { checkRateLimit } from '@/lib/rateLimit'
 
 const MAX_BYTES = 2 * 1024 * 1024 // 2MB
 
@@ -11,6 +12,20 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  /*
+   * Every accepted upload spends third-party storage quota, so this is metered
+   * for the same reason the AI tutor is: one client should not be able to run up
+   * someone else's bill. Changing an avatar a handful of times an hour is
+   * generous; a loop is not.
+   */
+  const { allowed } = await checkRateLimit('avatar-upload', session.user.id, 10, 3600)
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Too many avatar changes. Please try again later.' },
+      { status: 429 },
+    )
   }
 
   const formData = await req.formData()
