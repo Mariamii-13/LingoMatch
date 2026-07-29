@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Menu,
   Settings,
+  Users,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -31,11 +32,15 @@ const primaryItems = [
 ]
 
 const moreItems = [
+  // Friends belongs here rather than the primary row: it needs to be reachable,
+  // but it is a lower-frequency destination than practising or messaging. The
+  // badge below surfaces pending requests without spending a primary slot.
+  { label: "Friends", href: "/friends", icon: Users },
   { label: "Progress", href: "/progress", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
 
-export function MobileNav() {
+export function MobileNav({ pendingFriendRequests = 0 }: { pendingFriendRequests?: number }) {
   const pathname = usePathname()
   const moreActive = moreItems.some(
     (item) => pathname === item.href || pathname.startsWith(item.href + "/")
@@ -69,7 +74,16 @@ export function MobileNav() {
             moreActive ? "text-primary" : "text-muted-foreground"
           )}
         >
-          <Menu className="size-5" />
+          <span className="relative">
+            <Menu className="size-5" />
+            {pendingFriendRequests > 0 && (
+              // Without this, a pending request would be invisible on mobile
+              // until the user happened to open the More menu.
+              <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold leading-none text-white">
+                {pendingFriendRequests > 9 ? "9+" : pendingFriendRequests}
+              </span>
+            )}
+          </span>
           <span>More</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" side="top" sideOffset={8} className="w-48">
@@ -77,9 +91,15 @@ export function MobileNav() {
           <DropdownMenuSeparator />
           {moreItems.map((item) => {
             const Icon = item.icon
+            const count = item.href === "/friends" ? pendingFriendRequests : 0
             return (
               <DropdownMenuItem key={item.href} render={<Link href={item.href} />}>
                 <Icon className="size-4" /> {item.label}
+                {count > 0 && (
+                  <span className="ml-auto min-w-5 rounded-full bg-destructive px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none text-white">
+                    {count > 99 ? "99+" : count}
+                  </span>
+                )}
               </DropdownMenuItem>
             )
           })}

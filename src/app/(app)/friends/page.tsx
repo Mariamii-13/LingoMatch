@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getLanguage } from "@/constants/languages"
+import { formatLevel, getLanguage, migrateLegacyLevel } from "@/constants/languages"
 
 interface UserCard {
   id: string
@@ -42,11 +42,16 @@ function initials(displayName: string) {
 function LanguageBadges({ user }: { user: UserCard }) {
   return (
     <div className="flex flex-wrap gap-1">
+      {/*
+        Names and level labels rather than raw codes: this page was showing
+        "🇬🇧 en" and "· unsure" where the rest of the app shows "🇬🇧 English"
+        and "I'm not sure".
+      */}
       {user.nativeLanguages.map((code) => {
         const l = getLanguage(code)
         return (
           <Badge key={`n-${code}`} variant="secondary" className="text-xs">
-            {l.flag} {l.code}
+            {l.flag} {l.name}
           </Badge>
         )
       })}
@@ -54,7 +59,7 @@ function LanguageBadges({ user }: { user: UserCard }) {
         const l = getLanguage(code)
         return (
           <Badge key={`l-${code}`} variant="outline" className="text-xs">
-            {l.flag} {l.code} · {level}
+            {l.flag} {l.name} · {formatLevel(migrateLegacyLevel(level))}
           </Badge>
         )
       })}
@@ -110,6 +115,7 @@ export default function FriendsPage() {
           sent: d.sent,
         }
       })
+      router.refresh()
       toast.success(`You and ${user.displayName} are now friends!`)
     } catch {
       toast.error("Failed to accept request")
@@ -127,6 +133,7 @@ export default function FriendsPage() {
         if (!d) return d
         return { ...d, incoming: d.incoming.filter((u) => u.id !== user.id) }
       })
+      router.refresh()
       toast.success("Request declined.")
     } catch {
       toast.error("Failed to decline request")
