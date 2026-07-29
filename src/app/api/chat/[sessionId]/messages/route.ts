@@ -35,10 +35,20 @@ export async function GET(
   const query: Record<string, unknown> = { conversationId: sessionId }
   if (after) query.createdAt = { $gt: new Date(after) }
 
-  const messages = await Message.find(query)
-    .sort({ createdAt: 1 })
+  /*
+   * Without a cursor this has to return the NEWEST page, not the oldest.
+   * Sorting ascending with a limit returned the first 100 messages ever sent, so
+   * once a conversation passed 100 messages both participants were permanently
+   * stuck looking at its beginning and never saw anything new. Fetch descending
+   * and reverse, so the client always receives the latest window in
+   * chronological order.
+   */
+  const docs = await Message.find(query)
+    .sort({ createdAt: after ? 1 : -1 })
     .limit(100)
     .lean()
+
+  const messages = after ? docs : docs.reverse()
 
   const result = messages.map((m) => ({
     id: (m._id as mongoose.Types.ObjectId).toString(),

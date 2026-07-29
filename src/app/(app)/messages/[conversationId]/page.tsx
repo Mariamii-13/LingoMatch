@@ -376,7 +376,14 @@ export default function ConversationPage({
   const nearBottomRef = React.useRef(true)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
 
+  /** Cursor for incremental polling: the newest message currently held. */
+  const latestMessageAtRef = React.useRef<string | null>(null)
+
   React.useEffect(() => {
+    latestMessageAtRef.current = messages.length
+      ? messages[messages.length - 1].createdAt
+      : null
+
     if (nearBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }
@@ -427,9 +434,15 @@ export default function ConversationPage({
     if (realtimeStatus !== "disconnected" || sessionStatus !== "active") return
 
     const interval = setInterval(async () => {
-      const response = await fetch(`/api/chat/${conversationId}/messages`, {
-        cache: "no-store",
-      }).catch(() => null)
+      // Ask only for what arrived since the newest message already held. This
+      // endpoint has always supported the cursor; polling was refetching the
+      // whole window every ten seconds without it.
+      const newest = latestMessageAtRef.current
+      const url = newest
+        ? `/api/chat/${conversationId}/messages?after=${encodeURIComponent(newest)}`
+        : `/api/chat/${conversationId}/messages`
+
+      const response = await fetch(url, { cache: "no-store" }).catch(() => null)
       if (!response?.ok) return
       const data = await response.json()
       setMessages((current) => reconcileMessages(current, data.messages))
