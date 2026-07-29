@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import PricingPlan from '@/lib/models/PricingPlan'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -20,8 +21,7 @@ export async function GET() {
     const plans = await PricingPlan.find({}).sort({ sortOrder: 1, createdAt: 1 }).lean()
     return NextResponse.json(plans)
   } catch (err) {
-    console.error('[admin/plans GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/plans GET', err)
   }
 }
 
@@ -68,7 +68,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(plan, { status: 201 })
   } catch (err) {
-    console.error('[admin/plans POST]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/plans POST', err)
   }
 }

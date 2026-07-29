@@ -4,6 +4,7 @@ import * as React from "react"
 import { TriangleAlert } from "lucide-react"
 
 import { StatusScreen } from "@/components/shared/status-screen"
+import { reportBrowserError } from "@/lib/observability/client-report"
 
 /**
  * Errors inside the signed-in app keep the sidebar and navigation, because this
@@ -19,6 +20,10 @@ export default function AppSectionError({
 }) {
   React.useEffect(() => {
     console.error("[app error boundary]", error)
+    // A digest means the server already reported this through onRequestError;
+    // reporting it again would double every server-side failure. An error
+    // without one happened in the browser and reaches the server no other way.
+    if (!error.digest) reportBrowserError({ kind: "boundary", error })
   }, [error])
 
   return (

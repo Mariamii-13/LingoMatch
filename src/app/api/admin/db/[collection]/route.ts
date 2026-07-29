@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import { ObjectId } from 'mongodb'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -56,8 +57,7 @@ export async function GET(
 
     return NextResponse.json({ docs, total, page, limit, pages: Math.ceil(total / limit) })
   } catch (err) {
-    console.error('[admin/db/[collection] GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/db/[collection] GET', err)
   }
 }
 
@@ -87,8 +87,7 @@ export async function POST(
     const inserted = await conn.collection(collection).findOne({ _id: result.insertedId })
     return NextResponse.json(inserted, { status: 201 })
   } catch (err) {
-    console.error('[admin/db/[collection] POST]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/db/[collection] POST', err)
   }
 }
 
@@ -133,8 +132,7 @@ export async function PATCH(
 
     return NextResponse.json(result)
   } catch (err) {
-    console.error('[admin/db/[collection] PATCH]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/db/[collection] PATCH', err)
   }
 }
 
@@ -174,7 +172,6 @@ export async function DELETE(
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('[admin/db/[collection] DELETE]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/db/[collection] DELETE', err)
   }
 }

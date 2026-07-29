@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -39,7 +40,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ users, total, page, limit, pages: Math.ceil(total / limit) })
   } catch (err) {
-    console.error('[admin/billing GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/billing GET', err)
   }
 }

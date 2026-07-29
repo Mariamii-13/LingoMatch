@@ -5,6 +5,7 @@ import { callTutor, OpenRouterError, streamTutor } from '@/lib/ai/openrouter'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { buildTutorContext } from '@/lib/ai/tutor-context'
 import { checkTutorBudget } from '@/lib/ai/tutor-budget'
+import { internalErrorResponse, reportServerError } from '@/lib/observability/report.server'
 import {
   appendAssistantMessage,
   appendTutorExchange,
@@ -167,10 +168,9 @@ export async function POST(req: NextRequest) {
           }
           send({ type: 'done' })
         } catch (streamErr) {
-          console.error(
-            '[AI Practice] Stream interrupted:',
-            streamErr instanceof Error ? streamErr.message : String(streamErr),
-          )
+          reportServerError('ai-practice POST stream', streamErr, {
+            context: { sessionId: activeSessionId },
+          })
           send({
             type: 'error',
             error: 'The reply was cut short. Please try again.',
@@ -196,10 +196,11 @@ export async function POST(req: NextRequest) {
                 })
               }
             } catch (persistErr) {
-              console.error(
-                '[AI Practice] Failed to persist exchange:',
-                persistErr instanceof Error ? persistErr.message : String(persistErr),
-              )
+              // A learner's turn is lost when this fails, and they are given no
+              // sign of it — so it must be visible to an operator.
+              reportServerError('ai-practice POST persist', persistErr, {
+                context: { sessionId: activeSessionId },
+              })
             }
           }
           controller.close()
@@ -250,7 +251,8 @@ export async function POST(req: NextRequest) {
           )
       }
     }
-    console.error('[AI Practice] Unexpected error:', err instanceof Error ? err.message : String(err))
-    return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })
+    return internalErrorResponse('ai-practice POST', err, {
+      message: 'An unexpected error occurred',
+    })
   }
 }

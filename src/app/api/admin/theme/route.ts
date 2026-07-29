@@ -4,6 +4,7 @@ import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import ThemeSettings from '@/lib/models/ThemeSettings'
 import { THEME_CACHE_TAG } from '@/lib/theme.server'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -33,8 +34,7 @@ export async function GET() {
     }
     return NextResponse.json(settings)
   } catch (err) {
-    console.error('[admin/theme GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/theme GET', err)
   }
 }
 
@@ -70,7 +70,6 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json(settings)
   } catch (err) {
-    console.error('[admin/theme PUT]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/theme PUT', err)
   }
 }

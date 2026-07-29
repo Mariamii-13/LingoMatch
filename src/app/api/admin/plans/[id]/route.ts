@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import PricingPlan from '@/lib/models/PricingPlan'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -25,8 +26,7 @@ export async function GET(
     if (!plan) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json(plan)
   } catch (err) {
-    console.error('[admin/plans/[id] GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/plans/[id] GET', err)
   }
 }
 
@@ -68,8 +68,7 @@ export async function PATCH(
     if (!plan) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json(plan)
   } catch (err) {
-    console.error('[admin/plans/[id] PATCH]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/plans/[id] PATCH', err)
   }
 }
 
@@ -88,7 +87,6 @@ export async function DELETE(
     if (!plan) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('[admin/plans/[id] DELETE]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/plans/[id] DELETE', err)
   }
 }

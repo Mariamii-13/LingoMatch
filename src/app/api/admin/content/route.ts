@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import PageContent from '@/lib/models/PageContent'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -24,8 +25,7 @@ export async function GET(req: NextRequest) {
     const contents = await PageContent.find(filter).sort({ page: 1, slug: 1 }).lean()
     return NextResponse.json(contents)
   } catch (err) {
-    console.error('[admin/content GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/content GET', err)
   }
 }
 
@@ -60,7 +60,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(content, { status: 201 })
   } catch (err) {
-    console.error('[admin/content POST]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/content POST', err)
   }
 }

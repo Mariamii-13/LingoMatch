@@ -3,6 +3,7 @@
 import * as React from "react"
 
 import "./globals.css"
+import { reportBrowserError } from "@/lib/observability/client-report"
 
 /**
  * Last-resort boundary: this replaces the root layout, so it cannot rely on any
@@ -18,6 +19,7 @@ export default function GlobalError({
 }) {
   React.useEffect(() => {
     console.error("[global error boundary]", error)
+    if (!error.digest) reportBrowserError({ kind: "boundary", error })
   }, [error])
 
   return (

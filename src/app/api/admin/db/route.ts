@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -42,7 +43,6 @@ export async function GET() {
     )
     return NextResponse.json(results)
   } catch (err) {
-    console.error('[admin/db GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/db GET', err)
   }
 }

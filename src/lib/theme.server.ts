@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache'
 import { connectDB } from '@/lib/db'
 import ThemeSettings from '@/lib/models/ThemeSettings'
 import { DEFAULT_APP_THEME, type AppTheme } from '@/lib/theme'
+import { reportServerError } from '@/lib/observability/report.server'
 
 /** Invalidated by the admin theme route when the palette is saved. */
 export const THEME_CACHE_TAG = 'app-theme'
@@ -23,9 +24,11 @@ async function readAppTheme(): Promise<AppTheme> {
       primaryForeground: settings?.primaryForeground ?? DEFAULT_APP_THEME.primaryForeground,
       customCss: settings?.customCss ?? DEFAULT_APP_THEME.customCss,
     }
-  } catch {
+  } catch (err) {
     // The app is perfectly usable in its default palette; a theme lookup is not
-    // worth failing every signed-in page render over.
+    // worth failing every signed-in page render over. It is still reported,
+    // because "the palette silently reverted" is otherwise unexplainable.
+    reportServerError('theme read', err)
     return DEFAULT_APP_THEME
   }
 }

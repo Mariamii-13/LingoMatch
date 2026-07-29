@@ -4,6 +4,7 @@ import * as React from "react"
 import { TriangleAlert } from "lucide-react"
 
 import { StatusScreen } from "@/components/shared/status-screen"
+import { reportBrowserError } from "@/lib/observability/client-report"
 
 export default function AppError({
   error,
@@ -14,6 +15,9 @@ export default function AppError({
 }) {
   React.useEffect(() => {
     console.error("[error boundary]", error)
+    // Only browser-side failures: anything with a digest was already reported
+    // server-side by the onRequestError hook.
+    if (!error.digest) reportBrowserError({ kind: "boundary", error })
   }, [error])
 
   return (

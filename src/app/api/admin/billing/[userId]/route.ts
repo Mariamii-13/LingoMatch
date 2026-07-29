@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -29,8 +30,7 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
     return NextResponse.json(user)
   } catch (err) {
-    console.error('[admin/billing/[userId] GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/billing/[userId] GET', err)
   }
 }
 
@@ -81,7 +81,6 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
     return NextResponse.json(user)
   } catch (err) {
-    console.error('[admin/billing/[userId] PATCH]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/billing/[userId] PATCH', err)
   }
 }

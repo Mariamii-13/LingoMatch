@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import PageContent from '@/lib/models/PageContent'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -25,8 +26,7 @@ export async function GET(
     if (!content) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json(content)
   } catch (err) {
-    console.error('[admin/content/[slug] GET]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/content/[slug] GET', err)
   }
 }
 
@@ -59,8 +59,7 @@ export async function PATCH(
     if (!content) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json(content)
   } catch (err) {
-    console.error('[admin/content/[slug] PATCH]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/content/[slug] PATCH', err)
   }
 }
 
@@ -79,7 +78,6 @@ export async function DELETE(
     if (!content) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('[admin/content/[slug] DELETE]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('admin/content/[slug] DELETE', err)
   }
 }

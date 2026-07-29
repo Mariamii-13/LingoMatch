@@ -5,6 +5,7 @@ import User from '@/lib/models/User'
 import { buildLanguageProfileUpdate } from '@/lib/language-profile'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { languageProfileInputSchema } from '@/lib/validations/language-profile'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 export async function GET() {
   const session = await auth()
@@ -17,8 +18,9 @@ export async function GET() {
     if (!result) return NextResponse.json({ error: 'User not found' }, { status: 404 })
     return NextResponse.json(result)
   } catch (error) {
-    console.error('[Language Profile] Failed to load:', error instanceof Error ? error.message : error)
-    return NextResponse.json({ error: 'Failed to load language profile' }, { status: 500 })
+    return internalErrorResponse('user/me/language-profile GET', error, {
+      message: 'Failed to load language profile',
+    })
   }
 }
 
@@ -59,7 +61,8 @@ export async function PUT(req: NextRequest) {
     if (!updatedUser) return NextResponse.json({ error: 'User not found' }, { status: 404 })
     return NextResponse.json({ profile: update.languageProfile, complete: true })
   } catch (error) {
-    console.error('[Language Profile] Failed to save:', error instanceof Error ? error.message : error)
-    return NextResponse.json({ error: 'Failed to save language profile' }, { status: 500 })
+    return internalErrorResponse('user/me/language-profile PUT', error, {
+      message: 'Failed to save language profile',
+    })
   }
 }

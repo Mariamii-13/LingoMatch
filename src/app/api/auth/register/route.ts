@@ -5,6 +5,7 @@ import User from '@/lib/models/User'
 import { RegisterSchema } from '@/lib/validations/auth'
 import { allowRegistration } from '@/lib/auth-throttle'
 import { getClientIp } from '@/lib/request-identity'
+import { internalErrorResponse } from '@/lib/observability/report.server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,7 +54,6 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    console.error('Register error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return internalErrorResponse('auth/register POST', error)
   }
 }

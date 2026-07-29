@@ -17,8 +17,6 @@ export async function checkRateLimit(
   limit: number,
   windowSecs: number
 ): Promise<{ allowed: boolean; remaining: number }> {
-  await connectDB()
-
   const now = Date.now()
   const windowMs = windowSecs * 1000
   const windowId = Math.floor(now / windowMs) * windowMs
@@ -27,6 +25,12 @@ export async function checkRateLimit(
   const expiresAt = new Date(windowId + windowMs * 2)
 
   try {
+    // Connecting is inside the guard on purpose: an unreachable database used
+    // to throw straight out of here, so an outage turned every rate-limited
+    // endpoint into a 500 instead of degrading. Failing open is the trade-off
+    // this limiter already makes everywhere else.
+    await connectDB()
+
     const doc = await RateLimitModel.findOneAndUpdate(
       { key },
       { $inc: { count: 1 }, $setOnInsert: { expiresAt } },

@@ -10,7 +10,12 @@ export default auth((req) => {
     (req.auth?.user as { languageProfileComplete?: boolean })?.languageProfileComplete === true
 
   const publicPaths = ['/', '/login', '/register', '/forgot-password']
-  const isPublic = publicPaths.includes(pathname) || pathname.startsWith('/api/auth')
+  const isPublic =
+    publicPaths.includes(pathname) ||
+    pathname.startsWith('/api/auth') ||
+    // Browsers crash on the signed-out pages too, and a redirect to /login
+    // would silently discard exactly those reports.
+    pathname.startsWith('/api/observability')
 
   if (!isLoggedIn && !isPublic) {
     return NextResponse.redirect(new URL('/login', req.url))

@@ -33,6 +33,20 @@ NEXTAUTH_SECRET=your_secret_key
 NEXTAUTH_URL=http://localhost:3000
 ```
 
+Optional:
+
+```
+# Where to forward error reports, in addition to the runtime logs. Any endpoint
+# accepting a JSON POST works — a Slack or Discord incoming webhook, or a
+# hosted error tracker. Unset means errors are logged and nothing is sent.
+ERROR_REPORT_WEBHOOK_URL=https://hooks.example.com/...
+```
+
+Every failure the application knows about is logged as a single line prefixed
+`lm-error`, so searching runtime logs for that token finds all of them. Each
+carries an `id`; a 500 from the API returns the same value as `errorId`, and a
+page that fails to render shows it to the user as `Reference:`.
+
 ## Roadmap
 
 - [x] Phase 1 — Frontend (all pages, design system)
