@@ -4,7 +4,7 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated at commit `9dd30e5`.
+Last updated at commit `c9cee82`.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -100,7 +100,7 @@ data as real. All of that is resolved.
 | Dimension | State |
 |---|---|
 | Builds and typechecks | Clean |
-| Automated tests | 211 passing |
+| Automated tests | 227 passing |
 | Lint | 0 errors, 0 warnings |
 | Core AI tutor | Works, persists, streams, is metered |
 | Human matching | Works (a severe silent bug was fixed) |
@@ -122,9 +122,9 @@ paths; a single well-tested rate limiter reused across every abuse-prone endpoin
 validation at API boundaries; genuine separation between pure logic (unit tested) and I/O;
 comments that explain *why* rather than *what*, particularly around non-obvious decisions.
 
-**Weaknesses:** two pages still fetch client-side behind full-page spinners; some admin pages
-are only statically verified because admin access was unavailable; a database shared between
-development and production; test data in the production database.
+**Weaknesses:** some admin pages are only statically verified because admin access was
+unavailable; a database shared between development and production; test data in the production
+database.
 
 There is no dead fabricated data, no known IDOR, no unhandled-error blank screens, and no
 lint suppressions used to hide real problems.
@@ -139,9 +139,9 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `9dd30e5` — "fix: show the newest messages in long conversations" |
+| **HEAD** | `c9cee82` — "perf: serve the site palette from the server instead of a per-page fetch" |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync, no divergence |
+| **Local vs remote** | **Diverged.** `main` is at `055506e`; the two commits after it sit on the local branch `perf/server-render-friends-settings-theme`, unpushed. Merge or push before continuing. |
 | **Git user** | `mariamii13` |
 
 All 18 phases are committed and pushed. Every commit message is long-form and explains the
@@ -169,9 +169,13 @@ e792290  fix: explain CEFR levels and reset the language filter after picking
 c532d52  feat: make the Progress page show real practice history
 c4554ba  perf: bound the progress queries and surface practice on the dashboard
 9dd30e5  fix: show the newest messages in long conversations
+055506e  docs: add PROJECT_PASSPORT.md as the permanent handover document
+7ff87da  perf: render the last two client-fetched pages on the server
+c9cee82  perf: serve the site palette from the server instead of a per-page fetch
 ```
 
-Cumulative diff versus the pre-work baseline (`340b48a`): **117 files changed, +5218 / −3011**.
+Cumulative diff versus the pre-work baseline (`340b48a`): **133 files changed, +9154 / −4368**,
+of which this document is roughly 2,600 lines.
 
 ### Technology stack
 
@@ -192,7 +196,6 @@ Cumulative diff versus the pre-work baseline (`340b48a`): **117 files changed, +
 | Validation | Zod | 4.4.3 |
 | Tests | Vitest + Testing Library + jsdom | vitest 4.1.10 |
 | Toasts | `sonner` | 2.0.7 |
-| Charts | `recharts` (present; currently unused after admin cleanup) | 3.8.1 |
 | Theme | `next-themes` | 0.4.6 |
 | Password hashing | `bcryptjs`, cost 12 | 3.0.3 |
 
@@ -1075,7 +1078,8 @@ in Explore lists names alone. Putting an `<img>` there caused a hydration error 
 
 `next-themes` with `attribute="class"`, `defaultTheme="dark"`, system detection enabled.
 `ThemeToggle` in the navbar. An admin-editable `ThemeSettings` model with
-`GET /api/theme` (public) and `GET/PUT /api/admin/theme`; `AppThemeProvider` applies it.
+`GET/PUT /api/admin/theme`. The `(app)` layout reads it through `getAppTheme` and renders the
+variables into the HTML; there is no public theme endpoint and nothing applies it client-side.
 **Mostly Ready** — functional, not deeply tested across both themes.
 
 ### 3.30 Branding
@@ -1234,10 +1238,11 @@ Vercel. Project name is **`voxa`** (the local directory is `LingoMatch` — they
 Minimal and deliberate. No `use cache` / Cache Components adoption. Reasons: nearly every page
 is per-user and session-dependent, so cache keys would be per-user anyway; and correctness was
 the priority while fabricated data and broken flows were being removed. Streaming responses set
-`Cache-Control: no-store`. `/api/theme` is the only genuinely cacheable endpoint and is not
-cached yet.
+`Cache-Control: no-store`.
 
-**This is a real remaining opportunity** (section 7).
+The single exception is the site palette, which is global and rarely changes: `getAppTheme`
+caches it with `unstable_cache` under the `app-theme` tag, and the admin theme route
+invalidates that tag on save (see 11.25).
 
 ### Error handling
 
@@ -1404,8 +1409,9 @@ revisiting.
 
 ### Authorization
 
-**Audited across all 48 API routes.** Every route calls `auth()` except three, each correctly
-public: the NextAuth handler, `POST /api/auth/register`, and `GET /api/theme`.
+**Audited across all 48 API routes.** Every route calls `auth()` except two, each correctly
+public: the NextAuth handler and `POST /api/auth/register`. (`GET /api/theme` was the third; it
+has since been deleted, so the count is now 47 routes.)
 
 **Every conversation route verifies the caller is in `participants`** — checked individually
 across `chat/[sessionId]`, `chat/[sessionId]/messages`, `chat/[sessionId]/leave`,
@@ -1484,10 +1490,15 @@ server.
 
 ### Server Components
 
-The dashboard, progress, ai-practice, match/chat and match/video pages are Server Components.
-Each conversion removed a client fetch waterfall and a hydration flash. Verified for the
-dashboard: display name, username and target language are all present in the initial HTML, and
-the page issues **no `/api/user/me` request**.
+The dashboard, progress, ai-practice, match/chat, match/video, friends and settings pages are
+Server Components. Each conversion removed a client fetch waterfall and a hydration flash.
+Verified for the dashboard: display name, username and target language are all present in the
+initial HTML, and the page issues **no `/api/user/me` request**. Verified the same way for
+friends and settings: both serve their `<h1>` in the server HTML, and settings serves the
+user's name, email, languages and interest tags with it.
+
+**No page-level client data fetch remains.** `/messages` still polls, which is a live feature,
+not a load-time waterfall.
 
 The `(app)` layout resolves identity and the friend-request count once per render and passes
 them down, replacing per-component `useSession()` calls that rendered placeholder values first.
@@ -1507,18 +1518,18 @@ ai-practice and the auth pages.
 
 ### Caching
 
-Minimal by design (section 4). Streaming responses are `no-store`. **The clearest remaining
-opportunity** is `GET /api/theme`, which is global, rarely changes, and is fetched on every page
-load. Next 16's Cache Components (`use cache`, `cacheLife`, `cacheTag`) would suit it well.
+Minimal by design (section 4). Streaming responses are `no-store`. The one cached read is the
+site palette (`getAppTheme`), through `unstable_cache` with a tag the admin theme route
+invalidates. `use cache` was not used because it requires the `cacheComponents` flag, which this
+project does not set; adopting Cache Components is a separate decision.
 
 ### Network requests
 
 Per signed-in page load, the client currently issues:
-- `GET /api/theme`
 - `GET /api/auth/session` — **twice**, from `SessionProvider`
 
-Everything else on converted pages is server-rendered. The duplicate session call is a small
-known waste.
+Everything else is server-rendered. The duplicate session call is the only remaining
+load-time request, and is a small known waste.
 
 ### Optimisations completed
 
@@ -1534,18 +1545,19 @@ known waste.
 6. Tutor history capped at the last 20 messages upstream — prompt size is the dominant AI cost.
 7. Stale-response races eliminated in five paginated views via request cancellation.
 8. Cascading renders eliminated by deriving loading state instead of setting it in effect bodies.
+9. `/friends` and `/settings` converted to Server Components — the last two full-page spinners.
+10. The site palette moved from a per-page `GET /api/theme` to a cached server read rendered into
+    the HTML. That removed both a request per page load and the flash of default amber before
+    the custom colour landed.
+11. `recharts` uninstalled after confirming nothing imported it.
 
 ### Remaining opportunities
 
-1. **Cache `/api/theme`** — easy, immediate.
-2. **Convert `/friends` and `/settings` to Server Components** — the last two full-page
-   spinners; `/friends` is the only page whose heading is absent from server HTML.
-3. **Deduplicate the `SessionProvider` session calls.**
-4. **Reduce the `jwt` callback's database read** on every token refresh — currently the cost of
+1. **Deduplicate the `SessionProvider` session calls.**
+2. **Reduce the `jwt` callback's database read** on every token refresh — currently the cost of
    keeping `role`/`isBanned` fresh. A short in-token TTL could halve it.
-5. **Bundle analysis has never been run.** `recharts` is still a dependency but is now unused
-   after the admin cleanup — likely dead weight in the bundle.
-6. **Add compound indexes** guided by real query patterns once there is production traffic.
+3. **Bundle analysis has never been run.**
+4. **Add compound indexes** guided by real query patterns once there is production traffic.
 
 ---
 
@@ -1660,12 +1672,9 @@ values shown to users cannot be correlated with anything.
 
 ### Medium
 
-**9.8 `/friends` and `/settings` are client-fetched behind full-page spinners.**
-*Why:* predate the Server Component conversions.
-*Impact:* slower first paint; `/friends` is the only page whose heading is absent from server
-HTML.
-*Difficulty:* low — the dashboard conversion is a working template.
-*Solution:* server-render, keep only interactive parts as Client Components.
+**9.8 ~~`/friends` and `/settings` are client-fetched behind full-page spinners.~~** Resolved in
+`7ff87da`. Both render on the server; their data access lives in `lib/friends.server.ts` and
+`lib/settings-form-state.ts`.
 
 **9.9 Old Cloudinary avatars are never deleted.**
 *Why:* the upload route only writes.
@@ -1697,10 +1706,7 @@ Note the polling/realtime logic is correct — **do not rewrite it, just move it
 *Impact:* email ownership is unproven for credentials accounts.
 *Difficulty:* depends on 9.2. *Solution:* enforce after email exists.
 
-**9.15 `recharts` is now an unused dependency.**
-*Why:* the admin charts it powered were removed.
-*Impact:* likely dead bundle weight.
-*Difficulty:* trivial. *Solution:* confirm no imports remain, then uninstall.
+**9.15 ~~`recharts` is now an unused dependency.~~** Resolved in `c9cee82` — uninstalled.
 
 ### Low
 
@@ -2000,6 +2006,29 @@ deliberately-unused parameters.
 *Why:* the codebase already used that convention. Leaving standing warnings trains people to
 ignore lint output.
 
+### 11.25 The theme is server-rendered, and its invalidation is not the recommended one
+
+*Decision:* read the palette on the server through `unstable_cache`, render it into the HTML,
+and invalidate with `revalidateTag(tag, { expire: 0 })` from the admin theme route.
+*Why not `use cache`:* it requires the `cacheComponents` flag, which this project does not set.
+Turning that flag on is a project-wide change, not a side effect of a theme fix.
+*Why not the recommended `'max'` profile:* `'max'` is stale-while-revalidate, so an
+administrator who saved a colour would still see the old one on the very next render. `expire: 0`
+keeps read-your-writes. The single-argument form that used to mean this is deprecated in
+Next 16, so it is not an option.
+*Consequence:* admin-authored custom CSS is now inlined into a server-rendered `<style>`, where
+`element.textContent`'s guarantee no longer protects it. `sanitiseCustomCss` strips `</` for
+that reason — **do not remove it**, and do not assume it is theoretical because only admins can
+reach it.
+
+### 11.26 The friends page adopts server data during render, not in an effect
+
+*Decision:* compare the incoming prop against the last one seen and call `setState` during
+render, rather than syncing in `useEffect`.
+*Why:* the page keeps optimistic state so accepting a request feels instant, but the server owns
+the truth after `router.refresh()`. Doing that in an effect renders twice and is exactly the
+cascading-render pattern `21cbb41` removed — the lint rule catches it, and it is right to.
+
 ---
 
 ## 12. Remaining roadmap
@@ -2024,9 +2053,9 @@ Priority reflects value per unit of effort and dependency order.
 | 7 | **Implement password reset** | Critical | Moderate | Closes the only permanent lockout | Email provider |
 | 8 | **Enforce email verification** | Medium | Low | Proves email ownership | #7 |
 | 9 | **Configure CSP and security headers** | Medium | Low–Moderate | Hardens against injection | Careful testing vs LiveKit/Cloudinary/flagcdn |
-| 10 | **Cache `/api/theme`** | Medium | Low | Removes a request from every page load | None |
-| 11 | **Convert `/friends` and `/settings` to Server Components** | Medium | Low | Last two full-page spinners | None |
-| 12 | **Delete unused `recharts`; run a bundle analysis** | Low | Low | Smaller bundle | None |
+| 10 | ~~Cache `/api/theme`~~ | — | — | **Done** in `c9cee82` — server-rendered from a cached read instead | — |
+| 11 | ~~Convert `/friends` and `/settings` to Server Components~~ | — | — | **Done** in `7ff87da` | — |
+| 12 | ~~Delete unused `recharts`~~; **run a bundle analysis** | Low | Low | Smaller bundle | `recharts` removed in `c9cee82`; the analysis has still never been run |
 
 ### Medium term (during beta, guided by real usage)
 
@@ -2159,7 +2188,7 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**211 tests passing, 4 skipped, across 21 files.** Baseline before this work: 103.
+**227 tests passing, 4 skipped, across 24 files.** Baseline before this work: 103.
 
 ```
 src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume
@@ -2177,6 +2206,9 @@ src/lib/messages/access.test.ts                        participant checks
 src/lib/messages/history-window.test.ts               newest-page paging rule
 src/lib/messages/reconcile.test.ts                     dedupe + ordering
 src/lib/messages/routes.test.ts                        message route helpers
+src/lib/friends.test.ts                                friend card mapping, absent-field defaults
+src/lib/settings-form-state.test.ts                    settings seeding incl. legacy language shapes
+src/lib/theme.test.ts                                  palette variables, custom-CSS sanitising
 src/lib/onboarding-access.test.ts                      onboarding gate
 src/lib/onboarding-progress.test.ts                    steps, completion, redirects
 src/lib/progress.test.ts                               streak rule incl. gaps and expiry
@@ -2272,6 +2304,27 @@ a language.
     was actually uploaded.
 12. **Cold-start behaviour on Vercel** — all testing was local.
 13. **The progress empty state** — code-reviewed only; every available account had history.
+14. **The friends page with non-empty lists.** The converted page was verified signed in as
+    `mrekh2023`, who has no friends and no requests, so only the empty state was seen rendering.
+    The lists themselves are covered by unit tests and by `GET /api/friends`, which shares the
+    same query and returned the correct shape. Accepting, declining and cancelling were **not**
+    exercised: doing so would have written to the shared production database.
+15. **Admin theme save → cache invalidation.** `revalidateTag(tag, { expire: 0 })` is unverified
+    at runtime for the same reason the admin pages are (no admin account). If a saved colour
+    appears one render late, that call is the place to look.
+
+### A pre-existing dev-server fault, for whoever sees it next
+
+`GET /api/auth/session` returns **500 twice per page load in development**, and the browser
+console shows `ClientFetchError: Unexpected token '<'`. The server log attributes it to
+`Error: Jest worker encountered 2 child process exceptions, exceeding retry limit` alongside
+repeated `write EPIPE`.
+
+This is **not** caused by the Server Component conversions — it reproduces identically on
+untouched routes such as `/progress`, and appears in the log from before those changes were
+made. It looks like a Turbopack dev-worker crash rather than an application bug, and it has not
+been reproduced against a production build. Worth confirming it does not occur in production
+before assuming it is harmless.
 
 ---
 
@@ -2379,9 +2432,13 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `9dd30e5`, clean and synced. 211 tests, 0 lint problems, `tsc` clean, build green.
-The core loop works. Nothing is half-finished or uncommitted. Eighteen phases of work are
+`perf/server-render-friends-settings-theme` @ `c9cee82`, clean but **not merged into `main` and
+not pushed** — `main` is still at `055506e`. 227 tests, 0 lint problems, `tsc` clean, build
+green. The core loop works. Nothing is half-finished or uncommitted. Twenty phases of work are
 complete and documented in the git log.
+
+**First thing to decide:** merge that branch into `main` and push, or review it first. Nothing
+else in this document assumes either answer.
 
 ### Read these first, in this order
 
@@ -2426,7 +2483,10 @@ complete and documented in the git log.
   load-bearing on the owner's network.
 - **Do not delete production data**, including junk accounts, without explicit approval.
 - **Do not add a state-management library.** Nothing needs one.
-- **Do not silence a lint error.** Seven of them turned out to be real bugs.
+- **Do not silence a lint error.** Seven of them turned out to be real bugs, and an eighth
+  caught a cascading-render regression while the friends page was being converted.
+- **Do not remove `sanitiseCustomCss`** from the theme path. See 11.25.
+- **Do not sync a server prop into state with `useEffect`.** See 11.26.
 
 ### What not to rewrite
 
