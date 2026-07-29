@@ -4,7 +4,7 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated at commit `c9cee82`.
+Last updated at commit `0f7fbdb`.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -139,9 +139,9 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `c9cee82` — "perf: serve the site palette from the server instead of a per-page fetch" |
+| **HEAD** | `0f7fbdb` — "perf: read the friend count and the theme in parallel" |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | **Diverged.** `main` is at `055506e`; the two commits after it sit on the local branch `perf/server-render-friends-settings-theme`, unpushed. Merge or push before continuing. |
+| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`. |
 | **Git user** | `mariamii13` |
 
 All 18 phases are committed and pushed. Every commit message is long-form and explains the
@@ -172,6 +172,8 @@ c4554ba  perf: bound the progress queries and surface practice on the dashboard
 055506e  docs: add PROJECT_PASSPORT.md as the permanent handover document
 7ff87da  perf: render the last two client-fetched pages on the server
 c9cee82  perf: serve the site palette from the server instead of a per-page fetch
+5c548f4  docs: bring the passport up to date with the server-rendering work
+0f7fbdb  perf: read the friend count and the theme in parallel
 ```
 
 Cumulative diff versus the pre-work baseline (`340b48a`): **133 files changed, +9154 / −4368**,
@@ -2432,13 +2434,9 @@ make.**
 
 ### Current state, briefly
 
-`perf/server-render-friends-settings-theme` @ `c9cee82`, clean but **not merged into `main` and
-not pushed** — `main` is still at `055506e`. 227 tests, 0 lint problems, `tsc` clean, build
-green. The core loop works. Nothing is half-finished or uncommitted. Twenty phases of work are
+`main` @ `0f7fbdb`, clean and synced. 227 tests, 0 lint problems, `tsc` clean, build green.
+The core loop works. Nothing is half-finished or uncommitted. Twenty phases of work are
 complete and documented in the git log.
-
-**First thing to decide:** merge that branch into `main` and push, or review it first. Nothing
-else in this document assumes either answer.
 
 ### Read these first, in this order
 
