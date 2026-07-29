@@ -30,16 +30,39 @@ type ChatError = {
   retryable: boolean
 }
 
-export function AIPracticeClient({ profile }: { profile: LanguageProfileInput }) {
+export type InitialTutorSession = {
+  id: string
+  targetLanguageCode: string
+  mode: string
+  messages: { role: 'user' | 'assistant'; content: string }[]
+}
+
+export function AIPracticeClient({
+  profile,
+  initialSession = null,
+}: {
+  profile: LanguageProfileInput
+  initialSession?: InitialTutorSession | null
+}) {
   const primaryTarget =
     profile.learningLanguages.find((language) => language.isPrimary) ??
     profile.learningLanguages[0]
-  const [view, setView] = useState<'setup' | 'chat'>('setup')
+
+  // An unfinished session resumes straight into the chat view; its language and
+  // mode come from the stored session rather than the profile defaults.
+  const [view, setView] = useState<'setup' | 'chat'>(initialSession ? 'chat' : 'setup')
   const [settings, setSettings] = useState<SessionSettings>({
-    targetLanguageCode: primaryTarget.code,
-    mode: 'Free Conversation',
+    targetLanguageCode: initialSession?.targetLanguageCode ?? primaryTarget.code,
+    mode: (initialSession?.mode as PracticeMode) ?? 'Free Conversation',
   })
-  const [messages, setMessages] = useState<Message[]>([])
+  const [sessionId, setSessionId] = useState<string | null>(initialSession?.id ?? null)
+  const [messages, setMessages] = useState<Message[]>(() =>
+    (initialSession?.messages ?? []).map((message) => ({
+      id: crypto.randomUUID(),
+      role: message.role,
+      content: message.content,
+    })),
+  )
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<ChatError | null>(null)
   const [input, setInput] = useState('')
@@ -58,15 +81,9 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
   }, [messages, isLoading])
 
   const doApiCall = useCallback(
-    async (currentMessages: Message[], isStart: boolean) => {
-      const historyToSend = isStart
-        ? []
-        : currentMessages
-            .slice(-21, isStart ? undefined : -1)
-            .map((m) => ({ role: m.role, content: m.content }))
-
-      const lastMsg = !isStart ? currentMessages[currentMessages.length - 1] : null
-
+    async (userMessage: string | null, isStart: boolean) => {
+      // The server owns the transcript now, so a turn only needs the session id
+      // and the new message — no history is sent from the browser.
       const body = isStart
         ? {
             action: 'start',
@@ -75,10 +92,8 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
           }
         : {
             action: 'message',
-            targetLanguageCode: settings.targetLanguageCode,
-            mode: settings.mode,
-            history: historyToSend,
-            message: lastMsg!.content,
+            sessionId,
+            message: userMessage,
           }
 
       let res: Response
@@ -94,7 +109,13 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
         return
       }
 
-      let data: { reply?: string; error?: string; code?: string; retryable?: boolean }
+      let data: {
+        reply?: string
+        sessionId?: string
+        error?: string
+        code?: string
+        retryable?: boolean
+      }
       try {
         data = await res.json()
       } catch {
@@ -116,6 +137,8 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
         return
       }
 
+      if (data.sessionId) setSessionId(data.sessionId)
+
       const aiMsg: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -125,17 +148,18 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
       setError(null)
       setIsLoading(false)
     },
-    [settings],
+    [settings, sessionId],
   )
 
   const startSession = useCallback(async () => {
     if (isLoading) return
     setView('chat')
     setMessages([])
+    setSessionId(null)
     setError(null)
     setInput('')
     setIsLoading(true)
-    await doApiCall([], true)
+    await doApiCall(null, true)
   }, [isLoading, doApiCall])
 
   const sendMessage = useCallback(async () => {
@@ -144,13 +168,12 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
     if (!content) return
 
     const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content }
-    const next = [...messages, userMsg]
-    setMessages(next)
+    setMessages((prev) => [...prev, userMsg])
     setInput('')
     setError(null)
     setIsLoading(true)
-    await doApiCall(next, false)
-  }, [isLoading, input, messages, doApiCall])
+    await doApiCall(content, false)
+  }, [isLoading, input, doApiCall])
 
   const retryLast = useCallback(async () => {
     if (isLoading) return
@@ -165,15 +188,21 @@ export function AIPracticeClient({ profile }: { profile: LanguageProfileInput })
 
     setError(null)
     setIsLoading(true)
-    await doApiCall(messages, false)
+    // Resend the turn that failed. It was never stored, because the server only
+    // records an exchange once the provider has replied.
+    await doApiCall(last.content, false)
   }, [isLoading, messages, startSession, doApiCall])
 
-  const resetSession = useCallback(() => {
+  const resetSession = useCallback(async () => {
+    setShowResetConfirm(false)
     setView('setup')
     setMessages([])
     setError(null)
     setInput('')
-    setShowResetConfirm(false)
+    setSessionId(null)
+    // Close the stored session too, or the next page load would resume the
+    // conversation the user just chose to leave.
+    await fetch('/api/ai-practice', { method: 'DELETE' }).catch(() => {})
   }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
