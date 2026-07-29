@@ -4,8 +4,8 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated when the error-observability block was closed, in the commit directly on top of
-`7fa3f3d`.
+Last updated when the CSP / security-headers block was closed, in the commit directly on top of
+`1d8c98d`.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -143,9 +143,9 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `7fa3f3d` — "docs: record the error reporting work in the passport" — plus this closing docs commit on top |
+| **HEAD** | `1d8c98d` — "docs: close the observability block and record product direction" — plus this closing docs commit on top |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; the error-observability block was committed directly on `main` (`0d8c90b`, `7fa3f3d`) and pushed, so there is no branch left to merge. |
+| **Local vs remote** | In sync as of `1d8c98d`, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; the error-observability and CSP blocks were both committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
 
 All 18 phases are committed and pushed. Every commit message is long-form and explains the
@@ -180,6 +180,9 @@ c9cee82  perf: serve the site palette from the server instead of a per-page fetc
 0f7fbdb  perf: read the friend count and the theme in parallel
 6a3d27f  docs: record the merged branch state in the passport
 0d8c90b  feat: make production failures visible instead of silent
+7fa3f3d  docs: record the error reporting work in the passport
+1d8c98d  docs: close the observability block and record product direction
+4926443  feat: add a Content Security Policy and security headers
 ```
 
 Cumulative diff versus the pre-work baseline (`340b48a`): **133 files changed, +9154 / −4368**,
@@ -1187,6 +1190,67 @@ is dropped before it is sent.
 
 **Production Ready.** Verified live end to end; see section 14.
 
+### 3.35 Content Security Policy and security headers
+
+**Purpose.** Roadmap item #9 (section 12). Harden against XSS/clickjacking/MIME-sniffing before
+wider testing, without breaking the third-party integrations the app actually depends on.
+
+**Implementation.** `next.config.ts` → `headers()`, applied to every path (`source: '/(.*)'`).
+No nonces: nonces would force every page into dynamic rendering, which conflicts with the
+deliberately cached site palette (`getAppTheme`, section 4 "Caching") and with static
+optimisation generally, for a security gain this app's threat model doesn't need yet. This
+follows the "Without Nonces" pattern documented in `node_modules/next/dist/docs/01-app/02-guides/
+content-security-policy.md`, per `AGENTS.md`.
+
+**CSP directives and why each origin is there:**
+- `script-src`/`style-src 'self' 'unsafe-inline'` (+ `'unsafe-eval'` only when
+  `NODE_ENV === 'development'`, for React's dev error reconstruction). `'unsafe-inline'` on
+  `style-src` is required by the inline `<style id="app-theme-vars">` tag in `(app)/layout.tsx`
+  (3.29) — there is exactly one inline style source in the app and it's server-rendered, not
+  user-controlled.
+- `img-src` allows `res.cloudinary.com`, `lh3.googleusercontent.com`, `flagcdn.com` — all three
+  are loaded via plain `<img>` tags (Base UI's `Avatar.Image`, `FlagImage`), **not**
+  `next/image`, so the browser fetches them directly rather than through `/_next/image`.
+- `connect-src` allows `wss://*.livekit.cloud` and `https://*.livekit.cloud` — the only two
+  origins the browser talks to directly rather than through a Route Handler (video session
+  signaling and the per-user realtime-message data room, 3.11/3.24). Every other network call
+  the client makes is same-origin.
+- `form-action 'self' https://accounts.google.com` — the Google sign-in button
+  (`signIn("google", …)`) submits a same-origin form that Auth.js then redirects cross-origin to
+  Google's login page; `accounts.google.com` is allow-listed in case a browser enforces
+  `form-action` against the post-redirect target, not just the initial submission.
+- `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`, `upgrade-insecure-requests`.
+
+**Other headers added:** `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`
+(redundant with `frame-ancestors`, kept for older browsers), `Referrer-Policy:
+strict-origin-when-cross-origin`, `X-DNS-Prefetch-Control: on`, `Strict-Transport-Security:
+max-age=63072000; includeSubDomains` (**no `preload`** — that requires submission to browsers'
+HSTS preload list and is effectively permanent; not this block's call to make), and
+`Permissions-Policy: camera=(self), microphone=(self), geolocation=(), browsing-topics=()` —
+camera/microphone stay enabled for `self` because the pre-join screen and video sessions need
+`getUserMedia` (3.24); disabling them entirely, which several copy-pasted CSP examples do by
+default, would silently break live video.
+
+**Verified live**, not just built:
+- `npm run build` compiles cleanly with the new headers; `curl -i` against a running dev server
+  confirms every header is present on both HTML and JSON responses.
+- No CSP violation ever appeared in the browser console across dashboard, explore, friends,
+  settings, progress, messages and the onboarding `languages` page.
+- A raw `new WebSocket('wss://<project>.livekit.cloud/rtc')` opened from the page (no token)
+  reached the server and was rejected with `HTTP Authentication failed; no valid credentials
+  available` — a LiveKit-level auth rejection, not a CSP block. This is the deliberate way to
+  tell the two apart: a CSP block throws synchronously and logs "Refused to connect"; an allowed
+  but unauthenticated connection reaches the remote server and fails there instead.
+- `Image()` loads against `flagcdn.com` and `res.cloudinary.com` both resolved (`ok: true`).
+- The real Google avatar (`lh3.googleusercontent.com`) loaded in the running app (200).
+
+**Production Ready.**
+
+*Never revert:* do not set `Permissions-Policy` to `camera=(), microphone=()` — several public
+CSP examples do this by default and it would silently break the pre-join camera preview and
+video sessions (3.24). Do not add nonces without first re-deciding the caching trade-off in
+section 4. Do not add `preload` to the HSTS header without the owner's explicit sign-off.
+
 ---
 
 ## 4. Architecture
@@ -1553,7 +1617,9 @@ server.
 
 ### Remaining risks
 
-1. **No CSP or custom security headers.**
+1. ~~No CSP or custom security headers.~~ **Resolved** — see 3.35. A CSP, HSTS, X-Frame-Options,
+   X-Content-Type-Options, Referrer-Policy and a scoped Permissions-Policy are now set in
+   `next.config.ts` and verified live against LiveKit, Cloudinary, Google avatars and flagcdn.
 2. **Account enumeration** on registration.
 3. **No password complexity requirement.**
 4. **Admin surface is very powerful** — `admin/db` can edit any whitelisted collection,
@@ -1790,8 +1856,10 @@ Note the polling/realtime logic is correct — **do not rewrite it, just move it
 
 ### Low
 
-**9.16 No CSP or custom security headers.** *Solution:* configure in `next.config.ts` or
-`vercel.ts`; test carefully against LiveKit, Cloudinary and flagcdn origins.
+**9.16 ~~No CSP or custom security headers.~~** Resolved in the CSP block (3.35) —
+`next.config.ts` `headers()` now sets CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
+Referrer-Policy and Permissions-Policy, verified against LiveKit, Cloudinary, Google avatars and
+flagcdn with no violations.
 
 **9.17 Account enumeration on registration.** Deliberate usability trade-off; revisit if abuse
 appears.
@@ -2178,7 +2246,7 @@ how.
 | 6 | **Delete junk/test accounts** | High | Low | Real users stop seeing fake profiles | #5 first |
 | 7 | **Implement password reset** | Critical | Moderate | Closes the only permanent lockout | Email provider |
 | 8 | **Enforce email verification** | Medium | Low | Proves email ownership | #7 |
-| 9 | **Configure CSP and security headers** | Medium | Low–Moderate | Hardens against injection | Careful testing vs LiveKit/Cloudinary/flagcdn |
+| 9 | ~~Configure CSP and security headers~~ | — | — | **Done** — see 3.35 and 9.16. Verified against LiveKit, Cloudinary, Google avatars and flagcdn | — |
 | 10 | ~~Cache `/api/theme`~~ | — | — | **Done** in `c9cee82` — server-rendered from a cached read instead | — |
 | 11 | ~~Convert `/friends` and `/settings` to Server Components~~ | — | — | **Done** in `7ff87da` | — |
 | 12 | ~~Delete unused `recharts`~~; **run a bundle analysis** | Low | Low | Smaller bundle | `recharts` removed in `c9cee82`; the analysis has still never been run |
@@ -2457,6 +2525,31 @@ numbers below describe the committed state rather than a work-in-progress one:
 | `.env.local` | unchanged; `ERROR_REPORT_WEBHOOK_URL` was passed inline to a single now-dead process and was never written to a file |
 | Diff review | 32 files; every non-observability edit is a `console.error` → `internalErrorResponse`/`reportServerError` swap plus the four deliberate changes in `proxy.ts`, `rateLimit.ts`, `theme.server.ts` and `friend-requests.server.ts` |
 
+**CSP / security-headers block (3.35).** Verified against a running dev server and a production
+build:
+
+| Check | Result |
+|---|---|
+| `npm run build` | compiled successfully with the new `headers()` config; route manifest unchanged otherwise |
+| `npm test` | 277 passed, 4 skipped, 28 files — unchanged, `next.config.ts` has no test surface |
+| `npm run lint` / `tsc --noEmit` | clean |
+| Headers present | confirmed via `curl -i` on both an HTML route (`/login`) and a JSON API route (`/api/user/me`) — CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, X-DNS-Prefetch-Control all present |
+| Console clean of CSP violations | across `/dashboard`, `/explore`, `/friends`, `/settings`, `/progress`, `/messages`, `/languages` — zero `Refused to …` messages |
+| LiveKit `connect-src` | a raw unauthenticated `WebSocket` to `wss://<project>.livekit.cloud/rtc` reached the server and was rejected with LiveKit's own `HTTP Authentication failed`, not a CSP error — proof the origin is allowed, not blocked |
+| `img-src` | `flagcdn.com` and `res.cloudinary.com` both loaded via a script-injected `Image()`; the real Google avatar (`lh3.googleusercontent.com`) loaded live in the running app |
+| Working tree | clean; only `next.config.ts` changed |
+
+**A pre-existing fault re-observed while testing this block, unrelated to it.** While driving
+`/languages` and `/messages` signed in, `GET /api/user/me` and `GET /api/realtime/token`
+intermittently returned the branded 404 page instead of their real JSON responses, alongside the
+already-documented `GET /api/auth/session` failures (section 14, "A pre-existing dev-server
+fault"). **Confirmed independent of CSP**: `curl` with a valid `authjs.session-token` cookie,
+entirely outside the browser, reproduced the same spurious 404 on `/api/user/me` — a CSP
+response header cannot alter server-side route resolution, so this is the same Turbopack
+dev-worker instability already on file, now observed to affect more routes than previously
+recorded. Not fixed here — out of scope for this block, and the existing note already
+recommends confirming it doesn't reproduce against a production build.
+
 ### Scenarios NOT yet tested
 
 1. **A real two-participant video call.** No second camera was available. Tokens, rooms and the
@@ -2608,9 +2701,9 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `0d8c90b`, clean and synced. 277 tests, 0 lint problems, `tsc` clean, build green.
-The core loop works. Nothing is half-finished or uncommitted. Twenty phases of work are
-complete and documented in the git log.
+`main` @ `1d8c98d` plus this block's commit, clean and synced. 277 tests, 0 lint problems, `tsc`
+clean, build green. The core loop works. Nothing is half-finished or uncommitted.
+Twenty-one-plus phases of work are complete and documented in the git log.
 
 ### Read these first, in this order
 
@@ -2672,6 +2765,14 @@ complete and documented in the git log.
 - **Do not report from an error boundary when `error.digest` is set.** See 11.28.
 - **Do not put `await connectDB()` back outside the try in `checkRateLimit`.** See 11.30.
 - **Do not add the raw client address to a log record.** See 11.29.
+- **Do not set `Permissions-Policy` to `camera=(), microphone=()`.** It would silently break the
+  pre-join camera preview and live video (3.24, 3.35). Keep them scoped to `(self)`.
+- **Do not add nonces to the CSP** without first re-deciding the caching trade-off in section 4
+  — nonces require every page to render dynamically, which conflicts with the cached site
+  palette. See 3.35.
+- **Do not add `preload` to the `Strict-Transport-Security` header** without the owner's
+  explicit sign-off — it requires submission to browsers' HSTS preload list and is effectively
+  permanent. See 3.35.
 
 ### What not to rewrite
 
@@ -2687,8 +2788,8 @@ complete and documented in the git log.
 
 In priority order, matching section 12: **set `ERROR_REPORT_WEBHOOK_URL`** so the reports added
 in `0d8c90b` reach a human (configuration, no code); then verify video and admin with real
-access; then the owner-gated items (credits, database split, password reset); then CSP and
-security headers; then analytics.
+access; then the owner-gated items (credits, database split, password reset); then analytics.
+CSP and security headers are done (3.35).
 
 ### What requires the owner's approval
 
