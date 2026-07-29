@@ -23,9 +23,35 @@ const LEVEL_LABELS: Record<string, string> = {
   unsure:   "I'm not sure",
 }
 
-/** Human-readable label for a stored level string. */
+/**
+ * Plain-language meaning for each CEFR code.
+ *
+ * "A1" tells a learner nothing unless they already know the framework, and the
+ * level pickers offered nothing else. Compact badges keep the bare code, where
+ * space is tight and the picker has already explained it.
+ */
+const LEVEL_MEANINGS: Record<string, string> = {
+  a1: "Beginner",
+  a2: "Elementary",
+  b1: "Intermediate",
+  b2: "Upper intermediate",
+  c1: "Advanced",
+  c2: "Proficient",
+}
+
+/** Short label for a stored level string, e.g. "B1" or "I'm not sure". */
 export function formatLevel(level: string): string {
   return LEVEL_LABELS[level.toLowerCase()] ?? level.toUpperCase()
+}
+
+/**
+ * Label for choosing a level, e.g. "B1 · Intermediate". Falls back to the short
+ * label for values that are already plain words, such as "I'm not sure".
+ */
+export function formatLevelWithMeaning(level: string): string {
+  const key = level.toLowerCase()
+  const meaning = LEVEL_MEANINGS[key]
+  return meaning ? `${formatLevel(key)} · ${meaning}` : formatLevel(key)
 }
 
 /**

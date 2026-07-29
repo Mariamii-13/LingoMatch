@@ -22,6 +22,7 @@ import {
   type LanguageLevelEntry,
   formatLanguageFull,
   formatLevel,
+  formatLevelWithMeaning,
   getLanguage,
   searchLanguages,
 } from "@/constants/languages"
@@ -71,6 +72,8 @@ export function LanguageLevelPicker({
     if (!selectedCodes.has(code)) {
       onChange([...value, { code, level: defaultLevel }])
     }
+    // Reset the filter, or the list stays narrowed to the language just added.
+    setSearch("")
   }
 
   function remove(code: string) {
@@ -122,7 +125,7 @@ export function LanguageLevelPicker({
               >
                 {levels.map((lv) => (
                   <option key={lv} value={lv}>
-                    {formatLevel(lv)}
+                    {formatLevelWithMeaning(lv)}
                   </option>
                 ))}
               </select>

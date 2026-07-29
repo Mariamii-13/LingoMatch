@@ -67,6 +67,8 @@ export function LanguageSelector(props: LanguageSelectorProps) {
 
     function toggle(code: string) {
       onChange(value.includes(code) ? value.filter((c) => c !== code) : [...value, code])
+      // Reset the filter, or the list stays narrowed to the language just picked.
+      setSearch("")
     }
 
     function remove(code: string) {
