@@ -9,7 +9,7 @@ export default auth((req) => {
   const languageProfileComplete =
     (req.auth?.user as { languageProfileComplete?: boolean })?.languageProfileComplete === true
 
-  const publicPaths = ['/', '/login', '/register', '/verify-email', '/forgot-password']
+  const publicPaths = ['/', '/login', '/register', '/forgot-password']
   const isPublic = publicPaths.includes(pathname) || pathname.startsWith('/api/auth')
 
   if (!isLoggedIn && !isPublic) {
