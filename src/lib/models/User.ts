@@ -128,6 +128,13 @@ const UserSchema = new Schema(
       ],
       default: [],
     },
+    // One-directional: I control who I block. Blocking is checked both ways
+    // (see src/lib/blocking.server.ts) so a blocked user cannot route around
+    // it just because they didn't block back.
+    blockedUsers: {
+      type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
   },
   { timestamps: true }
 )
@@ -136,6 +143,8 @@ const UserSchema = new Schema(
 // prefix-regex queries (^pattern) on those fields are index-backed.
 // friendRequests.from index supports the sent-requests reverse lookup.
 UserSchema.index({ 'friendRequests.from': 1 })
+// Supports the reverse "who has blocked me" lookup in getBlockedUserIds.
+UserSchema.index({ blockedUsers: 1 })
 UserSchema.index({ 'languageProfile.nativeLanguages': 1 })
 UserSchema.index({ 'languageProfile.learningLanguages.code': 1 })
 UserSchema.index({

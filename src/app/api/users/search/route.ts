@@ -5,6 +5,7 @@ import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
 import { migrateLegacyLevel } from '@/constants/languages'
+import { getBlockedUserIds } from '@/lib/blocking.server'
 
 const VALID_INTERESTS = ['entertainment', 'music', 'gaming', 'travel', 'creativity', 'lifestyle']
 
@@ -23,9 +24,10 @@ export async function GET(req: NextRequest) {
   await connectDB()
 
   const myId = session.user.id
+  const excludedIds = await getBlockedUserIds(myId)
 
   const base: Record<string, unknown> = {
-    _id: { $ne: new mongoose.Types.ObjectId(myId) },
+    _id: { $nin: [myId, ...excludedIds].map((id) => new mongoose.Types.ObjectId(id)) },
     isBanned: false,
     isActive: true,
   }

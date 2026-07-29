@@ -7,6 +7,7 @@ import Message from '@/lib/models/Message'
 import { checkRateLimit } from '@/lib/rateLimit'
 import { isConversationParticipant } from '@/lib/messages/access'
 import { publishConversationMessage } from '@/lib/messages/realtime'
+import { isBlockedEitherWay } from '@/lib/blocking.server'
 
 const TYPING_TIMEOUT_MS = 4000
 
@@ -112,6 +113,11 @@ export async function POST(
   const participants = conv.participants as { toString(): string }[]
   if (!isConversationParticipant(participants, session.user.id)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const partnerId = participants.find((p) => p.toString() !== session.user!.id)?.toString()
+  if (partnerId && (await isBlockedEitherWay(session.user.id, partnerId))) {
+    return NextResponse.json({ error: 'Cannot message this user' }, { status: 403 })
   }
 
   const msg = await Message.create({

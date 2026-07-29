@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { use } from "react"
 import { useRouter } from "next/navigation"
-import { CalendarDays, Loader2, MessageSquare, UserCheck, UserPlus, Users } from "lucide-react"
+import { Ban, CalendarDays, Loader2, MessageSquare, ShieldOff, UserCheck, UserPlus, Users } from "lucide-react"
 import { toast } from "sonner"
 
 import { avatarGradient, cn } from "@/lib/utils"
@@ -27,6 +27,8 @@ interface PublicProfile {
   friendsCount: number
   joinedAt: string
   friendStatus: "self" | "friends" | "pending_sent" | "pending_received" | "none"
+  isBlockedByMe: boolean
+  isBlockedByThem: boolean
 }
 
 export default function PublicProfilePage({
@@ -42,6 +44,7 @@ export default function PublicProfilePage({
   const [loading, setLoading] = React.useState(true)
   const [friendBusy, setFriendBusy] = React.useState(false)
   const [chatBusy, setChatBusy] = React.useState(false)
+  const [blockBusy, setBlockBusy] = React.useState(false)
 
   React.useEffect(() => {
     fetch(`/api/users/${encodeURIComponent(username)}`)
@@ -111,6 +114,36 @@ export default function PublicProfilePage({
       toast.error("Failed to open chat")
     } finally {
       setChatBusy(false)
+    }
+  }
+
+  async function toggleBlock() {
+    if (!profile) return
+    const willBlock = !profile.isBlockedByMe
+    if (willBlock && !confirm(`Block @${profile.username}? They won't be able to message, add or match with you.`)) return
+
+    setBlockBusy(true)
+    try {
+      const res = await fetch("/api/users/block", {
+        method: willBlock ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: profile.id }),
+      })
+      if (!res.ok) { toast.error(willBlock ? "Failed to block user" : "Failed to unblock user"); return }
+      setProfile((p) =>
+        p
+          ? {
+              ...p,
+              isBlockedByMe: willBlock,
+              friendStatus: willBlock ? "none" : p.friendStatus,
+            }
+          : p
+      )
+      toast.success(willBlock ? `@${profile.username} blocked` : `@${profile.username} unblocked`)
+    } catch {
+      toast.error(willBlock ? "Failed to block user" : "Failed to unblock user")
+    } finally {
+      setBlockBusy(false)
     }
   }
 
@@ -192,48 +225,73 @@ export default function PublicProfilePage({
               </Button>
             )}
 
-            {profile.friendStatus === "none" && (
-              <Button onClick={sendFriendRequest} disabled={friendBusy}>
-                {friendBusy
+            {profile.friendStatus !== "self" && profile.isBlockedByMe && (
+              <Button variant="outline" disabled={blockBusy} onClick={toggleBlock}>
+                {blockBusy
                   ? <Loader2 className="size-4 animate-spin" />
-                  : <UserPlus className="size-4" />}
-                Add Friend
+                  : <ShieldOff className="size-4" />}
+                Unblock
               </Button>
             )}
 
-            {profile.friendStatus === "pending_sent" && (
-              <Button variant="outline" disabled>
-                <UserPlus className="size-4" />
-                Request Sent
-              </Button>
-            )}
+            {/* Blocking is unilateral and mutual to enforce (see blocking.server.ts),
+                so neither direction should still offer to friend or message. */}
+            {profile.friendStatus !== "self" && !profile.isBlockedByMe && !profile.isBlockedByThem && (
+              <>
+                {profile.friendStatus === "none" && (
+                  <Button onClick={sendFriendRequest} disabled={friendBusy}>
+                    {friendBusy
+                      ? <Loader2 className="size-4 animate-spin" />
+                      : <UserPlus className="size-4" />}
+                    Add Friend
+                  </Button>
+                )}
 
-            {profile.friendStatus === "pending_received" && (
-              <Button onClick={acceptFriendRequest} disabled={friendBusy}>
-                {friendBusy
-                  ? <Loader2 className="size-4 animate-spin" />
-                  : <UserCheck className="size-4" />}
-                Accept Request
-              </Button>
-            )}
+                {profile.friendStatus === "pending_sent" && (
+                  <Button variant="outline" disabled>
+                    <UserPlus className="size-4" />
+                    Request Sent
+                  </Button>
+                )}
 
-            {profile.friendStatus === "friends" && (
-              <Button variant="outline" disabled>
-                <UserCheck className="size-4" />
-                Friends
-              </Button>
-            )}
+                {profile.friendStatus === "pending_received" && (
+                  <Button onClick={acceptFriendRequest} disabled={friendBusy}>
+                    {friendBusy
+                      ? <Loader2 className="size-4 animate-spin" />
+                      : <UserCheck className="size-4" />}
+                    Accept Request
+                  </Button>
+                )}
 
-            <Button
-              variant="outline"
-              disabled={chatBusy}
-              onClick={openChat}
-            >
-              {chatBusy
-                ? <Loader2 className="size-4 animate-spin" />
-                : <MessageSquare className="size-4" />}
-              Message
-            </Button>
+                {profile.friendStatus === "friends" && (
+                  <Button variant="outline" disabled>
+                    <UserCheck className="size-4" />
+                    Friends
+                  </Button>
+                )}
+
+                <Button
+                  variant="outline"
+                  disabled={chatBusy}
+                  onClick={openChat}
+                >
+                  {chatBusy
+                    ? <Loader2 className="size-4 animate-spin" />
+                    : <MessageSquare className="size-4" />}
+                  Message
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Block user"
+                  disabled={blockBusy}
+                  onClick={toggleBlock}
+                >
+                  {blockBusy ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
+                </Button>
+              </>
+            )}
           </div>
         </div>
 

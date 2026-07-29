@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
+import { isBlockedEitherWay } from '@/lib/blocking.server'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -14,6 +15,10 @@ export async function POST(req: NextRequest) {
   // C1: prevent self-friend requests
   if (targetUserId === session.user.id) {
     return NextResponse.json({ error: 'Cannot send friend request to yourself' }, { status: 400 })
+  }
+
+  if (await isBlockedEitherWay(session.user.id, targetUserId)) {
+    return NextResponse.json({ error: 'Cannot send a friend request to this user' }, { status: 403 })
   }
 
   await connectDB()

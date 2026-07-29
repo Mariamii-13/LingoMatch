@@ -19,10 +19,10 @@ export async function GET(
 
   const [target, me] = await Promise.all([
     User.findOne({ username: username.toLowerCase(), isBanned: false, isActive: true })
-      .select('username displayName avatar bio country nativeLanguages spokenLanguages learningLanguages interests friends friendRequests createdAt')
+      .select('username displayName avatar bio country nativeLanguages spokenLanguages learningLanguages interests friends friendRequests blockedUsers createdAt')
       .lean(),
     User.findById(session.user.id)
-      .select('friends friendRequests')
+      .select('friends friendRequests blockedUsers')
       .lean(),
   ])
 
@@ -59,6 +59,13 @@ export async function GET(
     else if (myIncomingIds.has(targetId)) friendStatus = 'pending_received'
   }
 
+  const isBlockedByMe = (
+    (me as { blockedUsers?: mongoose.Types.ObjectId[] } | null)?.blockedUsers ?? []
+  ).some((id) => id.toString() === targetId)
+  const isBlockedByThem = (
+    (target as { blockedUsers?: mongoose.Types.ObjectId[] }).blockedUsers ?? []
+  ).some((id) => id.toString() === myId)
+
   const interestTags = Object.values(
     (target as { interests?: Record<string, string[]> }).interests ?? {}
   ).flat()
@@ -89,5 +96,7 @@ export async function GET(
     friendsCount: ((target.friends as unknown[]) || []).length,
     joinedAt: (target.createdAt as Date).toISOString(),
     friendStatus,
+    isBlockedByMe,
+    isBlockedByThem,
   })
 }

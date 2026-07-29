@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { AlertTriangle, Ban, Check, Clock, Loader2, ShieldCheck } from "lucide-react"
+import { AlertTriangle, Ban, Check, Clock, History, Loader2, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -22,12 +22,93 @@ type AdminReport = {
   createdAt: string
 }
 
+type ModerationActionRow = {
+  id: string
+  actorUsername: string
+  action: string
+  targetUsername: string
+  reason: string | null
+  createdAt: string
+}
+
 const TABS: { value: ReportStatus; label: string }[] = [
   { value: "open", label: "Open" },
   { value: "reviewed", label: "Reviewed" },
   { value: "resolved", label: "Resolved" },
   { value: "dismissed", label: "Dismissed" },
 ]
+
+const ACTION_LABELS: Record<string, string> = {
+  ban: "Banned",
+  unban: "Unbanned",
+  report_reviewed: "Marked report reviewed",
+  report_resolved: "Marked report resolved",
+  report_dismissed: "Dismissed report",
+}
+
+/**
+ * Read-only by design — this mirrors the append-only ModerationAction model
+ * (src/lib/models/ModerationAction.ts). An audit trail an admin can edit
+ * from the UI isn't an audit trail, so there is deliberately no action here
+ * beyond loading and displaying it.
+ */
+function AuditLogTab() {
+  const [actions, setActions] = React.useState<ModerationActionRow[] | null>(null)
+  const [failed, setFailed] = React.useState(false)
+
+  React.useEffect(() => {
+    fetch("/api/admin/moderation-actions")
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load audit log")
+        return r.json()
+      })
+      .then((data) => setActions(Array.isArray(data.actions) ? data.actions : []))
+      .catch(() => setFailed(true))
+  }, [])
+
+  if (failed) {
+    return (
+      <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        Could not load the moderation audit log. Refresh to try again.
+      </p>
+    )
+  }
+
+  if (actions === null) {
+    return (
+      <div role="status" aria-label="Loading audit log" className="flex justify-center py-12">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (actions.length === 0) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">No moderation actions recorded yet.</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      {actions.map((a) => (
+        <div key={a.id} className="flex items-start gap-3 rounded-xl border bg-card p-4 shadow-sm">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <History className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1 text-sm">
+            <p>
+              <span className="font-medium">@{a.actorUsername}</span>{" "}
+              {ACTION_LABELS[a.action] ?? a.action}{" "}
+              <span className="font-medium">@{a.targetUsername}</span>
+            </p>
+            {a.reason && <p className="mt-1 text-muted-foreground">Reason: {a.reason}</p>}
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="size-3" /> {formatDate(a.createdAt)}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 function formatDate(value: string): string {
   const date = new Date(value)
@@ -212,6 +293,7 @@ export default function AdminReportsPage() {
                 {tab.value === "open" && openCount > 0 ? ` (${openCount})` : ""}
               </TabsTrigger>
             ))}
+            <TabsTrigger value="audit">Audit log</TabsTrigger>
           </TabsList>
           {TABS.map((tab) => {
             const items = (reports ?? []).filter((r) => r.status === tab.value)
@@ -237,6 +319,9 @@ export default function AdminReportsPage() {
               </TabsContent>
             )
           })}
+          <TabsContent value="audit" className="mt-6">
+            <AuditLogTab />
+          </TabsContent>
         </Tabs>
       )}
     </div>

@@ -9,6 +9,7 @@ import { getLanguage, migrateLegacyLevel, formatLevel } from '@/constants/langua
 import { checkRateLimit } from '@/lib/rateLimit'
 import { matchRequestSchema } from '@/lib/validations/match'
 import { activeProvider, type MatchCandidate } from '@/lib/matching'
+import { getBlockedUserIds } from '@/lib/blocking.server'
 
 function buildPartner(doc: Record<string, unknown>) {
   const name = (doc.displayName as string) ?? 'Partner'
@@ -47,8 +48,11 @@ async function tryMatch(
   userId: string,
   targetLanguage: string,
   nativeLanguage: string,
-  countryPreference: string
+  countryPreference: string,
+  excludedIds: string[]
 ) {
+  const notCandidate = { $nin: [userId, ...excludedIds] }
+
   // Pass 1: prefer country match if specified
   if (countryPreference) {
     const exact = await MatchRequest.findOneAndUpdate(
@@ -57,7 +61,7 @@ async function tryMatch(
         targetLanguage: nativeLanguage,
         nativeLanguage: targetLanguage,
         status: 'waiting',
-        userId: { $ne: userId },
+        userId: notCandidate,
         countryPreference,
       },
       { $set: { status: 'matched' } },
@@ -73,7 +77,7 @@ async function tryMatch(
       targetLanguage: nativeLanguage,
       nativeLanguage: targetLanguage,
       status: 'waiting',
-      userId: { $ne: userId },
+      userId: notCandidate,
     },
     { $set: { status: 'matched' } },
     { returnDocument: 'after' }
@@ -113,7 +117,8 @@ export async function POST(req: NextRequest) {
     { $set: { status: 'cancelled' } }
   )
 
-  const existing = await tryMatch(userId, targetLanguage, nativeLanguage, countryPreference)
+  const excludedIds = await getBlockedUserIds(userId)
+  const existing = await tryMatch(userId, targetLanguage, nativeLanguage, countryPreference, excludedIds)
 
   if (existing) {
     const partnerDoc = await User.findById(existing.userId)

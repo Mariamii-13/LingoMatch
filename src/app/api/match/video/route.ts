@@ -7,6 +7,7 @@ import User from '@/lib/models/User'
 import { createRoom } from '@/lib/livekit'
 import { matchRequestSchema } from '@/lib/validations/match'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { getBlockedUserIds } from '@/lib/blocking.server'
 
 // Requests not polled within this window are considered ghost/disconnected
 const GHOST_THRESHOLD_MS = 12_000
@@ -87,13 +88,14 @@ export async function POST(req: NextRequest) {
   )
 
   // Try to match: language pair + candidate must be actively polling
+  const excludedIds = await getBlockedUserIds(userId)
   const existing = await MatchRequest.findOneAndUpdate(
     {
       type: 'video',
       targetLanguage: nativeLanguage,
       nativeLanguage: targetLanguage,
       status: 'waiting',
-      userId: { $ne: userId },
+      userId: { $nin: [userId, ...excludedIds] },
       lastPolledAt: activeFilter(),
     },
     { $set: { status: 'matched' } },
@@ -165,11 +167,12 @@ export async function GET(req: NextRequest) {
   // Still waiting — check if we should try language-agnostic fallback (after 5s in queue)
   const waitingMs = Date.now() - new Date(request.createdAt as Date).getTime()
   if (waitingMs >= LANGUAGE_FALLBACK_MS) {
+    const excludedIds = await getBlockedUserIds(session.user.id)
     const fallback = await MatchRequest.findOneAndUpdate(
       {
         type: 'video',
         status: 'waiting',
-        userId: { $ne: session.user.id },
+        userId: { $nin: [session.user.id, ...excludedIds] },
         lastPolledAt: activeFilter(),
       },
       { $set: { status: 'matched' } },

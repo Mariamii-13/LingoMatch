@@ -5,6 +5,7 @@ import { connectDB } from '@/lib/db'
 import Conversation from '@/lib/models/Conversation'
 import User from '@/lib/models/User'
 import { avatarGradient } from '@/lib/utils'
+import { isBlockedEitherWay } from '@/lib/blocking.server'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest) {
   const myId = session.user.id
   if (recipientId === myId) {
     return NextResponse.json({ error: 'Cannot chat with yourself' }, { status: 400 })
+  }
+
+  if (await isBlockedEitherWay(myId, recipientId)) {
+    return NextResponse.json({ error: 'Cannot message this user' }, { status: 403 })
   }
 
   await connectDB()
