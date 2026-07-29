@@ -4,7 +4,7 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated at commit `0f7fbdb`.
+Last updated at commit `0d8c90b`.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -100,7 +100,7 @@ data as real. All of that is resolved.
 | Dimension | State |
 |---|---|
 | Builds and typechecks | Clean |
-| Automated tests | 227 passing |
+| Automated tests | 277 passing |
 | Lint | 0 errors, 0 warnings |
 | Core AI tutor | Works, persists, streams, is metered |
 | Human matching | Works (a severe silent bug was fixed) |
@@ -139,7 +139,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `0f7fbdb` — "perf: read the friend count and the theme in parallel" |
+| **HEAD** | `0d8c90b` — "feat: make production failures visible instead of silent" |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`. |
 | **Git user** | `mariamii13` |
@@ -174,6 +174,8 @@ c4554ba  perf: bound the progress queries and surface practice on the dashboard
 c9cee82  perf: serve the site palette from the server instead of a per-page fetch
 5c548f4  docs: bring the passport up to date with the server-rendering work
 0f7fbdb  perf: read the friend count and the theme in parallel
+6a3d27f  docs: record the merged branch state in the passport
+0d8c90b  feat: make production failures visible instead of silent
 ```
 
 Cumulative diff versus the pre-work baseline (`340b48a`): **133 files changed, +9154 / −4368**,
@@ -856,7 +858,9 @@ moderation action.
 `checkRateLimit(action, subject, limit, windowSecs)`. MongoDB-backed **fixed window**, keyed
 `${action}:${subject}:${windowId}`. Uses `findOneAndUpdate` with `upsert` and `$inc` (atomic),
 retries as a plain increment on duplicate-key races, and **fails open** on unexpected errors so
-a database hiccup does not lock out legitimate users. Documents carry `expiresAt` set to 2× the
+a database hiccup does not lock out legitimate users — **including a failure to connect at all**,
+which until `0d8c90b` threw past the guard and turned every limited endpoint into a 500 during an
+outage (11.30). Documents carry `expiresAt` set to 2× the
 window with a MongoDB TTL index, so cleanup is automatic. Works across all serverless instances
 because state is in the database, not memory.
 
@@ -876,6 +880,7 @@ because state is in the database, not memory.
 | `match-queue` | userId | 5 | 60 s | chat queue spam |
 | `match-queue-video` | userId | 5 | 60 s | video queue spam (added; was missing) |
 | `report` | userId | 10 | 1 h | report spam |
+| `client-error` | hashed IP | 30 | 5 min | browser error-report spam on a public endpoint (3.34) |
 
 **Privacy decision.** Rate-limit keys for unauthenticated endpoints are **hashed** with the app
 secret (`src/lib/request-identity.ts`, `hashSubject`). These documents persist for the length of
@@ -1109,6 +1114,74 @@ session ends; surfaced at `(admin)/admin/feedback` reading real data. **Mostly R
 `POST /api/user/me/presence` updates `lastSeenAt`. Used for online indicators.
 **Mostly Ready** — no heartbeat interval is configured anywhere, so `lastSeenAt` updates are
 sparse.
+
+### 3.34 Error reporting and observability
+
+**Purpose.** Make a failure in production findable. Added in `0d8c90b`.
+
+**The problem it solves.** Error handling (3.22) was already good: a user saw a branded screen
+and a `Reference:` digest. But **nothing wrote that digest anywhere searchable**, so a user
+quoting it matched nothing. API handlers logged a scope tag and returned a bare
+`Internal server error` with no identifier, so "it failed at about 3pm" could not be turned into
+a request. Browser crashes left **no trace at all** — the user saw a broken screen while the
+server saw a perfectly successful render.
+
+**The record.** One structured line per failure, prefixed `lm-error`, built by
+`src/lib/observability/error-report.ts` (pure, unit tested):
+
+```
+lm-error {"id":"7da63a08f1f4","at":"…","origin":"server","scope":"render /dashboard",
+          "name":"Error","message":"…","stack":"…","digest":"104943454",
+          "path":"/dashboard","method":"GET","headers":{"user-agent":"…"}}
+```
+
+Deliberately **one line**: a raw stack spans dozens, and log platforms treat each as a separate
+record, which separates the interesting frames from the id identifying them.
+
+**Where reports come from.**
+
+| Source | File | Covers |
+|---|---|---|
+| `onRequestError` | `src/instrumentation.ts` | Server Component renders, Server Actions, uncaught route throws, proxy failures — everything that produces a digest |
+| `internalErrorResponse` | route handlers | errors a handler catches itself and answers with a 500 |
+| `reportServerError` | `friend-requests.server.ts`, `theme.server.ts`, streaming tutor paths | soft-fail paths that return a fallback and used to swallow the cause entirely |
+| window listeners | `src/instrumentation-client.ts` | uncaught browser errors and unhandled rejections, registered **before hydration** so a hydration failure is caught |
+| error boundaries | `error.tsx`, `(app)/error.tsx`, `global-error.tsx` | React render failures **only when there is no digest** |
+
+**The correlation id is the point.** `internalErrorResponse` returns the same id to the caller as
+`errorId`, and the error screens already show it as `Reference:`. Both now match a log line.
+
+**Why boundaries only report digest-less errors.** A digest means the server already reported it
+through `onRequestError`; reporting again would double every server-side failure. An error
+without one happened in the browser and reaches the server no other way.
+
+**Sinks.** stdout, always — Vercel captures it with no account, no key and no cost. Optionally
+`ERROR_REPORT_WEBHOOK_URL` forwards the identical payload to any JSON endpoint (a Slack or
+Discord incoming webhook, or a hosted tracker). Delivery goes through `after()` so it never
+delays a response, falls back to a floating promise outside a request scope, and never throws.
+**No SDK and no provider account is required to run the app** — that was a deliberate choice, not
+a shortcut (see 11.27).
+
+**Redaction, in `redactSecrets`.** Messages and stacks are stripped of MongoDB connection
+credentials, bearer tokens, provider api keys, and the values of this deployment's own secrets.
+This is not theoretical: **a Mongoose connection failure quotes the whole connection string,
+password included**, and that is precisely the error most likely to be logged. Headers are
+**allow-listed** (`user-agent`, `referer`, `accept-language`, `content-type`, `x-vercel-id`)
+rather than filtered, because an allow-list cannot be defeated by a header nobody anticipated.
+**The client address is dropped entirely** — it identifies a person, and rate limiting already
+keys on a hash of it for that reason (3.21).
+
+**The ingest endpoint.** `POST /api/observability/client-error`, validated by
+`clientErrorReportSchema`. Public on purpose: the landing page, sign-in form and onboarding steps
+are where a broken build hurts most and nobody is authenticated there — so `/api/observability`
+was added to the middleware's public prefixes, otherwise every such report would have been
+redirected to `/login` and lost. Bounded on every axis: at most **5 reports per page load** from
+the browser, **30 per address per 5 minutes** at the endpoint (`client-error` action, hashed IP
+subject), bodies over **16KB** refused, every schema field length-capped. Cross-origin
+`"Script error."` noise — which identifies nothing and usually comes from a browser extension —
+is dropped before it is sent.
+
+**Production Ready.** Verified live end to end; see section 14.
 
 ---
 
@@ -1589,7 +1662,7 @@ load-time request, and is a small known waste.
 | Subscription/billing | **Not Implemented** | Fiction removed; scaffolding retained deliberately |
 | Admin console | **Mostly Ready** | Real data throughout; four pages statically verified only |
 | Reports & moderation | **Mostly Ready** | Real queue and working actions; no audit trail or appeals |
-| Rate limiting | **Production Ready** | One tested implementation across 12 actions |
+| Rate limiting | **Production Ready** | One tested implementation across 13 actions; now genuinely fails open when the database is unreachable |
 | Error handling | **Production Ready** | Three boundary layers, verified with a real crash |
 | 404 handling | **Production Ready** | Branded, in-app variant keeps navigation |
 | Loading states | **Production Ready** | Route-level fallback plus derived per-view states |
@@ -1607,7 +1680,8 @@ load-time request, and is a small known waste.
 | Page content CMS | **Mostly Ready** | Works; landing page does not consume it |
 | Deployment | **Mostly Ready** | Vercel configured; no staging, no CLI locally |
 | Database infrastructure | **Needs Work** | Dev and prod share a database named `test` |
-| Observability | **Needs Work** | `console.error` only; no error tracking or metrics |
+| Error reporting | **Production Ready** | Structured `lm-error` records with correlation ids, server and browser, verified live |
+| Alerting & metrics | **Needs Work** | Nobody is watching the reports; no product analytics or performance data |
 
 ---
 
@@ -1665,12 +1739,12 @@ mute/unmute, leave, and the ended-session state.
 *Difficulty:* low, but touches production data.
 *Solution:* delete after 9.3, so deletion is not being done against a live shared database.
 
-**9.7 No observability.**
-*Why:* never added.
-*Impact:* production failures are invisible unless someone reads Vercel logs. `error.digest`
-values shown to users cannot be correlated with anything.
-*Difficulty:* low.
-*Solution:* Sentry or Vercel's own error tracking; forward `digest` values.
+**9.7 ~~No observability.~~** Resolved in `0d8c90b`. Every failure is a structured `lm-error`
+line carrying a correlation id and, for renders, the digest the user was shown; see 3.34.
+*What remains:* **nobody is alerted.** Reports land in runtime logs and, if
+`ERROR_REPORT_WEBHOOK_URL` is set, in a webhook — but no one is watching either, and there is
+still no product metrics or performance instrumentation (that is roadmap #13). Setting the
+webhook to a Slack channel is the cheapest next step and needs no code.
 
 ### Medium
 
@@ -2031,6 +2105,45 @@ render, rather than syncing in `useEffect`.
 the truth after `router.refresh()`. Doing that in an effect renders twice and is exactly the
 cascading-render pattern `21cbb41` removed — the lint rule catches it, and it is right to.
 
+### 11.27 Error reporting writes to logs, with a webhook seam, instead of adopting a provider
+
+*Decision:* structured one-line logs as the always-on sink, plus optional
+`ERROR_REPORT_WEBHOOK_URL` forwarding. No Sentry SDK, no account, no dependency added.
+*Why:* the roadmap said "Sentry or Vercel", but adopting a hosted tracker means an external
+account and a decision that belongs to the owner (section 16), and the app would then depend on
+a key that does not exist yet. stdout is captured by Vercel with no account, no key and no cost,
+so this works the moment it deploys. A webhook URL is enough to get real alerts in Slack or
+Discord today, and it is also where a hosted tracker plugs in later — **adding one is a
+configuration change, not a rewrite.**
+*Trade-off:* no grouping, no dashboards, no release tracking. Accept until failure volume makes
+those worth paying for.
+
+### 11.28 Error boundaries report only failures without a digest
+
+*Decision:* `error.tsx` and friends call the browser reporter only when `error.digest` is absent.
+*Why:* a digest means `onRequestError` already recorded it server-side. Reporting from the
+boundary as well would double every server-side failure, and duplicates in an error log are
+worse than they sound — they make frequency meaningless, which is the main thing an error log is
+read for. Digest-less errors happened in the browser and reach the server no other way.
+
+### 11.29 Logged fields are allow-listed, and the client address is not one of them
+
+*Decision:* keep five named headers; drop everything else including `x-forwarded-for`.
+*Why:* a deny-list is defeated by any header nobody anticipated, and `cookie` carries the session
+token. The address is omitted because it identifies a person: the same reasoning that made
+rate-limit keys hashed (11.19) applies to a log line that a support process will read.
+
+### 11.30 The rate limiter now fails open on connection failure too
+
+*Decision:* move `await connectDB()` inside `checkRateLimit`'s existing try.
+*Why:* the limiter documented that it fails open so a database hiccup cannot lock users out, but
+connecting sat outside the guard — so an unreachable database threw straight out of it and every
+rate-limited endpoint returned 500 instead of degrading. This was found by the client-error
+endpoint 500ing during verification, which is a good argument for the endpoint's existence: the
+one thing that must work during an outage is the thing that records outages.
+*Trade-off:* unchanged from the original decision — a MongoDB outage disables abuse protection.
+That was already true for every other failure mode of this function.
+
 ---
 
 ## 12. Remaining roadmap
@@ -2042,7 +2155,7 @@ Priority reflects value per unit of effort and dependency order.
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
 | 1 | **Buy ~$10 OpenRouter credits**; set `AI_MODEL_DEFAULT` to a paid model; raise `AI_DAILY_REQUEST_BUDGET` | Critical | Trivial | Unblocks the core product and makes it ~10× faster | Owner spending money |
-| 2 | **Add error tracking** (Sentry or Vercel) and forward `error.digest` | High | Low | Production failures stop being invisible | None |
+| 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | **Test live video with two real cameras** | High | Low | The only wholly unverified feature | Two devices |
 
@@ -2089,6 +2202,14 @@ Priority reflects value per unit of effort and dependency order.
 ## 13. Lessons learned
 
 ### Major bugs discovered
+
+**The rate limiter did not fail open where it mattered most.** `checkRateLimit` is documented as
+failing open so a database problem cannot lock users out, and its `catch` does exactly that — but
+`await connectDB()` sat *outside* the try, so an unreachable database threw straight past the
+guard. Every rate-limited endpoint would have returned 500 during an outage. Found only because
+the new client-error endpoint 500ed while the database happened to be unreachable. *Lesson: a
+comment describing a failure mode is not evidence of it; the guard has to actually cover the
+call that fails. And the code that records outages is worth testing during one.*
 
 **The core product was entirely broken and nobody knew.** The AI tutor returned a generic 502 to
 every user because `AI_MODEL_DEFAULT` pointed at a paid model on a zero-credit account. It was
@@ -2190,7 +2311,7 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**227 tests passing, 4 skipped, across 24 files.** Baseline before this work: 103.
+**277 tests passing, 4 skipped, across 28 files.** Baseline before this work: 103.
 
 ```
 src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume
@@ -2217,6 +2338,10 @@ src/lib/progress.test.ts                               streak rule incl. gaps an
 src/lib/validations/ai-practice.test.ts                discriminated union, rejected fields
 src/lib/validations/language-profile.test.ts           language profile schema
 src/lib/validations/match.test.ts                      code normalisation, self-match rejection
+src/lib/observability/error-report.test.ts             redaction, header allow-list, one-line format
+src/lib/observability/report.server.test.ts            log record, correlation id, webhook delivery
+src/lib/observability/client-report.test.ts            payload building, per-page cap, noise filter
+src/lib/rateLimit.test.ts                              window maths, duplicate-key race, fail-open
 ```
 
 Runner: Vitest, jsdom, 2 workers, `src/test/setup.ts`, with `server-only` aliased to a mock so
@@ -2285,6 +2410,28 @@ a language.
 **Smoke test.** All eight main routes returning 200 with their own headings server-rendered
 (except `/friends`, which is client-fetched by design).
 
+**Error reporting (`0d8c90b`).** Verified against a running dev server with temporary probe
+routes, which were deleted afterwards:
+
+| Path exercised | Evidence |
+|---|---|
+| Uncaught route throw | `lm-error` line, `scope:"route /api/errorprobe-temp"`, method and path recorded |
+| Caught API 500 | response `{"error":"Internal server error","errorId":"7da63a08f1f4"}` and a logged line **with the same id** |
+| Server Component render failure | `scope:"render /errorprobe-temp"` carrying `digest:"104943454"` — the value the user is shown |
+| Uncaught browser throw | driven in a real Chromium via Playwright; arrived as `origin:"client"`, `scope:"browser window"`, `path:"/errorprobe-temp/client"` |
+| Unhandled promise rejection | arrived as `scope:"browser unhandledrejection"` |
+| Ingest endpoint | 204 valid, 400 on bad kind / empty message / malformed JSON, 413 over 16KB |
+| Secret redaction | a probe error containing a real-shaped connection string logged as `mongodb+srv://***:***@…` and `Bearer [redacted]` |
+| Header allow-list | logged headers were `user-agent` and `content-type` only |
+| Webhook forwarding | local listener received both the caught API error (id matching the HTTP response) and the render failure, **after** the response was sent |
+
+**A caveat about this verification.** MongoDB was unreachable from the shell used for it — the
+SRV lookup is refused because `db.ts` pins DNS to 8.8.8.8 and that traffic is blocked in this
+environment. Everything above therefore ran with the rate limiter failing open. That is a
+faithful test of an outage (and is what surfaced 11.30), but **the rate limit on the ingest
+endpoint has not been observed rejecting a 31st request against a live database.** Worth ten
+seconds of somebody's time on a machine that can reach the cluster.
+
 ### Scenarios NOT yet tested
 
 1. **A real two-participant video call.** No second camera was available. Tokens, rooms and the
@@ -2338,12 +2485,12 @@ before assuming it is harmless.
    match → converse → see progress has been walked end to end with real accounts.
 2. **Honesty as an enforced property.** No fabricated data anywhere; no control that does not
    work; numbers that state their own window. This is unusual and valuable.
-3. **Cost and abuse controls are real.** One tested rate limiter across twelve actions, a
+3. **Cost and abuse controls are real.** One tested rate limiter across thirteen actions, a
    three-tier AI budget whose check *ordering* is a security property, and bounded AI history.
 4. **Failure modes are designed.** A model chain that survives credit exhaustion, retired model
    ids and upstream rate limits; limiters that fail open; a badge count that fails soft; three
    layers of error boundary; explicit database timeouts.
-5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 211 tests, green build.
+5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 277 tests, green build.
 6. **Comments explain why.** The non-obvious decisions are documented where someone would
    otherwise "simplify" them.
 7. **Git history is genuine documentation.** Each commit explains the problem, the reasoning and
@@ -2354,7 +2501,9 @@ before assuming it is harmless.
 1. **One commercial blocker gates the core feature** (50 AI requests/day).
 2. **No self-service password recovery** — a permanent lockout path for credentials users.
 3. **Dev and prod share a database**, with test accounts visible to real users.
-4. **No observability.** Production failures are invisible.
+4. **Nobody is alerted.** Failures are now recorded and correlatable (3.34), but no one is
+   watching the logs and no webhook is configured, so a production incident still waits for a
+   user to report it.
 5. **Video is unverified** end to end.
 6. **Parts of admin are statically verified only.**
 7. **No integration or end-to-end test suite.** Confidence in I/O rests on manual verification
@@ -2434,7 +2583,7 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `0f7fbdb`, clean and synced. 227 tests, 0 lint problems, `tsc` clean, build green.
+`main` @ `0d8c90b`, clean and synced. 277 tests, 0 lint problems, `tsc` clean, build green.
 The core loop works. Nothing is half-finished or uncommitted. Twenty phases of work are
 complete and documented in the git log.
 
@@ -2485,6 +2634,12 @@ complete and documented in the git log.
   caught a cascading-render regression while the friends page was being converted.
 - **Do not remove `sanitiseCustomCss`** from the theme path. See 11.25.
 - **Do not sync a server prop into state with `useEffect`.** See 11.26.
+- **Do not log an error object directly.** Use `reportServerError` / `internalErrorResponse`, or
+  the redaction in 11.29 is bypassed and a connection string ends up in the logs. A bare
+  `console.error(err)` in a new route is a regression, not a style preference.
+- **Do not report from an error boundary when `error.digest` is set.** See 11.28.
+- **Do not put `await connectDB()` back outside the try in `checkRateLimit`.** See 11.30.
+- **Do not add the raw client address to a log record.** See 11.29.
 
 ### What not to rewrite
 
@@ -2498,9 +2653,10 @@ complete and documented in the git log.
 
 ### What to improve
 
-In priority order, matching section 12: error tracking; then verify video and admin with real
-access; then the owner-gated items (credits, database split, password reset); then caching and
-the last two Server Component conversions; then analytics.
+In priority order, matching section 12: **set `ERROR_REPORT_WEBHOOK_URL`** so the reports added
+in `0d8c90b` reach a human (configuration, no code); then verify video and admin with real
+access; then the owner-gated items (credits, database split, password reset); then CSP and
+security headers; then analytics.
 
 ### What requires the owner's approval
 
@@ -2548,6 +2704,18 @@ Everything here existed only in working memory and would otherwise be lost.
   never have seen it.
 - Dev-server cold Turbopack compiles took 20–45s per route. Not a production characteristic; do
   not chase it as a performance problem.
+- **MongoDB was unreachable from the shell during the `0d8c90b` work.** `resolveSrv` on the
+  cluster returns `ECONNREFUSED`, because `db.ts` pins DNS to 8.8.8.8/8.8.4.4 and that traffic
+  is blocked in that environment. The database itself was fine. If DB-backed flows suddenly
+  appear broken, **check this before concluding anything about the application** — and do not
+  "fix" it by deleting `dns.setServers`, which may be load-bearing on the owner's network.
+- **A `next dev` process can outlive the shell that started it.** Stopping the background job
+  left the server listening on 3000 and silently serving stale environment variables, which
+  invalidated one verification run before it was noticed. Check `netstat -ano | grep :3000` and
+  kill the PID directly. A second `next dev` refuses to start and says which PID holds the port.
+- The dev server found running at the start of that session was an unresponsive husk of the fault
+  described in section 14 — listening on 3000, answering nothing, logging `write EPIPE` on a
+  loop. Killing and restarting it was the fix.
 - Accounts created during this work, all in the shared production database:
   `qaftue001` / `qa.ftue.001@lingomatch.test`, `qaphase001` / `qa.phase.001@lingomatch.test`
   (both password `QaTest!2026`), plus `throttleprobe1` and `throttleprobe2` from rate-limit
