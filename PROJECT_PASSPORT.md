@@ -4,8 +4,8 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated when the user-blocking / moderation-audit-trail block was closed, in the commit
-directly on top of `f9b433b`.
+Last updated in the final-review pass that closed the user-blocking / moderation-audit-trail
+block, in the commit directly on top of `9f401ed`.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -146,9 +146,9 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `f9b433b` — "feat: add user blocking and a moderation audit trail" — plus this closing docs commit on top |
+| **HEAD** | `9f401ed` — "docs: close the blocking/moderation block and record voice-first direction" — plus this final-review commit on top |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync as of `f9b433b`, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, and this one) was committed directly on `main` and pushed, so there is no branch left to merge. |
+| **Local vs remote** | In sync as of `9f401ed`, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, and this one) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
 
 All 19 phases are committed and pushed. Every commit message is long-form and explains the
@@ -188,6 +188,7 @@ c9cee82  perf: serve the site palette from the server instead of a per-page fetc
 4926443  feat: add a Content Security Policy and security headers
 cfaa8a2  docs: close the CSP block and record what was verified
 f9b433b  feat: add user blocking and a moderation audit trail
+9f401ed  docs: close the blocking/moderation block and record voice-first direction
 ```
 
 Cumulative diff versus the pre-work baseline (`340b48a`): **133 files changed, +9154 / −4368**,
@@ -1324,14 +1325,23 @@ covering the union/dedup logic, the friendship-clearing side effects, username r
 the fail-soft path when the audit write itself throws — mocked the same way `rateLimit.test.ts`
 mocks its model, since these are I/O-shaped functions rather than pure logic. **Driven live**
 against the two existing QA accounts (`qaftue001`/`qaphase001`, section 17) via a scripted
-credentials sign-in: baseline confirmed they start as friends; A blocking B immediately returned
-403 on a fresh friend request **in both directions**, 403 on opening a chat **in both
-directions**, and excluded each other from search (0 results where there had been ≥1); the
-profile endpoint reported `isBlockedByMe: true` / `isBlockedByThem: false` correctly from A's
-side; unblocking restored the ability to re-friend, and the friendship was explicitly restored
-afterward so the QA accounts are unchanged for future verification runs. Separately confirmed
-`GET /api/admin/moderation-actions` returns 403 to a signed-in non-admin session, matching the
-existing pattern for the other admin endpoints (section 6).
+credentials sign-in, across two passes (the second added at final review, once it was noticed
+the first pass never exercised matching): baseline confirmed they start as friends; A blocking B
+immediately returned 403 on a fresh friend request **in both directions**, 403 on opening a chat
+**in both directions**, and excluded each other from search (0 results where there had been ≥1);
+the profile endpoint reported `isBlockedByMe: true` / `isBlockedByThem: false` correctly from A's
+side. **Matching** — the one enforcement point the first pass had skipped — was then verified
+directly: with a fresh, previously-unused reciprocal language pair queued on both sides, a
+genuinely reciprocal pair matched instantly while unblocked (`matched:true`), then the identical
+shape with a different fresh pair produced `matched:false` on both `POST`/`GET /api/match/chat`
+and `POST /api/match/video` once A had blocked B — confirming exclusion holds at all three query
+sites (chat's `tryMatch`, video's initial match, video's fallback), not just the two that were
+convenient to reach through the UI-facing endpoints. Unblocking restored the ability to
+re-friend; the friendship was explicitly restored afterward (and re-restored after the matching
+pass re-broke it, since blocking clears friendship as designed) so the QA accounts are unchanged
+for future verification runs. Separately confirmed `GET /api/admin/moderation-actions` returns
+403 to a signed-in non-admin session, matching the existing pattern for the other admin endpoints
+(section 6).
 
 **Not verified live: the admin-side write path itself** (an actual ban or report-status change
 producing a `ModerationAction` row, and the Audit log tab rendering it). Reaching it needs an
@@ -2810,9 +2820,10 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `cfaa8a2` plus this block's two commits, clean and synced. 287 tests, 0 lint problems,
-`tsc` clean, build green. The core loop works. Nothing is half-finished or uncommitted.
-Twenty-two-plus phases of work are complete and documented in the git log.
+`main` @ `cfaa8a2` plus this block's three commits (`f9b433b` feat, `9f401ed` docs, and a small
+final-review docs commit that tightened the verification claims below), clean and synced. 287
+tests, 0 lint problems, `tsc` clean, build green. The core loop works. Nothing is half-finished
+or uncommitted. Twenty-two-plus phases of work are complete and documented in the git log.
 
 ### Read these first, in this order
 
