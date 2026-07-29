@@ -4,8 +4,8 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated when the CSP / security-headers block was closed, in the commit directly on top of
-`1d8c98d`.
+Last updated when the user-blocking / moderation-audit-trail block was closed, in the commit
+directly on top of `f9b433b`.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -52,7 +52,10 @@ practise:
    partner and no waiting.
 2. **Human language exchange** — a learner is matched with another user on a reciprocal basis
    (A speaks what B is learning and vice versa) for a text conversation, with optional live
-   video. Video is deliberately optional throughout the product, never a requirement.
+   video. Video is deliberately optional throughout the product, never a requirement. **This is
+   the current, built state.** The owner's binding long-term direction (18.5) is for live voice
+   conversation to become the primary human-exchange mode, with text demoted to a supporting
+   feature — not yet implemented; read 18.5 before changing matching, messaging or the dashboard.
 
 Supporting features: profiles, friend requests, a persistent conversation list, partner
 discovery/search, practice history, and an admin console.
@@ -104,7 +107,7 @@ data as real. All of that is resolved.
 | Dimension | State |
 |---|---|
 | Builds and typechecks | Clean |
-| Automated tests | 277 passing |
+| Automated tests | 287 passing |
 | Lint | 0 errors, 0 warnings |
 | Core AI tutor | Works, persists, streams, is metered |
 | Human matching | Works (a severe silent bug was fixed) |
@@ -143,12 +146,12 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `1d8c98d` — "docs: close the observability block and record product direction" — plus this closing docs commit on top |
+| **HEAD** | `f9b433b` — "feat: add user blocking and a moderation audit trail" — plus this closing docs commit on top |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync as of `1d8c98d`, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; the error-observability and CSP blocks were both committed directly on `main` and pushed, so there is no branch left to merge. |
+| **Local vs remote** | In sync as of `f9b433b`, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, and this one) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
 
-All 18 phases are committed and pushed. Every commit message is long-form and explains the
+All 19 phases are committed and pushed. Every commit message is long-form and explains the
 reasoning, not just the change — **the git log is a primary source of design rationale and is
 worth reading.**
 
@@ -183,6 +186,8 @@ c9cee82  perf: serve the site palette from the server instead of a per-page fetc
 7fa3f3d  docs: record the error reporting work in the passport
 1d8c98d  docs: close the observability block and record product direction
 4926443  feat: add a Content Security Policy and security headers
+cfaa8a2  docs: close the CSP block and record what was verified
+f9b433b  feat: add user blocking and a moderation audit trail
 ```
 
 Cumulative diff versus the pre-work baseline (`340b48a`): **133 files changed, +9154 / −4368**,
@@ -1251,9 +1256,96 @@ CSP examples do this by default and it would silently break the pre-join camera 
 video sessions (3.24). Do not add nonces without first re-deciding the caching trade-off in
 section 4. Do not add `preload` to the HSTS header without the owner's explicit sign-off.
 
----
+### 3.36 User blocking and moderation audit trail
 
-## 4. Architecture
+**Purpose.** Roadmap item #17, re-prioritised upward by the voice-first direction (18.5): a
+live voice conversation cannot be reviewed after the fact the way a text transcript can, so
+safety has to be preventive (who can reach whom at all) rather than only retrospective (review a
+report after it's filed). This block does not touch voice — it closes the gap that would make
+shipping voice-as-primary irresponsible later: **users could not stop an unwanted contact from
+reaching them, and admins had no record of who took which moderation action** (former debt 9.20).
+
+**Blocking.** `User.blockedUsers: [ObjectId]` (`src/lib/models/User.ts`), one-directional to set
+— only the blocker's document changes — but enforced two-directionally everywhere it matters,
+via `isBlockedEitherWay` / `getBlockedUserIds` in `src/lib/blocking.server.ts`. A blocked user
+must not be able to reach the person who blocked them just because they didn't block back.
+
+- `POST /api/users/block` / `DELETE /api/users/block` — **body-based** (`{ targetUserId }`),
+  not `/api/users/[id]/block`. The first attempt at a path-based route broke `next dev` outright
+  with `Error: You cannot use different slug names for the same dynamic path ('id' !==
+  'username')` — Next's App Router requires every dynamic segment at one path level to share a
+  slug name, and `src/app/api/users/[username]/route.ts` already owns that level. Notably, the
+  production build did **not** catch this — it listed the conflicting route in its output with
+  no error, and only `next dev`'s Turbopack router failed on first request. **Do not trust a
+  clean `npm run build` alone to prove a new dynamic route is safe; start the dev server too.**
+  The fix follows the existing `/api/friends/request` convention (also body-based) rather than
+  fighting the router over segment naming.
+- `blockUser()` clears the friendship and any pending friend request **both ways** — staying
+  "friends" with someone you just blocked is incoherent — but leaves existing messages and
+  conversation history alone; blocking stops future contact, it doesn't rewrite the past.
+- Enforced at every point two people can reach each other: `POST /api/friends/request` (403),
+  `POST /api/conversations/upsert` (403), `POST /api/chat/[sessionId]/messages` on an existing
+  conversation (403), `GET /api/users/search` (excluded from results, both directions), and the
+  matching queries in `POST /api/match/chat` and `POST`/`GET /api/match/video` (`$nin` against
+  `getBlockedUserIds`, all three query sites: chat's `tryMatch`, video's initial match, and
+  video's 5-second language-agnostic fallback). `GET /api/users/[username]` returns
+  `isBlockedByMe` / `isBlockedByThem` so the profile page can hide Add Friend/Message and offer
+  Block or Unblock correctly in either direction.
+- **UI.** `(app)/profile/[username]/page.tsx` — a Block icon button next to Message when neither
+  side has blocked the other, an Unblock button when I blocked them, and nothing (no dangling
+  friend/message actions) when either direction is blocked.
+
+**Moderation audit trail.** `ModerationAction` (`src/lib/models/ModerationAction.ts`):
+`actorId`/`actorUsername`, `action` (`ban`|`unban`|`report_reviewed`|`report_resolved`|
+`report_dismissed`), `targetUserId`/`targetUsername`, `reason`, optional `reportId`, `createdAt`.
+**Append-only by convention** — no route updates or deletes a row, and the collection is
+deliberately **absent** from the `admin/db/[collection]` CRUD whitelist (3.19) so the generic
+admin database editor can't rewrite it either. An audit trail an admin can edit isn't an audit
+trail.
+
+`recordModerationAction()` (`src/lib/moderation.server.ts`) is called from `PATCH
+/api/admin/users/[id]` when `isBanned` actually changes (the prior value is read before the
+update so a ban and an unban are told apart, and a PATCH that leaves `isBanned` unchanged logs
+nothing) and from `PATCH /api/admin/reports/[id]` on every status transition. Unlike error
+reporting (`reportServerError`, which fires via `after()` so a slow webhook never delays a
+response), this write is **awaited** — it is the record itself, not a secondary trace of one, so
+it has to exist before the admin action is considered done. It still fails soft: if the insert
+throws, the ban or report update that already succeeded is not undone, and the gap is reported
+through `reportServerError` so it's still visible in the logs even though the audit row is
+missing.
+
+Surfaced read-only at `GET /api/admin/moderation-actions` (admin-only, paginated, newest first)
+and a new **Audit log** tab on `(admin)/admin/reports/page.tsx`, alongside the existing
+open/reviewed/resolved/dismissed tabs. No edit controls, matching 11.2's standing rule against
+decorative or fabricated admin controls.
+
+**Verification.** 10 new unit tests (`blocking.server.test.ts`, `moderation.server.test.ts`)
+covering the union/dedup logic, the friendship-clearing side effects, username resolution, and
+the fail-soft path when the audit write itself throws — mocked the same way `rateLimit.test.ts`
+mocks its model, since these are I/O-shaped functions rather than pure logic. **Driven live**
+against the two existing QA accounts (`qaftue001`/`qaphase001`, section 17) via a scripted
+credentials sign-in: baseline confirmed they start as friends; A blocking B immediately returned
+403 on a fresh friend request **in both directions**, 403 on opening a chat **in both
+directions**, and excluded each other from search (0 results where there had been ≥1); the
+profile endpoint reported `isBlockedByMe: true` / `isBlockedByThem: false` correctly from A's
+side; unblocking restored the ability to re-friend, and the friendship was explicitly restored
+afterward so the QA accounts are unchanged for future verification runs. Separately confirmed
+`GET /api/admin/moderation-actions` returns 403 to a signed-in non-admin session, matching the
+existing pattern for the other admin endpoints (section 6).
+
+**Not verified live: the admin-side write path itself** (an actual ban or report-status change
+producing a `ModerationAction` row, and the Audit log tab rendering it). Reaching it needs an
+admin account, which — as recorded in section 17 — was not available during this block for the
+same reason it wasn't during the original admin work: promoting an account requires either a
+direct database write or the owner's authenticated session, and both were correctly out of
+reach. This is a genuine access limitation, not a skipped step; it is the same gap already
+tracked as roadmap #3 ("promote one account to admin and click through every admin page"), and
+the Audit log tab should be exercised in that same pass.
+
+**Production readiness.** Mostly Ready. Blocking is fully implemented and verified live
+end-to-end. The audit trail is implemented, unit tested, and matches the codebase's established
+patterns closely enough to trust, but — like four other admin pages before it (3.19) — its
+write path has only been exercised through code review and tests, not a real admin session.
 
 ### Frontend
 
@@ -1623,11 +1715,13 @@ server.
 2. **Account enumeration** on registration.
 3. **No password complexity requirement.**
 4. **Admin surface is very powerful** — `admin/db` can edit any whitelisted collection,
-   including `users`. There is no audit log of admin actions.
+   including `users`. `moderationactions` is deliberately **excluded** from that whitelist —
+   see 3.36 — so the one collection meant to be tamper-evident can't be edited through it.
 5. **No email verification enforcement**, so email ownership is unproven for credentials
    accounts.
 6. **Shared dev/prod database** — a careless local script could damage production data.
-7. **No moderation audit trail.**
+7. ~~No moderation audit trail.~~ **Resolved** — see 3.36. Bans/unbans and report status
+   changes are now recorded in `ModerationAction` with actor, target and reason.
 
 ---
 
@@ -1731,7 +1825,9 @@ load-time request, and is a small known waste.
 | Settings | **Mostly Ready** | Works; client-fetched; two buttons share one endpoint |
 | Subscription/billing | **Not Implemented** | Fiction removed; scaffolding retained deliberately |
 | Admin console | **Mostly Ready** | Real data throughout; four pages statically verified only |
-| Reports & moderation | **Mostly Ready** | Real queue and working actions; no audit trail or appeals |
+| Reports & moderation | **Mostly Ready** | Real queue and working actions; audit trail now exists (3.36), no appeals |
+| User blocking | **Production Ready** | Enforced across friends, messaging, matching and search; verified live with two accounts |
+| Moderation audit trail | **Mostly Ready** | Implemented, unit tested, matches established patterns; write path not yet exercised through a real admin session (3.36) |
 | Rate limiting | **Production Ready** | One tested implementation across 13 actions; now genuinely fails open when the database is unreachable |
 | Error handling | **Production Ready** | Three boundary layers, verified with a real crash |
 | 404 handling | **Production Ready** | Branded, in-app variant keeps navigation |
@@ -1870,7 +1966,10 @@ appears.
 data" both `DELETE /api/user/me/ai-profile`. Neither misrepresents what it does, but "Delete my
 data" implies more than AI preferences.
 
-**9.20 No moderation audit trail.** No record of who banned whom.
+**9.20 ~~No moderation audit trail.~~** Resolved in the blocking/moderation block (see 3.36) —
+`ModerationAction` records who banned/unbanned whom and who moved a report to reviewed/resolved/
+dismissed, with a reason where one exists. *What remains:* there is no UI to search or filter
+the log beyond newest-first, and no export.
 
 **9.21 `dns.setServers(['8.8.8.8','8.8.4.4'])` in `db.ts` is unexplained.** Predates this work;
 plausibly involved in the 13-minute connection stall. **Investigate before removing — it may
@@ -2226,8 +2325,8 @@ Priority reflects value per unit of effort and dependency order.
 
 **Read section 18 before picking anything from this list.** It records permanent
 product-direction constraints — AI provider independence, teaching in the learner's own
-language, and SEO as a product requirement — that decide which of these items may be built and
-how.
+language, SEO as a product requirement, and (18.5) voice-first human exchange — that decide
+which of these items may be built and how.
 
 ### Immediate (before any wider testing)
 
@@ -2259,7 +2358,7 @@ how.
 | 14 | **Build the real admin analytics page** on those events | Medium | Moderate | Replaces the honest placeholder | #13 |
 | 15 | **Delete superseded Cloudinary avatars** | Medium | Low | Stops a storage-cost leak | Careful — deletes user files |
 | 16 | **Split the 774-line messages page** | Medium | Moderate | Maintainability. **Move the polling/realtime logic, do not rewrite it** | None |
-| 17 | **User blocking, plus a moderation audit trail** | Medium | Moderate | Real safety for stranger conversation | None |
+| 17 | ~~User blocking, plus a moderation audit trail~~ | — | — | **Done** — see 3.36. Re-prioritised upward and implemented in the same block that recorded the voice-first direction (18.5), because live voice raises the cost of shipping without it | — |
 | 18 | **Push notification when a match is found** | Medium | Moderate | Matching currently requires staring at the page | None |
 | 19 | **Backwards pagination through message history** | Low | Moderate | Users can only see the newest 100 | None |
 | 20 | **Reduce the `jwt` callback DB read** | Low | Moderate | One fewer read per page load | Accepts delayed ban propagation |
@@ -2368,6 +2467,14 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
   *Lesson: an assertion on an unreadable response is not an assertion.*
 - A first attempt to trip the burst limit failed because each provider call took ~5s, so fewer
   than 15 fit in a 60-second window. The limiter was correct; the test was wrong.
+- A new route at `/api/users/[id]/block` **passed `npm run build` cleanly** — the route even
+  appeared in the build's own page listing — but broke `next dev` outright on first request,
+  because `/api/users/[username]/route.ts` already owns that path level and Next requires one
+  slug name per dynamic segment. *Lesson: a clean production build does not prove a new dynamic
+  route is safe; `next dev` enforces this particular constraint and the production build did
+  not. Start the dev server after adding any dynamic API route, not just after adding a page.*
+  Fixed by moving to a body-based endpoint (3.36), matching `/api/friends/request`'s existing
+  convention rather than fighting the router over segment naming.
 
 ### Important engineering lessons
 
@@ -2390,7 +2497,9 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**277 tests passing, 4 skipped, across 28 files.** Baseline before this work: 103.
+**287 tests passing, 4 skipped, across 30 files.** Baseline before this work: 103. The ten newest
+(`blocking.server.test.ts`, `moderation.server.test.ts`) cover the blocking/moderation-audit
+block (3.36).
 
 ```
 src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume
@@ -2608,7 +2717,7 @@ before assuming it is harmless.
 4. **Failure modes are designed.** A model chain that survives credit exhaustion, retired model
    ids and upstream rate limits; limiters that fail open; a badge count that fails soft; three
    layers of error boundary; explicit database timeouts.
-5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 277 tests, green build.
+5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 287 tests, green build.
 6. **Comments explain why.** The non-obvious decisions are documented where someone would
    otherwise "simplify" them.
 7. **Git history is genuine documentation.** Each commit explains the problem, the reasoning and
@@ -2701,9 +2810,9 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `1d8c98d` plus this block's commit, clean and synced. 277 tests, 0 lint problems, `tsc`
-clean, build green. The core loop works. Nothing is half-finished or uncommitted.
-Twenty-one-plus phases of work are complete and documented in the git log.
+`main` @ `cfaa8a2` plus this block's two commits, clean and synced. 287 tests, 0 lint problems,
+`tsc` clean, build green. The core loop works. Nothing is half-finished or uncommitted.
+Twenty-two-plus phases of work are complete and documented in the git log.
 
 ### Read these first, in this order
 
@@ -2971,11 +3080,17 @@ If you take one working practice from this handover, take that one.
 
 ## 18. Permanent product direction
 
-**Status: binding constraints set by the owner, recorded 2026-07-30.** These are not tasks in
-the current roadmap and none of them were implemented in the error-observability block. They
-constrain how future architecture and roadmap decisions are made. Read this section before
-proposing any change to the AI layer, the language model configuration, or the public-facing
-surface — a design that violates one of these is wrong even if it is otherwise good.
+**Status: binding constraints set by the owner, recorded 2026-07-30 (18.1–18.3) and extended
+2026-07-30 (18.5).** These are not tasks in the current roadmap and none of them were
+implemented in the error-observability or CSP blocks. They constrain how future architecture and
+roadmap decisions are made. Read this section before proposing any change to the AI layer, the
+language model configuration, the human-matching/session model, or the public-facing surface —
+a design that violates one of these is wrong even if it is otherwise good.
+
+**18.5 supersedes the "text conversation, with optional live video" framing in section 1** and in
+3.9/3.11/3.24 as the long-term direction. Those sections still accurately describe what is
+*built today* — do not rewrite them to describe a future state as current. Read 18.5 before
+touching matching, messaging, video, or the AI tutor's product surface.
 
 ### 18.1 AI provider strategy
 
@@ -3067,6 +3182,83 @@ governs *within* a release. Section 18 governs *what may be built at all*:
 |---|---|
 | 1 — buy AI credits, pin a paid model | Still correct, but pin it **through** `resolveModelChain()`; do not hard-code a vendor anywhere else (18.1) |
 | 13 — product analytics | Becomes a **precondition for any paid advertising** (18.3), not only a learning tool |
+| 17 — user blocking + moderation audit trail | **Re-prioritised upward by 18.5, and done** — see 3.36. Live voice between strangers cannot be reviewed after the fact the way a text transcript can; safety controls needed to exist *before* voice is the default experience, not after |
 | 22 — payments | Unchanged; still requires demand evidence |
-| 24 — speaking practice | **Requires the written architecture and product plan first** (18.2). This is now the largest planned initiative in the project |
+| 24 — speaking practice | **Requires the written architecture and product plan first** (18.2), which 18.5 now says must cover human-to-human voice matching as well as the AI tutor, not the tutor alone. This is the largest planned initiative in the project |
 | — new | Public SEO surface (landing pages, sitemap, robots, structured data, per-pair content) is now an explicit future roadmap area (18.3) |
+| — new | Voice-first human exchange (18.5): audio-first matching UX, a moderation model that assumes conversations are not reviewable after the fact, and demoting text to a supporting role — see 18.5 for what this does and does not authorise building now |
+
+### 18.5 Voice-first human exchange (primary interaction model)
+
+**Status: binding, recorded 2026-07-30. Not implemented. Does not authorise starting
+implementation on its own — see "What this block does not do" below.**
+
+**The owner's direction:** text messaging between users must stop being the primary way people
+practise together. The product's centre of gravity moves to **live, real-time voice
+conversation between learners**. Text chat continues to exist, but only as a **supporting**
+feature — sharing a word, a link, a correction, a translation, a note — not as the thing the
+architecture is organised around. Optional video (3.24) is unaffected by this and remains
+optional; this direction is about audio being the default *human exchange* mode, not about
+making video mandatory.
+
+This extends, and does not replace, 18.2's existing requirement that the **AI tutor** eventually
+become a spoken conversation partner. 18.2 was written about the AI tutor specifically; 18.5
+applies the same shift to **human-to-human** matching, which 18.2 did not previously cover.
+
+**Why this is a binding architectural constraint, not a UI reskin:**
+
+- **Matching.** `MatchRequest`/`Conversation` currently model exactly two live modes: `chat`
+  (text, no urgency) and `video` (live, ghost-detected, 12s liveness threshold). Voice-first
+  means the *default* queue a user lands in should behave like `video`'s liveness model — a
+  live two-party session — not like `chat`'s asynchronous one. Concretely this points toward a
+  third session type (`voice`: an audio-only LiveKit room, i.e. `video` minus the camera track,
+  not a new realtime vendor) sharing `video`'s matching liveness mechanics rather than `chat`'s.
+  **Text as support means the existing per-user LiveKit data-room message channel (3.11) is the
+  right transport for in-call text** — sharing a word or correction during a live voice
+  session — rather than building a second text system.
+- **Liquidity gets harder, not easier.** Section 10 already names two-sided liquidity as the
+  biggest matching risk for *video*, which is optional today. Making a live-session mode the
+  *primary* mode means that risk now applies to the primary experience, not an optional extra.
+  The AI tutor's role as "the always-available floor" (section 1) becomes more important, not
+  less, as the human-matching liquidity bar rises — **do not deprioritise the AI tutor while
+  building this.**
+- **Moderation is the load-bearing prerequisite, not an afterthought.** A text conversation
+  leaves a transcript an admin can review after a report. A live voice call, by default, leaves
+  nothing — reviewing "what was said" would require recording and storing audio of strangers
+  talking to each other, which is its own consent/privacy/legal question this direction does
+  **not** resolve and should not be assumed. Until that question is answered, moderation for
+  voice has to be **preventive** (who can reach whom at all) rather than **retrospective**
+  (review a transcript after a report). That is precisely what blocking and a moderation audit
+  trail are for — see roadmap #17, now re-prioritised (18.4) — and it is why this block
+  implements that item rather than voice matching itself: shipping a primary voice-matching mode
+  with no working block/report loop and no accountable admin action log would put strangers in
+  live audio with each other with weaker safety tooling than the text product already has today.
+- **AI tutoring.** No change to 18.1 (provider independence) or 18.2's core requirement (teach in
+  the learner's own language, no mandatory English bridge). 18.5 adds that when the tutor's
+  speech capability (roadmap #24) is built, the same STT/LLM/TTS pipeline consideration and the
+  same "an evidence-based plan before code" gate apply, and that plan should now design the tutor
+  and human-to-human voice as one coherent audio product surface (shared audio infrastructure,
+  shared moderation assumptions) rather than two unrelated features that happen to both use a
+  microphone.
+- **Infrastructure.** No new realtime vendor is implied — LiveKit already carries both audio and
+  video tracks, so an audio-only room is a client/room-config change, not a new integration. A
+  speech-to-text and text-to-speech vendor for the AI tutor's future voice capability **is** new,
+  and 18.1's provider-agnosticism applies to it exactly as it applies to the LLM: no hard-coded
+  vendor, no leaking a vendor/model name into the product surface.
+- **UX.** The dashboard's current framing — "Text Practice" and "Live Practice" as co-equal cards
+  (3.14), "practise your way … text-first, video optional" (section 1) — is the thing this
+  direction eventually overturns. **Do not reword the dashboard or landing copy to claim a
+  voice-first product before voice matching exists** (11.2's rule against fiction applies here
+  exactly as it did to the old `/subscription` page); update the copy in the same implementation
+  block that ships the capability, not before.
+- **SEO (18.3).** Unaffected in mechanism, but future public landing/content pages should be
+  written to describe live voice conversation practice once that is real, not text messaging —
+  a content detail for whenever that page-writing work happens, not for this block.
+
+**What this block does not do:** it does not add a `voice` match/session type, does not change
+the dashboard or landing copy, and does not start the AI tutor speech work. Per 18.2, that
+requires its own evidence-based architecture and product plan first — and per this section, that
+plan must now scope human-to-human voice matching alongside the tutor. **What this block does
+do** is update this passport with the direction and act on the one piece of preparatory work that
+is genuinely evidence-justified today and has no owner-approval dependency: user blocking and a
+moderation audit trail (roadmap #17), because voice-first raises the cost of shipping without it.
