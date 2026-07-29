@@ -18,6 +18,7 @@ function renderClient() {
   return render(<AIPracticeClient profile={PROFILE} />)
 }
 
+/** Error responses are still plain JSON, so this covers every failure case. */
 function mockFetch(body: unknown, status = 200) {
   return vi.spyOn(global, 'fetch').mockResolvedValueOnce(
     new Response(JSON.stringify(body), {
@@ -25,6 +26,36 @@ function mockFetch(body: unknown, status = 200) {
       headers: { 'Content-Type': 'application/json' },
     }),
   )
+}
+
+/**
+ * Builds the newline-delimited event stream a successful reply now returns.
+ * `chunks` lets a test assert that text renders progressively.
+ */
+function streamResponse(chunks: string[], sessionId = 'a'.repeat(24)) {
+  const encoder = new TextEncoder()
+  const events = [
+    { type: 'session', sessionId },
+    ...chunks.map((text) => ({ type: 'delta', text })),
+    { type: 'done' },
+  ]
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+      }
+      controller.close()
+    },
+  })
+  return new Response(body, {
+    status: 200,
+    headers: { 'Content-Type': 'application/x-ndjson' },
+  })
+}
+
+/** Mocks one successful streamed reply, delivered as a single chunk. */
+function mockReply(reply: string) {
+  return vi.spyOn(global, 'fetch').mockResolvedValueOnce(streamResponse([reply]))
 }
 
 beforeEach(() => {
@@ -100,7 +131,7 @@ describe('AIPracticeClient — loading state', () => {
 
 describe('AIPracticeClient — session start', () => {
   it('transitions to chat view and shows AI reply', async () => {
-    mockFetch({ reply: 'Hola! ¿Cómo te llamas?' })
+    mockReply('Hola! ¿Cómo te llamas?')
 
     renderClient()
     await act(async () => {
@@ -240,9 +271,117 @@ describe('AIPracticeClient — duplicate submission prevention', () => {
   })
 })
 
+describe('AIPracticeClient — streamed replies', () => {
+  it('assembles a reply delivered across several chunks', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      streamResponse(['Hola', ', ', '¿qué tal?']),
+    )
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    // One message containing the joined text, not three separate bubbles.
+    await waitFor(() => {
+      expect(screen.getByText('Hola, ¿qué tal?')).toBeInTheDocument()
+    })
+  })
+
+  it('handles events split across chunk boundaries', async () => {
+    const encoder = new TextEncoder()
+    const raw =
+      `${JSON.stringify({ type: 'session', sessionId: 'b'.repeat(24) })}\n` +
+      `${JSON.stringify({ type: 'delta', text: 'Buenos ' })}\n` +
+      `${JSON.stringify({ type: 'delta', text: 'días' })}\n` +
+      `${JSON.stringify({ type: 'done' })}\n`
+    // Split mid-event so the client must buffer the partial line.
+    const cut = Math.floor(raw.length / 2)
+
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(raw.slice(0, cut)))
+            controller.enqueue(encoder.encode(raw.slice(cut)))
+            controller.close()
+          },
+        }),
+        { status: 200 },
+      ),
+    )
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Buenos días')).toBeInTheDocument()
+    })
+  })
+
+  it('surfaces a mid-stream error while keeping the partial reply', async () => {
+    const encoder = new TextEncoder()
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const event of [
+              { type: 'session', sessionId: 'c'.repeat(24) },
+              { type: 'delta', text: 'Empecé a responder' },
+              { type: 'error', error: 'The reply was cut short. Please try again.', retryable: true },
+            ]) {
+              controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+            }
+            controller.close()
+          },
+        }),
+        { status: 200 },
+      ),
+    )
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Empecé a responder')).toBeInTheDocument()
+      expect(screen.getByText(/cut short/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+    })
+  })
+})
+
+describe('AIPracticeClient — resuming a stored session', () => {
+  it('opens straight into the conversation with its saved settings', () => {
+    render(
+      <AIPracticeClient
+        profile={PROFILE}
+        initialSession={{
+          id: 'd'.repeat(24),
+          targetLanguageCode: 'de',
+          mode: 'Travel',
+          messages: [
+            { role: 'assistant', content: 'Guten Tag!' },
+            { role: 'user', content: 'Hallo' },
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Guten Tag!')).toBeInTheDocument()
+    expect(screen.getByText('Hallo')).toBeInTheDocument()
+    // The stored session's language and mode win over the profile default.
+    expect(screen.getByText('Travel')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /start practice/i })).not.toBeInTheDocument()
+  })
+})
+
 describe('AIPracticeClient — message sending', () => {
   it('sends user message and shows AI reply', async () => {
-    mockFetch({ reply: 'Hola!' })
+    mockReply('Hola!')
 
     renderClient()
     await act(async () => {
@@ -251,7 +390,7 @@ describe('AIPracticeClient — message sending', () => {
 
     await waitFor(() => expect(screen.getByText('Hola!')).toBeInTheDocument())
 
-    mockFetch({ reply: 'Me llamo Claude.' })
+    mockReply('Me llamo Claude.')
 
     const textarea = screen.getByLabelText('Your message')
     await act(async () => {
@@ -266,14 +405,14 @@ describe('AIPracticeClient — message sending', () => {
   })
 
   it('Enter key submits message', async () => {
-    mockFetch({ reply: 'Hello!' })
+    mockReply('Hello!')
     renderClient()
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
     })
     await waitFor(() => expect(screen.getByText('Hello!')).toBeInTheDocument())
 
-    mockFetch({ reply: 'Response' })
+    mockReply('Response')
     const textarea = screen.getByLabelText('Your message')
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'Test message' } })
@@ -286,7 +425,7 @@ describe('AIPracticeClient — message sending', () => {
 
 describe('AIPracticeClient — new session', () => {
   it('shows confirmation when session has messages', async () => {
-    mockFetch({ reply: 'Hello!' })
+    mockReply('Hello!')
 
     renderClient()
     await act(async () => {

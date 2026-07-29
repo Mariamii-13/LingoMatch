@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { callTutor, OpenRouterError } from './openrouter'
+import { callTutor, OpenRouterError, streamTutor } from './openrouter'
 import { FREE_TUTOR_MODELS } from './models'
 
 const MOCK_VALID_RESPONSE = {
@@ -273,5 +273,97 @@ describe('callTutor', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(OpenRouterError)
     }
+  })
+})
+
+function sseResponse(frames: string[]) {
+  const encoder = new TextEncoder()
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const frame of frames) controller.enqueue(encoder.encode(frame))
+        controller.close()
+      },
+    }),
+    { status: 200 },
+  )
+}
+
+function delta(content: string) {
+  return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`
+}
+
+async function collect(gen: AsyncGenerator<string>): Promise<string[]> {
+  const out: string[] = []
+  for await (const chunk of gen) out.push(chunk)
+  return out
+}
+
+describe('streamTutor', () => {
+  it('yields content deltas in order', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      sseResponse([delta('Hola'), delta(', '), delta('¿qué tal?'), 'data: [DONE]\n\n']),
+    )
+    await expect(collect(streamTutor(BASE_REQ))).resolves.toEqual(['Hola', ', ', '¿qué tal?'])
+  })
+
+  it('reassembles frames split across network chunks', async () => {
+    const whole = delta('Buenos días')
+    const cut = Math.floor(whole.length / 2)
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      sseResponse([whole.slice(0, cut), whole.slice(cut), 'data: [DONE]\n\n']),
+    )
+    await expect(collect(streamTutor(BASE_REQ))).resolves.toEqual(['Buenos días'])
+  })
+
+  it('ignores keep-alives, comments and empty deltas', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      sseResponse([
+        ': ping\n\n',
+        '\n',
+        `data: ${JSON.stringify({ choices: [{ delta: {} }] })}\n\n`,
+        delta(''),
+        delta('Hola'),
+        'data: [DONE]\n\n',
+      ]),
+    )
+    await expect(collect(streamTutor(BASE_REQ))).resolves.toEqual(['Hola'])
+  })
+
+  it('requests a streaming completion', async () => {
+    const spy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(sseResponse([delta('hi'), 'data: [DONE]\n\n']))
+    await collect(streamTutor(BASE_REQ))
+    const body = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.stream).toBe(true)
+  })
+
+  // Availability failures must surface before any bytes are committed, so the
+  // route can still answer with a real HTTP status instead of a broken stream.
+  it('throws rather than yielding when every model lacks credits', async () => {
+    vi.spyOn(global, 'fetch').mockImplementation(async () =>
+      jsonResponse({ error: { code: 402 } }, 402),
+    )
+    await expect(collect(streamTutor(BASE_REQ))).rejects.toMatchObject({
+      code: 'NO_CREDITS',
+    })
+  })
+
+  it('advances past an unavailable model before streaming', async () => {
+    const spy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 402 } }, 402))
+      .mockResolvedValueOnce(sseResponse([delta('Hola'), 'data: [DONE]\n\n']))
+
+    await expect(collect(streamTutor(BASE_REQ))).resolves.toEqual(['Hola'])
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('throws MISSING_CONFIG without an API key', async () => {
+    delete process.env.OPENROUTER_API_KEY
+    await expect(collect(streamTutor(BASE_REQ))).rejects.toMatchObject({
+      code: 'MISSING_CONFIG',
+    })
   })
 })

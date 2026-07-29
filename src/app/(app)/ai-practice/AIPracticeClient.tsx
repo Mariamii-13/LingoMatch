@@ -109,44 +109,89 @@ export function AIPracticeClient({
         return
       }
 
-      let data: {
-        reply?: string
-        sessionId?: string
-        error?: string
-        code?: string
-        retryable?: boolean
-      }
-      try {
-        data = await res.json()
-      } catch {
-        setError({ message: 'Unexpected response from server.', retryable: true })
-        setIsLoading(false)
-        return
-      }
-
+      // Failures before the reply begins still arrive as ordinary JSON errors.
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}) as Record<string, unknown>)
         setError({
-          message: data.error ?? 'Something went wrong. Please try again.',
-          code: data.code,
+          message: (data.error as string) ?? 'Something went wrong. Please try again.',
+          code: data.code as string | undefined,
           // The server knows when retrying cannot help — a spent daily
           // allowance will not recover for hours, so do not offer a Retry
           // button that is guaranteed to fail.
-          retryable: data.retryable ?? (res.status !== 400 && res.status !== 401),
+          retryable: (data.retryable as boolean) ?? (res.status !== 400 && res.status !== 401),
         })
         setIsLoading(false)
         return
       }
 
-      if (data.sessionId) setSessionId(data.sessionId)
-
-      const aiMsg: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data.reply!,
+      if (!res.body) {
+        setError({ message: 'Unexpected response from server.', retryable: true })
+        setIsLoading(false)
+        return
       }
-      setMessages((prev) => [...prev, aiMsg])
-      setError(null)
-      setIsLoading(false)
+
+      /*
+       * The reply streams as newline-delimited JSON events. A placeholder
+       * message is appended once and then grown in place, so the learner reads
+       * the tutor's words as they arrive instead of waiting out the full
+       * six-to-thirteen second reply behind a spinner.
+       */
+      const replyId = crypto.randomUUID()
+      let started = false
+
+      const appendDelta = (text: string) => {
+        if (!started) {
+          started = true
+          setIsLoading(false)
+          setMessages((prev) => [...prev, { id: replyId, role: 'assistant', content: text }])
+          return
+        }
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === replyId ? { ...message, content: message.content + text } : message,
+          ),
+        )
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      const handleEvent = (line: string) => {
+        const trimmed = line.trim()
+        if (!trimmed) return
+        let event: { type?: string; text?: string; sessionId?: string; error?: string; retryable?: boolean }
+        try {
+          event = JSON.parse(trimmed)
+        } catch {
+          return
+        }
+        if (event.type === 'session' && event.sessionId) setSessionId(event.sessionId)
+        else if (event.type === 'delta' && event.text) appendDelta(event.text)
+        else if (event.type === 'error') {
+          setError({
+            message: event.error ?? 'The reply was cut short. Please try again.',
+            retryable: event.retryable ?? true,
+          })
+        }
+      }
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() ?? ''
+          for (const line of lines) handleEvent(line)
+        }
+        if (buffer) handleEvent(buffer)
+      } catch {
+        setError({ message: 'The connection dropped mid-reply. Please try again.', retryable: true })
+      } finally {
+        reader.releaseLock()
+        setIsLoading(false)
+      }
     },
     [settings, sessionId],
   )

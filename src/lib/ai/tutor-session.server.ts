@@ -51,7 +51,13 @@ export async function getActiveTutorSession(
   userId: string,
 ): Promise<TutorSessionView | null> {
   await connectDB()
-  const doc = await TutorSession.findOne({ userId, status: 'active' })
+  const doc = await TutorSession.findOne({
+    userId,
+    status: 'active',
+    // A session is created before its first reply streams, so one that never
+    // produced a message is an abandoned shell, not something to resume.
+    'messages.0': { $exists: true },
+  })
     .sort({ updatedAt: -1 })
     .lean<TutorSessionDoc | null>()
   return doc ? toView(doc) : null
@@ -60,12 +66,14 @@ export async function getActiveTutorSession(
 /**
  * Starts a new session, ending any other active one first so a user always has
  * at most one session to resume and cannot accumulate stale transcripts.
+ *
+ * Created empty: the opening reply streams to the client, so its text is only
+ * known once the stream finishes.
  */
 export async function startTutorSession(args: {
   userId: string
   targetLanguageCode: string
   mode: string
-  firstReply: string
 }): Promise<TutorSessionView> {
   await connectDB()
   await endActiveTutorSessions(args.userId)
@@ -75,10 +83,23 @@ export async function startTutorSession(args: {
     targetLanguageCode: args.targetLanguageCode,
     mode: args.mode,
     status: 'active',
-    messages: [{ role: 'assistant', content: args.firstReply }],
+    messages: [],
   })
 
   return toView(doc as unknown as TutorSessionDoc)
+}
+
+/** Records the tutor's opening message once its stream completes. */
+export async function appendAssistantMessage(args: {
+  sessionId: string
+  userId: string
+  content: string
+}): Promise<void> {
+  await connectDB()
+  await TutorSession.updateOne(
+    { _id: args.sessionId, userId: args.userId, status: 'active' },
+    { $push: { messages: { role: 'assistant', content: args.content, createdAt: new Date() } } },
+  )
 }
 
 export async function endActiveTutorSessions(userId: string): Promise<void> {

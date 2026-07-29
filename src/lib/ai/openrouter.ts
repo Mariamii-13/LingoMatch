@@ -90,17 +90,23 @@ function logAttemptFailure(modelId: string, status: number, body: string): void 
   )
 }
 
-export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
+function requireApiKey(): string {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
     throw new OpenRouterError('OPENROUTER_API_KEY is not configured', 'MISSING_CONFIG')
   }
+  return apiKey
+}
 
+function requireChain(): string[] {
   const chain = resolveModelChain('defaultTutor')
   if (chain.length === 0) {
     throw new OpenRouterError('No AI model is configured', 'MISSING_CONFIG')
   }
+  return chain
+}
 
+function buildMessages(req: TutorRequest): { role: string; content: string }[] {
   const systemPrompt = buildSystemPrompt(
     req.targetLanguage,
     req.level,
@@ -116,6 +122,135 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
   if (req.userMessage !== undefined) {
     messages.push({ role: 'user', content: req.userMessage })
   }
+  return messages
+}
+
+/**
+ * Opens a streaming completion, walking the model chain by the same rules as
+ * callTutor. Returns only once a model has accepted the request, so every
+ * availability failure still surfaces as a thrown error before any bytes have
+ * been committed to the caller's response.
+ */
+async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>> {
+  const apiKey = requireApiKey()
+  const chain = requireChain()
+  const messages = buildMessages(req)
+
+  let lastError: OpenRouterError | null = null
+
+  for (const modelId of chain) {
+    const controller = new AbortController()
+    // Bounds time to the response headers; cleared once the body starts, since
+    // a long reply is not a stalled one.
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+    let response: Response
+    try {
+      response = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          stream: true,
+        }),
+        signal: controller.signal,
+      })
+    } catch (err) {
+      clearTimeout(timeoutId)
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new OpenRouterError(
+          `Request to ${modelId} timed out after ${TIMEOUT_MS / 1000} seconds`,
+          'TIMEOUT',
+        )
+      }
+      lastError = new OpenRouterError(
+        'Network error communicating with AI provider',
+        'PROVIDER_ERROR',
+      )
+      logAttemptFailure(modelId, 0, err instanceof Error ? err.message : String(err))
+      continue
+    }
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '')
+      logAttemptFailure(modelId, response.status, body)
+
+      const error = new OpenRouterError(
+        describeStatus(response.status, modelId),
+        classifyStatus(response.status),
+        response.status,
+      )
+      if (!isModelUnavailable(response.status)) throw error
+      lastError = error
+      continue
+    }
+
+    if (!response.body) {
+      lastError = new OpenRouterError('AI provider returned no stream', 'MALFORMED_RESPONSE')
+      logAttemptFailure(modelId, response.status, 'empty body')
+      continue
+    }
+
+    return response.body
+  }
+
+  throw lastError ?? new OpenRouterError('No AI model was able to answer', 'PROVIDER_ERROR')
+}
+
+/**
+ * Yields reply text as the model produces it.
+ *
+ * A full reply takes 6-13 seconds, which is a long time to watch a spinner
+ * during a conversation, so the words appear as they arrive.
+ */
+export async function* streamTutor(req: TutorRequest): AsyncGenerator<string> {
+  const body = await openStream(req)
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      // Server-sent events are newline delimited; the last fragment may be a
+      // partial line, so it stays in the buffer until the rest arrives.
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('data:')) continue
+        const payload = trimmed.slice(5).trim()
+        if (!payload || payload === '[DONE]') continue
+
+        try {
+          const parsed = JSON.parse(payload)
+          const delta = parsed?.choices?.[0]?.delta?.content
+          if (typeof delta === 'string' && delta.length > 0) yield delta
+        } catch {
+          // Keep-alive comments and non-JSON frames are expected; skip them.
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
+  const apiKey = requireApiKey()
+  const chain = requireChain()
+  const messages = buildMessages(req)
 
   let lastError: OpenRouterError | null = null
 

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { aiPracticeRequestSchema } from '@/lib/validations/ai-practice'
-import { callTutor, OpenRouterError } from '@/lib/ai/openrouter'
+import { callTutor, OpenRouterError, streamTutor } from '@/lib/ai/openrouter'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { buildTutorContext } from '@/lib/ai/tutor-context'
 import { checkTutorBudget } from '@/lib/ai/tutor-budget'
 import {
+  appendAssistantMessage,
   appendTutorExchange,
   endActiveTutorSessions,
   loadOwnedTutorSession,
@@ -126,32 +127,95 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const tutorResponse = await callTutor({
+    const generator = streamTutor({
       ...tutorContext,
       mode: mode as Parameters<typeof callTutor>[0]['mode'],
       history,
       userMessage: parsed.action === 'message' ? parsed.message : undefined,
     })
 
-    // Persisted only after a successful reply, so a provider failure never
-    // leaves a turn half-recorded.
-    if (parsed.action === 'message' && sessionId) {
-      await appendTutorExchange({
-        sessionId,
-        userId,
-        userMessage: parsed.message,
-        assistantReply: tutorResponse.reply,
-      })
-      return NextResponse.json({ reply: tutorResponse.reply, sessionId })
-    }
+    /*
+     * Pull the first chunk before committing to a 200. Everything that can go
+     * wrong with reaching a model — no credits, rate limits, timeouts, a whole
+     * exhausted chain — happens here, so those still arrive as ordinary HTTP
+     * errors with a proper status instead of being buried inside a stream the
+     * client has already started rendering.
+     */
+    const first = await generator.next()
 
-    const created = await startTutorSession({
-      userId,
-      targetLanguageCode,
-      mode,
-      firstReply: tutorResponse.reply,
+    // Created only now, so a failed start never leaves an empty session behind.
+    const activeSessionId =
+      sessionId ?? (await startTutorSession({ userId, targetLanguageCode, mode })).id
+
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: Record<string, unknown>) =>
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+
+        let reply = first.done ? '' : (first.value ?? '')
+
+        send({ type: 'session', sessionId: activeSessionId })
+        if (reply) send({ type: 'delta', text: reply })
+
+        try {
+          if (!first.done) {
+            for await (const delta of generator) {
+              reply += delta
+              send({ type: 'delta', text: delta })
+            }
+          }
+          send({ type: 'done' })
+        } catch (streamErr) {
+          console.error(
+            '[AI Practice] Stream interrupted:',
+            streamErr instanceof Error ? streamErr.message : String(streamErr),
+          )
+          send({
+            type: 'error',
+            error: 'The reply was cut short. Please try again.',
+            retryable: true,
+          })
+        } finally {
+          // Persist whatever the learner actually saw. A partial reply is worth
+          // keeping — it is already on their screen and in their context.
+          if (reply.trim()) {
+            try {
+              if (parsed.action === 'message') {
+                await appendTutorExchange({
+                  sessionId: activeSessionId,
+                  userId,
+                  userMessage: parsed.message,
+                  assistantReply: reply,
+                })
+              } else {
+                await appendAssistantMessage({
+                  sessionId: activeSessionId,
+                  userId,
+                  content: reply,
+                })
+              }
+            } catch (persistErr) {
+              console.error(
+                '[AI Practice] Failed to persist exchange:',
+                persistErr instanceof Error ? persistErr.message : String(persistErr),
+              )
+            }
+          }
+          controller.close()
+        }
+      },
     })
-    return NextResponse.json({ reply: tutorResponse.reply, sessionId: created.id })
+
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+        // Streaming is pointless if a proxy buffers the whole response first.
+        'X-Accel-Buffering': 'no',
+      },
+    })
   } catch (err) {
     if (err instanceof OpenRouterError) {
       switch (err.code) {
