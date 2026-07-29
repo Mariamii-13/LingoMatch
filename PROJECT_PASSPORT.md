@@ -4,10 +4,13 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated at commit `0d8c90b`.
+Last updated when the error-observability block was closed, in the commit directly on top of
+`7fa3f3d`.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
+> **Section 18 is binding product direction** set by the owner — it constrains architecture and
+> roadmap choices, and it is not a backlog of tasks to start.
 
 ---
 
@@ -30,6 +33,7 @@ Last updated at commit `0d8c90b`.
 15. [Final engineering assessment](#15-final-engineering-assessment)
 16. [Instructions for the next AI assistant](#16-instructions-for-the-next-ai-assistant)
 17. [Project memory](#17-project-memory)
+18. [Permanent product direction](#18-permanent-product-direction)
 
 ---
 
@@ -139,9 +143,9 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `0d8c90b` — "feat: make production failures visible instead of silent" |
+| **HEAD** | `7fa3f3d` — "docs: record the error reporting work in the passport" — plus this closing docs commit on top |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`. |
+| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; the error-observability block was committed directly on `main` (`0d8c90b`, `7fa3f3d`) and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
 
 All 18 phases are committed and pushed. Every commit message is long-form and explains the
@@ -1894,7 +1898,9 @@ people want it — which is the point of a beta.
 ### Biggest technical risks
 
 1. **Shared dev/prod database** — the highest-severity operational risk.
-2. **No observability** — failures are silent.
+2. **Nobody is alerted.** Failures are no longer silent — every one is recorded as a structured
+   `lm-error` line with a correlation id (3.34) — but with `ERROR_REPORT_WEBHOOK_URL` unset,
+   seeing a failure still requires somebody to go and read the logs.
 3. **Untested video** — a whole feature depends on an unverified third-party integration.
 4. **Single points of failure** — MongoDB outage is total; LiveKit outage removes video and
    degrades text.
@@ -2149,6 +2155,11 @@ That was already true for every other failure mode of this function.
 ## 12. Remaining roadmap
 
 Priority reflects value per unit of effort and dependency order.
+
+**Read section 18 before picking anything from this list.** It records permanent
+product-direction constraints — AI provider independence, teaching in the learner's own
+language, and SEO as a product requirement — that decide which of these items may be built and
+how.
 
 ### Immediate (before any wider testing)
 
@@ -2432,6 +2443,20 @@ faithful test of an outage (and is what surfaced 11.30), but **the rate limit on
 endpoint has not been observed rejecting a 31st request against a live database.** Worth ten
 seconds of somebody's time on a machine that can reach the cluster.
 
+**Closing review of the block.** Re-run on a clean tree before the block was closed, so the
+numbers below describe the committed state rather than a work-in-progress one:
+
+| Check | Result |
+|---|---|
+| `npm test` | **277 passed, 4 skipped, 28 files** (the skips are `tutor-live.test.ts`, gated on an env flag) |
+| `npm run lint` | 0 errors, 0 warnings |
+| `npx tsc --noEmit` | clean |
+| `npm run build` | compiled successfully in 28.5s; `/api/observability/client-error` present in the route manifest |
+| Working tree | clean, no untracked files |
+| Temporary artefacts | none — no probe routes, scripts or listeners tracked or on disk; nothing listening on the dev or webhook ports |
+| `.env.local` | unchanged; `ERROR_REPORT_WEBHOOK_URL` was passed inline to a single now-dead process and was never written to a file |
+| Diff review | 32 files; every non-observability edit is a `console.error` → `internalErrorResponse`/`reportServerError` swap plus the four deliberate changes in `proxy.ts`, `rateLimit.ts`, `theme.server.ts` and `friend-requests.server.ts` |
+
 ### Scenarios NOT yet tested
 
 1. **A real two-participant video call.** No second camera was available. Tokens, rooms and the
@@ -2634,6 +2659,13 @@ complete and documented in the git log.
   caught a cascading-render regression while the friends page was being converted.
 - **Do not remove `sanitiseCustomCss`** from the theme path. See 11.25.
 - **Do not sync a server prop into state with `useEffect`.** See 11.26.
+- **Do not hard-code an AI provider or model outside `src/lib/ai/`**, and do not surface a
+  provider name or model slug to users. See 18.1.
+- **Do not claim support for a language pair that has not been tested**, and do not assume
+  English as the instructional language. See 18.2.
+- **Do not start building speech practice before the architecture and product plan in 18.2
+  exists.**
+- **Do not propose paid advertising before conversion tracking exists.** See 18.3.
 - **Do not log an error object directly.** Use `reportServerError` / `internalErrorResponse`, or
   the redaction in 11.29 is bypassed and a connection string ends up in the logs. A bare
   `console.error(err)` in a new route is a regression, not a style preference.
@@ -2673,7 +2705,8 @@ security headers; then analytics.
 
 ### How to prioritise future work
 
-Rank by: **(a) does it unblock users, (b) does it prevent a silent failure, (c) does it reduce
+First check the work against **section 18** — it constrains what may be built at all. Then rank
+by: **(a) does it unblock users, (b) does it prevent a silent failure, (c) does it reduce
 risk to real data, (d) does it produce learning.** Polish comes last. Concretely, a fix that
 makes a broken feature work beats a fix that makes a working feature faster, and both beat
 visual refinement.
@@ -2832,3 +2865,107 @@ the unanswerable friend requests, the frozen long conversations, the camera prev
 never display — was invisible in code review and obvious within minutes of actual use.
 
 If you take one working practice from this handover, take that one.
+
+---
+
+## 18. Permanent product direction
+
+**Status: binding constraints set by the owner, recorded 2026-07-30.** These are not tasks in
+the current roadmap and none of them were implemented in the error-observability block. They
+constrain how future architecture and roadmap decisions are made. Read this section before
+proposing any change to the AI layer, the language model configuration, or the public-facing
+surface — a design that violates one of these is wrong even if it is otherwise good.
+
+### 18.1 AI provider strategy
+
+- **LingoMatch must not become tightly coupled to one AI provider or one model.** Providers and
+  models will be added, removed, upgraded and replaced over time on the basis of quality,
+  latency, reliability, language support and cost.
+- **The architecture must support configurable provider and model routing, and future
+  fallbacks, without a major rewrite.** The existing seams that already satisfy this and must be
+  preserved: `resolveModelChain()` in `src/lib/ai/models.ts` (env-driven, ordered, deduplicated),
+  the advance rules in `src/lib/ai/openrouter.ts`, and the fact that no SDK is used (11.20) so
+  the HTTP boundary stays swappable.
+- **Do not prematurely integrate many models at once.** Introduce a model when a real product
+  need justifies it and the cost/quality trade-off has been verified — the same discipline that
+  produced the current three-model free list by benchmarking all 17 candidates on the live key,
+  not by guessing (section 17).
+- **Provider names and model assumptions must not leak into core domain logic or the user
+  experience.** A learner should never see "OpenRouter" or a model slug; domain code should ask
+  for a tutor reply, not for a specific vendor.
+
+*Consequence for the current code:* the OpenRouter-specific pieces are correctly confined to
+`src/lib/ai/`. Keep them there. If a second provider is added, the split to make is
+provider-adapter versus tutor-domain, mirroring the `CompatibilityProvider` seam already used
+for matching (3.9).
+
+### 18.2 Core AI language-teaching requirement
+
+**The AI must directly teach a target language — not act as an English-based chatbot.**
+
+- **English must not be a mandatory bridge language.** A user who speaks Spanish and does not
+  understand English must be able to learn another supported language *in Spanish*.
+- **Supported pairs should work in both directions** where model quality permits — Spanish →
+  English and English → Spanish.
+- **It is acceptable, and preferred, to launch with a limited set of carefully supported
+  languages and pairs** rather than claiming to support every language. **Supported combinations
+  must be explicit and based on tested quality**, not on the size of the language list in
+  `src/constants/languages.ts`.
+- **The eventual experience must include spoken conversation:** the learner speaks, the AI
+  understands the speech, replies naturally, corrects mistakes appropriately, and teaches
+  pronunciation, vocabulary, grammar and practical conversation **in the learner's known
+  language**.
+- **The teaching system must adapt** to the learner's level, goals, mistakes and progress —
+  not behave like a generic assistant.
+
+**Before this is implemented it needs an evidence-based architecture and product plan** covering
+speech-to-text, text generation and reasoning, text-to-speech, pronunciation feedback,
+language-pair support, latency, safety and usage cost. **Do not start building speech before
+that plan exists.**
+
+*Where the current code already points the right way:* `explanationLanguage` is part of the
+saved language profile and is fed into the tutor prompt, so the instructional language is
+already a real, per-user variable rather than an English default. `voiceIntro` on the `User`
+model anticipates speech (3.24) but is unused. The honest current position is that the
+per-pair *quality* has never been tested — only Spanish was exercised live — so the "explicit,
+tested combinations" requirement is unmet today and should not be claimed.
+
+### 18.3 SEO and acquisition
+
+- **Public-facing SEO is a product requirement, not a cosmetic final task.**
+- **Future public pages must use crawlable server-rendered content**, correct metadata,
+  canonical URLs, structured data where appropriate, sitemap and robots handling, good
+  performance, and genuinely useful language-learning content.
+- **Authenticated application pages are not the SEO acquisition surface** and must not be
+  mistaken for it. Everything under `(app)` sits behind the middleware auth gate in
+  `src/proxy.ts` and is correctly invisible to crawlers.
+- **The roadmap should eventually include public landing pages and useful indexable pages** for
+  supported languages, language pairs and learning use cases — **while avoiding thin or
+  auto-generated low-value pages.** A page per language pair is only worth publishing if it says
+  something true and useful about that pair, which ties this requirement to 18.2: pages should
+  exist for combinations the product actually supports well.
+- **Paid advertising must not begin until the core onboarding and learning flow are measurable
+  and conversion tracking is ready.** This depends on roadmap item 13 (product analytics).
+- **Acquisition planning must consider SEO, content, referrals, social media and paid ads
+  together**, rather than relying on advertising alone.
+- **Advertising spend and channels must be chosen from real conversion and retention evidence**,
+  not assumptions.
+
+*Current position:* the only public pages are the landing page, login, register and
+`/forgot-password`. No sitemap, no `robots.txt`, no structured data, and no canonical URLs
+exist. That is a gap against this requirement, not a completed state — but it is deliberately
+**not** work for the current block.
+
+### 18.4 How these interact with the existing roadmap
+
+None of section 12 is invalidated. The ordering guidance in 16 ("does it unblock users, does it
+prevent a silent failure, does it reduce risk to real data, does it produce learning") still
+governs *within* a release. Section 18 governs *what may be built at all*:
+
+| Roadmap item | Effect of section 18 |
+|---|---|
+| 1 — buy AI credits, pin a paid model | Still correct, but pin it **through** `resolveModelChain()`; do not hard-code a vendor anywhere else (18.1) |
+| 13 — product analytics | Becomes a **precondition for any paid advertising** (18.3), not only a learning tool |
+| 22 — payments | Unchanged; still requires demand evidence |
+| 24 — speaking practice | **Requires the written architecture and product plan first** (18.2). This is now the largest planned initiative in the project |
+| — new | Public SEO surface (landing pages, sitemap, robots, structured data, per-pair content) is now an explicit future roadmap area (18.3) |
