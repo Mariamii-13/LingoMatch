@@ -2,8 +2,9 @@ import { auth } from "@/auth"
 import { Navbar } from "@/components/shared/navbar"
 import { Sidebar } from "@/components/shared/sidebar"
 import { MobileNav } from "@/components/shared/mobile-nav"
-import { AppThemeProvider } from "@/components/shared/app-theme-provider"
 import { countIncomingFriendRequests } from "@/lib/friend-requests.server"
+import { getAppTheme } from "@/lib/theme.server"
+import { themeStyleSheet } from "@/lib/theme"
 import type { NavIdentity } from "@/components/shared/nav-identity"
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -13,6 +14,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const pendingFriendRequests = session?.user?.id
     ? await countIncomingFriendRequests(session.user.id)
     : 0
+
+  // Rendered into the HTML rather than fetched and injected after hydration, so
+  // the app never paints in the default palette first. The read is cached, so
+  // this does not add a query per page load.
+  const theme = await getAppTheme()
 
   // Resolved here rather than from useSession in each component, so the
   // navigation never renders a placeholder identity before correcting itself.
@@ -25,7 +31,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="app-scope flex min-h-screen">
-      <AppThemeProvider />
+      <style
+        id="app-theme-vars"
+        dangerouslySetInnerHTML={{ __html: themeStyleSheet(theme) }}
+      />
       <Sidebar identity={identity} pendingFriendRequests={pendingFriendRequests} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Navbar identity={identity} />

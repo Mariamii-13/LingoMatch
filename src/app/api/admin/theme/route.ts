@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import ThemeSettings from '@/lib/models/ThemeSettings'
+import { THEME_CACHE_TAG } from '@/lib/theme.server'
 
 async function requireAdmin() {
   const session = await auth()
@@ -59,6 +61,12 @@ export async function PUT(req: NextRequest) {
       { $set: update },
       { upsert: true, new: true, runValidators: true }
     ).lean()
+
+    // Every signed-in page renders the palette from a cached read. `expire: 0`
+    // rather than the recommended `'max'` profile because an administrator who
+    // just saved a colour should see it on the next render, not one render
+    // later behind stale-while-revalidate.
+    revalidateTag(THEME_CACHE_TAG, { expire: 0 })
 
     return NextResponse.json(settings)
   } catch (err) {
