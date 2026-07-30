@@ -19,6 +19,18 @@ type Message = {
   content: string
 }
 
+// crypto.randomUUID() only exists in secure contexts (https:, localhost,
+// 127.0.0.1) — on a plain-HTTP LAN address (a projector, a second device on
+// the network, an old browser) it is simply undefined, and calling it throws.
+// These ids are only React keys and a client-side match for streamed deltas,
+// never anything security-sensitive, so a non-cryptographic fallback is fine.
+function randomId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
 type SessionSettings = {
   targetLanguageCode: string
   mode: PracticeMode
@@ -58,7 +70,7 @@ export function AIPracticeClient({
   const [sessionId, setSessionId] = useState<string | null>(initialSession?.id ?? null)
   const [messages, setMessages] = useState<Message[]>(() =>
     (initialSession?.messages ?? []).map((message) => ({
-      id: crypto.randomUUID(),
+      id: randomId(),
       role: message.role,
       content: message.content,
     })),
@@ -143,7 +155,7 @@ export function AIPracticeClient({
        * the tutor's words as they arrive instead of waiting out the full
        * six-to-thirteen second reply behind a spinner.
        */
-      const replyId = crypto.randomUUID()
+      const replyId = randomId()
       let started = false
       lastReplyRef.current = ''
 
@@ -224,7 +236,7 @@ export function AIPracticeClient({
     const content = input.trim()
     if (!content) return
 
-    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content }
+    const userMsg: Message = { id: randomId(), role: 'user', content }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
     setError(null)

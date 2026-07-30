@@ -155,6 +155,33 @@ describe('AIPracticeClient — session start', () => {
       expect(screen.getByRole('alert')).toBeInTheDocument()
     })
   })
+
+  /**
+   * crypto.randomUUID() only exists in secure contexts (https:, localhost,
+   * 127.0.0.1) — on a plain-HTTP LAN address it is undefined, and calling it
+   * threw an uncaught TypeError that silently hung the chat forever (an
+   * unhandled promise rejection with no user-facing error at all). Reproduced
+   * live via a LAN-IP dev server; this pins the fallback that fixes it.
+   */
+  it('still starts a session when crypto.randomUUID is unavailable', async () => {
+    const original = globalThis.crypto.randomUUID
+    // @ts-expect-error - simulating a non-secure context where this is undefined
+    delete globalThis.crypto.randomUUID
+    try {
+      mockReply('Hola! ¿Cómo te llamas?')
+
+      renderClient()
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByText('Hola! ¿Cómo te llamas?')).toBeInTheDocument()
+      })
+    } finally {
+      globalThis.crypto.randomUUID = original
+    }
+  })
 })
 
 describe('AIPracticeClient — timeout error', () => {

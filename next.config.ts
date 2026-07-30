@@ -6,6 +6,11 @@ import type { NextConfig } from "next";
 // every page into dynamic rendering, which conflicts with the deliberately cached
 // site palette (see PROJECT_PASSPORT.md section 4, "Caching").
 const isDev = process.env.NODE_ENV === "development";
+// `NODE_ENV === "production"` only means "optimized build" — `next start` sets
+// it locally too, over plain HTTP. Vercel is the only environment where this
+// app is actually served over real HTTPS, and it sets `VERCEL=1`. Gating on
+// that instead of `isDev` covers `next start` run locally as well.
+const isServedOverHttps = process.env.VERCEL === "1";
 
 // Origins the browser talks to directly (not proxied through a Route Handler):
 // LiveKit for video/realtime-text signaling, and three CDNs whose images render
@@ -25,7 +30,12 @@ const cspDirectives = [
   // enforces form-action against the final redirect target.
   `form-action 'self' https://accounts.google.com`,
   `frame-ancestors 'none'`,
-  `upgrade-insecure-requests`,
+  // Plain HTTP (dev, or `next start` run locally) has nothing answering on
+  // https: for the same port, so upgrading every asset request to https:
+  // fails outright — the entire app renders unstyled with a wall of
+  // ERR_SSL_PROTOCOL_ERROR in the console. Only include this on Vercel,
+  // where the app is actually served over real HTTPS and it's a no-op.
+  ...(isServedOverHttps ? [`upgrade-insecure-requests`] : []),
 ];
 
 const securityHeaders = [
