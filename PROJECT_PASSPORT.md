@@ -4,13 +4,18 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated after two blocks completed in the same session: a match-found browser notification
-(roadmap #18, section 3.9, commit `030a211`) and an accessibility pass (roadmap #21, section
-3.23, commit `ac9bec4`) — streaming-transcript `aria-live`, accessible video toggle switches, and
-a colour-contrast audit of both themes. The session also recorded two environment/process
-findings — a Vercel Marketplace integration install blocked by the auto-mode classifier, and the
-dev server being non-interactive for browser-automation clicks throughout. See section 17 for
-both.
+Last updated after a presentation-readiness pass (commit `df823d0`), run in place of long-term
+roadmap work ahead of a live demo. It found and fixed **two bugs that broke the entire app for
+anyone demoing outside a real HTTPS deployment**: the CSP's `upgrade-insecure-requests` directive
+was breaking every asset load over plain HTTP (`next dev` *and* `next start`, run locally), and
+`crypto.randomUUID()` — called directly with no fallback — threw and silently hung the AI tutor,
+this product's flagship feature, whenever the app was reached via a non-secure-context origin
+(a LAN IP, e.g. for a projector or a second device). See section 3.37 for both, and 3.9/3.23/17
+for the two prior blocks this session (match-found notification, roadmap #18; accessibility pass,
+roadmap #21) and two environment/process findings — a Vercel Marketplace integration install
+blocked by the auto-mode classifier, and the dev server being non-interactive for
+browser-automation clicks in this AI assistant's sandbox specifically (not a real app defect —
+see 17 for how that was distinguished from the two real bugs above).
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -112,7 +117,7 @@ data as real. All of that is resolved.
 | Dimension | State |
 |---|---|
 | Builds and typechecks | Clean |
-| Automated tests | 305 passing |
+| Automated tests | 306 passing |
 | Lint | 0 errors, 0 warnings |
 | Core AI tutor | Works, persists, streams, is metered |
 | Human matching | Works (a severe silent bug was fixed) |
@@ -151,12 +156,12 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `ac9bec4` — "feat: make the streaming tutor and video toggles legible to screen readers" — plus this docs commit on top |
+| **HEAD** | `df823d0` — "fix: two demo-breaking bugs found in a pre-presentation review" — plus this docs commit on top |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and both blocks this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
+| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
 
-All 21 phases are committed and pushed. Every commit message is long-form and explains the
+All 22 phases are committed and pushed. Every commit message is long-form and explains the
 reasoning, not just the change — **the git log is a primary source of design rationale and is
 worth reading.**
 
@@ -198,6 +203,8 @@ dcaf4cd  docs: final review of the blocking/moderation block
 030a211  feat: notify learners away from the tab when a match is found
 c14df19  docs: close the match-notification block and record two blockers
 ac9bec4  feat: make the streaming tutor and video toggles legible to screen readers
+21e0a3e  docs: close the accessibility block and record the contrast finding
+df823d0  fix: two demo-breaking bugs found in a pre-presentation review
 ```
 
 Cumulative diff versus the pre-work baseline (`340b48a`): roughly **137 files changed**, of
@@ -1410,6 +1417,65 @@ end-to-end. The audit trail is implemented, unit tested, and matches the codebas
 patterns closely enough to trust, but — like four other admin pages before it (3.19) — its
 write path has only been exercised through code review and tests, not a real admin session.
 
+### 3.37 Two bugs that only appear outside a real HTTPS deployment
+
+**Why this exists.** Found during a presentation-readiness review (commit `df823d0`) — walking
+the app as a first-time evaluator would, rather than auditing the architecture. Both bugs are
+invisible in the normal case (a real Vercel deployment, served over genuine HTTPS) and were only
+found by actually loading the app the way a local rehearsal or a demo on unfamiliar network setup
+would: over plain HTTP, and/or from an address other than the presenter's own `localhost`.
+
+**Bug 1 — the entire app rendered unstyled.** `next.config.ts`'s CSP unconditionally included
+`upgrade-insecure-requests`. That directive upgrades every same-origin asset request (CSS, JS,
+fonts) to `https:`; over plain HTTP with nothing answering on `https:` for that port, every one of
+those requests fails with `ERR_SSL_PROTOCOL_ERROR` and the page renders as raw unstyled HTML —
+looks completely broken, though the server and all data are fine. Reproduced on **both**
+`next dev` **and** `next start` run locally. The existing `isDev` flag (`NODE_ENV ===
+"development"`) only covers the first — `next start` sets `NODE_ENV=production` too, and running
+a local production build to rehearse a demo is a perfectly reasonable thing to do. **Fixed by
+gating on `process.env.VERCEL === "1"` instead** — the actual question is "is this genuinely
+served over HTTPS", not "is this an optimised build", and Vercel is the only environment where
+that's true for this app. **Do not gate this directive on `NODE_ENV` again** — use
+`isServedOverHttps` (the `VERCEL` check), or the same bug returns for anyone testing a production
+build locally.
+
+**Bug 2 — the AI tutor hung forever with no error.** `AIPracticeClient` called
+`crypto.randomUUID()` directly for message ids (three call sites: resuming a stored session,
+starting a new one, sending a message). That API is only defined in secure contexts — `https:`,
+`localhost`, `127.0.0.1` — so from a LAN IP (a projector, a second device on the network, anything
+other than the presenter's own machine's `localhost`) it is simply `undefined`, and calling it
+throws inside the streaming-reply handler. The user sees the loading spinner and then nothing,
+forever — no error message, because the crash happens in the response-handling code itself, not
+in a path that reports failures to the user. Confirmed server-side: the tutor session and reply
+were created successfully every time; only the client's own rendering of that reply crashed.
+**Fixed** with a `randomId()` helper that uses `crypto.randomUUID()` when available and falls
+back to a `Date.now()`/`Math.random()` string otherwise — these ids are React keys and a
+client-side match for streamed deltas, never anything security-sensitive, so the fallback's lack
+of cryptographic strength doesn't matter. Behaviour in the normal secure-context case is
+unchanged — the real `crypto.randomUUID()` still runs first.
+
+**Both confirmed fixed live**, not just by reasoning about the code: rebuilt, ran `next start`,
+reproduced each bug over a LAN IP, applied the fix, rebuilt, and watched a real end-to-end AI
+tutor conversation stream correctly (Spanish, natural reply, `aria-live` announcement from 3.23
+firing correctly alongside it) over that same non-localhost origin. 1 new regression test
+(`AIPracticeClient.test.tsx`) pins bug 2 by deleting `crypto.randomUUID` and asserting the session
+still starts.
+
+**Also reviewed in the same pass, no other code issues found:** landing page, login, register,
+the full onboarding flow for a brand-new account, dashboard, explore, friends, messages, progress,
+settings. **One data-cleanliness issue noted but not touched**: the shared QA/rate-limit-testing
+accounts from section 17 (`throttleprobe1-3`, `qaphase001`) still appear in Find Partners and
+Conversations regardless of which account is browsing — real production data, not a code defect,
+and deleting it is an explicit owner-approval item (section 16) this block correctly did not
+decide unilaterally. A fresh, uncluttered account (`presentationcheck01` /
+`presentation.check01@lingomatch.test`, password `PresoCheck!2026`) was created while verifying
+onboarding and has no such clutter, if a clean account is wanted for the demo itself.
+
+**Production readiness.** Both fixes are Production Ready — verified live, unit tested, and the
+production build (`npm run build`) is clean. Neither bug was ever reachable in an actual Vercel
+deployment (genuine HTTPS throughout), so this block changes local/demo reliability, not anything
+about the deployed product's behavior.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -2560,13 +2626,14 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**305 tests passing, 4 skipped, across 33 files.** Baseline before this work: 103. The newest 18
-split across two blocks: 11 in `use-match-notification.test.tsx` (match-found notification, 3.9,
-roadmap #18), and 7 across `AIPracticeClient.test.tsx` (new describe block), `PreJoinScreen.test.tsx`
-and `SessionControls.test.tsx` (accessibility, 3.23, roadmap #21).
+**306 tests passing, 4 skipped, across 33 files.** Baseline before this work: 103. The newest 19
+split across three blocks: 11 in `use-match-notification.test.tsx` (match-found notification, 3.9,
+roadmap #18), 7 across `AIPracticeClient.test.tsx` (new describe block), `PreJoinScreen.test.tsx`
+and `SessionControls.test.tsx` (accessibility, 3.23, roadmap #21), and 1 more in
+`AIPracticeClient.test.tsx` pinning the `crypto.randomUUID` fallback (3.37).
 
 ```
-src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume, aria-live
+src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume, aria-live, randomUUID fallback
 src/components/session/PreJoinScreen.test.tsx         camera/mic switch semantics: role, aria-checked
 src/components/session/SessionControls.test.tsx       aria-pressed state, handler wiring
 src/constants/languages.test.ts                       level labels, CEFR meanings, legacy migration
@@ -2784,7 +2851,7 @@ before assuming it is harmless.
 4. **Failure modes are designed.** A model chain that survives credit exhaustion, retired model
    ids and upstream rate limits; limiters that fail open; a badge count that fails soft; three
    layers of error boundary; explicit database timeouts.
-5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 305 tests, green build.
+5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 306 tests, green build.
 6. **Comments explain why.** The non-obvious decisions are documented where someone would
    otherwise "simplify" them.
 7. **Git history is genuine documentation.** Each commit explains the problem, the reasoning and
@@ -2877,19 +2944,23 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `dcaf4cd` plus this session's four commits (`030a211` feat, `c14df19` docs, `ac9bec4`
-feat, and this docs commit), clean and synced. 305 tests (287 + 11 + 7 new), 0 lint problems,
-`tsc` clean, build green. The core loop works. Nothing is half-finished or uncommitted.
-Twenty-one-plus phases of work are complete and documented in the git log.
+`main` @ `dcaf4cd` plus this session's six commits (`030a211` feat, `c14df19` docs, `ac9bec4`
+feat, `21e0a3e` docs, `df823d0` fix, and this docs commit), clean and synced. 306 tests
+(287 + 11 + 7 + 1 new), 0 lint problems, `tsc` clean, build green. The core loop works. Nothing
+is half-finished or uncommitted. Twenty-two-plus phases of work are complete and documented in
+the git log.
 
 This session also tried to provision product analytics (roadmap #13) via the Vercel Marketplace —
 `vercel integration add posthog` was blocked by the auto-mode classifier as a billing-affecting
-action (see 17) — and could not complete a live two-account click-through of either the match
-notification or the new accessibility markup, because the dev server was non-interactive in the
-automation browser for reasons unrelated to either diff (also see 17, and the login-form symptom
-noted there). Both are recorded as owner/environment blockers, not silent gaps. The accessibility
-work leaned on component-level tests (Testing Library, no live browser needed) specifically
-because of that limitation — see 3.23.
+action (see 17) — and could not complete a live two-account click-through of the match
+notification or the new accessibility markup at the time, because the dev server appeared
+non-interactive in the automation browser (also see 17, and the login-form symptom noted there).
+That was later resolved during a presentation-readiness pass run in the same session (`df823d0`):
+building and running `next start` proved the interactivity issue was specific to this sandbox's
+dev-mode HMR, not a real defect — and the same `next start` approach is what surfaced two
+*genuine* demo-breaking bugs (3.37) that live browser testing under `next dev` had been masking.
+**If you pick this project up next and browser automation seems non-interactive, try `next start`
+before assuming the app is broken or giving up on live verification** — it worked here.
 
 ### Read these first, in this order
 
@@ -2959,6 +3030,13 @@ because of that limitation — see 3.23.
 - **Do not add `preload` to the `Strict-Transport-Security` header** without the owner's
   explicit sign-off — it requires submission to browsers' HSTS preload list and is effectively
   permanent. See 3.35.
+- **Do not gate `upgrade-insecure-requests` on `NODE_ENV`/`isDev` again.** `next start` sets
+  `NODE_ENV=production` too, and it is commonly run locally over plain HTTP — that reintroduces
+  the app-wide unstyled-page bug in 3.37. Use `process.env.VERCEL === "1"` (`isServedOverHttps`).
+- **Do not call `crypto.randomUUID()` directly in client code without a fallback.** It is
+  `undefined` outside secure contexts (anything other than `https:`, `localhost`, `127.0.0.1`) and
+  throws — see the `randomId()` helper in `AIPracticeClient.tsx` (3.37) for the pattern to reuse
+  if another component needs a client-side id.
 
 ### What not to rewrite
 
@@ -3048,6 +3126,10 @@ Everything here existed only in working memory and would otherwise be lost.
   (both password `QaTest!2026`), plus `throttleprobe1` and `throttleprobe2` from rate-limit
   testing. `qaftue001` and `qaphase001` are friends and share one conversation with two
   messages, and `qaphase001` has five tutor sessions. **This is why Progress showed real data.**
+  A fourth, created during the presentation-readiness block (`df823d0`) while verifying
+  onboarding for a brand-new user: `presentationcheck01` / `presentation.check01@lingomatch.test`,
+  password `PresoCheck!2026`, native English, learning Spanish, no friends/messages/QA clutter —
+  usable as-is for a clean demo account, or ignore it.
 - **Installing a Vercel Marketplace integration is a production/billing action, not a plain
   read.** `vercel integration discover analytics` (a read-only lookup, no auth needed) surfaced
   PostHog as the best-fit provider for roadmap #13. But `vercel integration add posthog --yes
@@ -3072,6 +3154,18 @@ Everything here existed only in working memory and would otherwise be lost.
   `030a211` diff caused — the identical symptom pre-dated it on the login page. If a future
   session hits the same thing, don't assume the newest diff broke it; check whether *any* client
   click produces a network request first.
+- **Follow-up (presentation-readiness block, `df823d0`): this was confirmed to be dev/HMR-only,
+  not a real app defect.** The identical login click, on the identical account, on a **production
+  build served via `next start`** (no Turbopack dev client, no HMR websocket at all) worked
+  correctly first try — real redirect to `/dashboard`, real session, real data. This is strong
+  evidence the broken-HMR-websocket theory above was right. **If dev-mode browser automation in
+  this sandbox seems non-interactive again, build and run `next start` before concluding the app
+  itself is broken** — it isolates the dev-only HMR subsystem from everything else and, in this
+  session, immediately told apart two *genuine* bugs (3.37) from this one *environment* artifact.
+  The two real bugs in 3.37 were themselves only found and confirmed this same way — via `next
+  start` over a LAN address, which is also what exposed them (both are specific to being reached
+  over plain HTTP or a non-secure-context origin, exactly what this sandbox's browser is forced to
+  use instead of `localhost`).
 - **In this session's sandbox, `http://localhost:3001` refused connections from the
   chrome-devtools-mcp browser (`net::ERR_CONNECTION_REFUSED`) even while `curl` on the same host
   reached it instantly**, and `http://127.0.0.1:3001` worked only intermittently before also
