@@ -4,11 +4,13 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated in the block that shipped a match-found browser notification (roadmap #18,
-section 3.9), commit `030a211` on top of `dcaf4cd`, plus this docs commit. That block also
-recorded two new environment/process findings — a Vercel Marketplace integration install
-blocked by the auto-mode classifier, and this session's dev server being non-interactive for
-browser-automation clicks. See section 17 for both.
+Last updated after two blocks completed in the same session: a match-found browser notification
+(roadmap #18, section 3.9, commit `030a211`) and an accessibility pass (roadmap #21, section
+3.23, commit `ac9bec4`) — streaming-transcript `aria-live`, accessible video toggle switches, and
+a colour-contrast audit of both themes. The session also recorded two environment/process
+findings — a Vercel Marketplace integration install blocked by the auto-mode classifier, and the
+dev server being non-interactive for browser-automation clicks throughout. See section 17 for
+both.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -110,7 +112,7 @@ data as real. All of that is resolved.
 | Dimension | State |
 |---|---|
 | Builds and typechecks | Clean |
-| Automated tests | 298 passing |
+| Automated tests | 305 passing |
 | Lint | 0 errors, 0 warnings |
 | Core AI tutor | Works, persists, streams, is metered |
 | Human matching | Works (a severe silent bug was fixed) |
@@ -149,12 +151,12 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `030a211` — "feat: notify learners away from the tab when a match is found" — plus this docs commit on top |
+| **HEAD** | `ac9bec4` — "feat: make the streaming tutor and video toggles legible to screen readers" — plus this docs commit on top |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and this one) was committed directly on `main` and pushed, so there is no branch left to merge. |
+| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and both blocks this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
 
-All 20 phases are committed and pushed. Every commit message is long-form and explains the
+All 21 phases are committed and pushed. Every commit message is long-form and explains the
 reasoning, not just the change — **the git log is a primary source of design rationale and is
 worth reading.**
 
@@ -194,9 +196,11 @@ f9b433b  feat: add user blocking and a moderation audit trail
 9f401ed  docs: close the blocking/moderation block and record voice-first direction
 dcaf4cd  docs: final review of the blocking/moderation block
 030a211  feat: notify learners away from the tab when a match is found
+c14df19  docs: close the match-notification block and record two blockers
+ac9bec4  feat: make the streaming tutor and video toggles legible to screen readers
 ```
 
-Cumulative diff versus the pre-work baseline (`340b48a`): roughly **135 files changed**, of
+Cumulative diff versus the pre-work baseline (`340b48a`): roughly **137 files changed**, of
 which this document is the largest single file.
 
 ### Technology stack
@@ -971,12 +975,40 @@ keyboard navigation; `FlagImage` is decorative by default (empty `alt`) because 
 always names the language or country; the sidebar friend badge is duplicated onto the collapsed
 rail where labels are hidden.
 
-**Lint is clean of accessibility warnings.** `jsx-a11y` rules from `eslint-config-next` pass.
+**Streaming tutor transcript now has an `aria-live` region (roadmap #21, done in commit on top
+of `030a211`).** `AIPracticeClient` renders a `sr-only` `aria-live="polite" role="status"` div
+holding a short `announcement` string, updated exactly twice per reply — once when the first
+delta arrives ("Tutor is replying…"), once when the `done` event closes the stream ("Tutor
+replied: {full text}") — not once per delta, which would read every arriving word fragment aloud.
+An error mid-stream leaves the "replying" announcement in place rather than claiming completion.
+4 tests in `AIPracticeClient.test.tsx` cover this, including a manually-driven stream to observe
+the mid-reply state (the existing `streamResponse` test helper resolves too fast for that state
+to be observable through polling).
 
-**Needs Work.** Not audited: full keyboard traversal of the video session controls; colour
-contrast measurement in light theme; screen-reader testing of the streaming tutor transcript
-(new text arrives without an `aria-live` region, so a screen reader user is not told the reply
-is arriving); focus management when dialogs open and close.
+**Video toggle switches now expose name and state to assistive tech (roadmap #21, same
+commit).** `PreJoinScreen`'s camera and microphone toggles were plain `<button>`s with no text,
+no `aria-label`, and no exposed state — a screen reader announced only "button". Both are now
+`role="switch"` with `aria-checked` and `aria-label="Camera"` / `"Microphone"`. `SessionControls`'
+`CtrlBtn` (used for camera, mic, chat, add-friend during a live session) already had `aria-label`
+on every control; it now also carries `aria-pressed` reflecting on/off state. All controls in
+both components were already native `<button>` elements, so keyboard reachability and
+activation (Tab, Enter, Space) were not the gap — the accessible name/state was. Covered by
+`PreJoinScreen.test.tsx` and `SessionControls.test.tsx`.
+
+**Colour contrast audited in both themes (roadmap #21, same commit) — one real finding, not
+fixed.** Computed WCAG relative-luminance contrast ratios directly from the OKLCH values in
+`globals.css` (`oklch → OKLab → linear sRGB → relative luminance`, Björn Ottosson's published
+conversion). Every pair checked passes AA (≥4.5:1 for normal text) **except one**:
+**dark-mode `--primary-foreground` on `--primary` measures 4.30:1**, just under the 4.5:1
+minimum — button and badge label text on the primary colour in dark mode. Light mode's
+equivalent pair is fine (6.58:1). `--destructive` text on `--background` is marginal in both
+themes (4.50 light, 7.16 dark — light mode passes by the smallest possible margin). **Not
+fixed**: `--primary`/`--primary-foreground` are brand colours, and 11's "visual identity changes
+need the owner" rule applies here exactly as it does to the brand mark — raise the dark-mode
+button-text contrast with the owner rather than shift a brand colour unilaterally.
+
+**Needs Work.** Focus management when dialogs open and close; the dark-mode primary-button
+contrast finding above.
 
 ### 3.24 Live video and pre-join
 
@@ -2393,7 +2425,7 @@ which of these items may be built and how.
 | 18 | ~~Push notification when a match is found~~ | — | — | **Done** in `030a211` — see 3.9. Browser `Notification` API, no server/third-party dependency. Live two-account click-through still owed (blocked this session by dev-server interactivity, see 17) | — |
 | 19 | **Backwards pagination through message history** | Low | Moderate | Users can only see the newest 100 | None |
 | 20 | **Reduce the `jwt` callback DB read** | Low | Moderate | One fewer read per page load | Accepts delayed ban propagation |
-| 21 | **Accessibility audit** — video controls, contrast, `aria-live` on the streaming transcript | Medium | Moderate | Real inclusion; the tutor transcript is currently silent to screen readers | None |
+| 21 | ~~Accessibility audit~~ — video controls, contrast, `aria-live` on the streaming transcript | — | — | **Done** in `ac9bec4` — see 3.23. `aria-live` on the tutor transcript and accessible switch semantics on the video toggles shipped; the dark-mode primary-button contrast finding (4.30:1, needs 4.5:1) was **not** fixed — it's a brand-colour change and needs the owner, same as 11's rule for the brand mark | — |
 
 ### Long term (post-beta, demand-dependent)
 
@@ -2528,11 +2560,15 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**298 tests passing, 4 skipped, across 31 files.** Baseline before this work: 103. The newest
-11 (`use-match-notification.test.tsx`) cover the match-found notification (3.9, roadmap #18).
+**305 tests passing, 4 skipped, across 33 files.** Baseline before this work: 103. The newest 18
+split across two blocks: 11 in `use-match-notification.test.tsx` (match-found notification, 3.9,
+roadmap #18), and 7 across `AIPracticeClient.test.tsx` (new describe block), `PreJoinScreen.test.tsx`
+and `SessionControls.test.tsx` (accessibility, 3.23, roadmap #21).
 
 ```
-src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume
+src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume, aria-live
+src/components/session/PreJoinScreen.test.tsx         camera/mic switch semantics: role, aria-checked
+src/components/session/SessionControls.test.tsx       aria-pressed state, handler wiring
 src/constants/languages.test.ts                       level labels, CEFR meanings, legacy migration
 src/hooks/use-match-notification.test.tsx             permission gating, visibility/focus, dedup
 src/hooks/use-unsaved-changes.test.tsx                beforeunload guard, releaseGuard, re-arming
@@ -2748,7 +2784,7 @@ before assuming it is harmless.
 4. **Failure modes are designed.** A model chain that survives credit exhaustion, retired model
    ids and upstream rate limits; limiters that fail open; a badge count that fails soft; three
    layers of error boundary; explicit database timeouts.
-5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 298 tests, green build.
+5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 305 tests, green build.
 6. **Comments explain why.** The non-obvious decisions are documented where someone would
    otherwise "simplify" them.
 7. **Git history is genuine documentation.** Each commit explains the problem, the reasoning and
@@ -2841,17 +2877,19 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `dcaf4cd` plus this block's two commits (`030a211` feat, and this docs commit), clean
-and synced. 298 tests (287 + 11 new), 0 lint problems, `tsc` clean, build green. The core loop
-works. Nothing is half-finished or uncommitted. Twenty-three-plus phases of work are complete and
-documented in the git log.
+`main` @ `dcaf4cd` plus this session's four commits (`030a211` feat, `c14df19` docs, `ac9bec4`
+feat, and this docs commit), clean and synced. 305 tests (287 + 11 + 7 new), 0 lint problems,
+`tsc` clean, build green. The core loop works. Nothing is half-finished or uncommitted.
+Twenty-one-plus phases of work are complete and documented in the git log.
 
-This block also tried to provision product analytics (roadmap #13) via the Vercel Marketplace —
+This session also tried to provision product analytics (roadmap #13) via the Vercel Marketplace —
 `vercel integration add posthog` was blocked by the auto-mode classifier as a billing-affecting
-action (see 17) — and could not complete a live two-account click-through of the new notification
-because this session's dev server was non-interactive in the automation browser for reasons
-unrelated to the diff (also see 17, and the login-form symptom noted there). Both are recorded
-as owner/environment blockers, not silent gaps.
+action (see 17) — and could not complete a live two-account click-through of either the match
+notification or the new accessibility markup, because the dev server was non-interactive in the
+automation browser for reasons unrelated to either diff (also see 17, and the login-form symptom
+noted there). Both are recorded as owner/environment blockers, not silent gaps. The accessibility
+work leaned on component-level tests (Testing Library, no live browser needed) specifically
+because of that limitation — see 3.23.
 
 ### Read these first, in this order
 
