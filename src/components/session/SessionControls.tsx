@@ -17,18 +17,22 @@ interface SessionControlsProps {
 function CtrlBtn({
   onClick,
   active,
+  pressed,
   children,
   label,
 }: {
   onClick: () => void
   active?: boolean
+  pressed?: boolean
   children: React.ReactNode
   label: string
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       aria-label={label}
+      aria-pressed={pressed ?? active ?? false}
       title={label}
       className={cn(
         "flex size-12 items-center justify-center rounded-full transition-colors",
@@ -52,10 +56,14 @@ export function SessionControls({
 }: SessionControlsProps) {
   return (
     <div className="flex items-center justify-center gap-3 px-4 py-5">
-      <CtrlBtn onClick={onToggleCamera} label={cameraEnabled ? "Turn off camera" : "Turn on camera"}>
+      <CtrlBtn
+        onClick={onToggleCamera}
+        pressed={cameraEnabled}
+        label={cameraEnabled ? "Turn off camera" : "Turn on camera"}
+      >
         {cameraEnabled ? <Camera className="size-5" /> : <CameraOff className="size-5" />}
       </CtrlBtn>
-      <CtrlBtn onClick={onToggleMic} label={micEnabled ? "Mute" : "Unmute"}>
+      <CtrlBtn onClick={onToggleMic} pressed={micEnabled} label={micEnabled ? "Mute" : "Unmute"}>
         {micEnabled ? <Mic className="size-5" /> : <MicOff className="size-5" />}
       </CtrlBtn>
       <CtrlBtn onClick={onToggleChat} active={chatOpen} label="Chat">
@@ -65,6 +73,7 @@ export function SessionControls({
         <UserPlus className="size-5" />
       </CtrlBtn>
       <button
+        type="button"
         onClick={onEnd}
         className="flex h-12 items-center gap-2 rounded-full bg-red-600 px-5 font-medium text-white hover:bg-red-700"
       >

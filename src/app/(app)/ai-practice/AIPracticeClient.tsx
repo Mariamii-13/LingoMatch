@@ -67,9 +67,16 @@ export function AIPracticeClient({
   const [error, setError] = useState<ChatError | null>(null)
   const [input, setInput] = useState('')
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  // Screen readers get no signal at all while a reply streams in — the visible
+  // text grows silently, and the one status region that exists (the loading
+  // spinner) disappears the instant the first token arrives. This announces
+  // once when a reply starts and once with the full text when it finishes,
+  // rather than on every delta, which would read out each arriving fragment.
+  const [announcement, setAnnouncement] = useState('')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const lastReplyRef = useRef('')
   const selectedTarget =
     profile.learningLanguages.find(
       (language) => language.code === settings.targetLanguageCode,
@@ -138,11 +145,14 @@ export function AIPracticeClient({
        */
       const replyId = crypto.randomUUID()
       let started = false
+      lastReplyRef.current = ''
 
       const appendDelta = (text: string) => {
+        lastReplyRef.current += text
         if (!started) {
           started = true
           setIsLoading(false)
+          setAnnouncement('Tutor is replying…')
           setMessages((prev) => [...prev, { id: replyId, role: 'assistant', content: text }])
           return
         }
@@ -168,7 +178,9 @@ export function AIPracticeClient({
         }
         if (event.type === 'session' && event.sessionId) setSessionId(event.sessionId)
         else if (event.type === 'delta' && event.text) appendDelta(event.text)
-        else if (event.type === 'error') {
+        else if (event.type === 'done') {
+          if (lastReplyRef.current) setAnnouncement(`Tutor replied: ${lastReplyRef.current}`)
+        } else if (event.type === 'error') {
           setError({
             message: event.error ?? 'The reply was cut short. Please try again.',
             retryable: event.retryable ?? true,
@@ -333,6 +345,9 @@ export function AIPracticeClient({
 
   return (
     <div className="flex h-[calc(100dvh-8rem)] max-h-[700px] flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
+      <div aria-live="polite" role="status" className="sr-only">
+        {announcement}
+      </div>
       {/* Header */}
       <div className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">

@@ -354,6 +354,98 @@ describe('AIPracticeClient — streamed replies', () => {
   })
 })
 
+describe('AIPracticeClient — screen reader announcements', () => {
+  /**
+   * New text arrives silently while a reply streams — the only status region
+   * (the loading spinner) disappears the instant the first token lands. This
+   * covers the aria-live region that fills the gap: one announcement when the
+   * reply starts, one with the full text when it finishes, not one per delta.
+   */
+  it('announces once that the tutor is replying, not once per delta', async () => {
+    // A stream that resolves instantly (like `streamResponse`) never leaves
+    // the "replying" state observable — it races straight to "done" before
+    // any assertion can poll for it. Holding the controller open lets the
+    // test observe the mid-stream state before completing the reply.
+    const encoder = new TextEncoder()
+    let controllerRef!: ReadableStreamDefaultController<Uint8Array>
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) { controllerRef = controller },
+    })
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(new Response(stream, { status: 200 }))
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    await act(async () => {
+      controllerRef.enqueue(
+        encoder.encode(`${JSON.stringify({ type: 'session', sessionId: 'e'.repeat(24) })}\n`),
+      )
+      controllerRef.enqueue(encoder.encode(`${JSON.stringify({ type: 'delta', text: 'Hola' })}\n`))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Tutor is replying…')
+    })
+
+    await act(async () => {
+      controllerRef.enqueue(encoder.encode(`${JSON.stringify({ type: 'done' })}\n`))
+      controllerRef.close()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Tutor replied: Hola')
+    })
+  })
+
+  it('announces the full assembled reply once the stream completes', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      streamResponse(['Hola', ', ', '¿qué tal?']),
+    )
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('Tutor replied: Hola, ¿qué tal?')
+    })
+  })
+
+  it('does not announce a completed reply when the stream errors instead', async () => {
+    const encoder = new TextEncoder()
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            for (const event of [
+              { type: 'session', sessionId: 'd'.repeat(24) },
+              { type: 'delta', text: 'Empecé' },
+              { type: 'error', error: 'The reply was cut short. Please try again.', retryable: true },
+            ]) {
+              controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
+            }
+            controller.close()
+          },
+        }),
+        { status: 200 },
+      ),
+    )
+
+    renderClient()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/cut short/i)).toBeInTheDocument()
+    })
+    expect(screen.getByRole('status')).toHaveTextContent('Tutor is replying…')
+  })
+})
+
 describe('AIPracticeClient — resuming a stored session', () => {
   it('opens straight into the conversation with its saved settings', () => {
     render(

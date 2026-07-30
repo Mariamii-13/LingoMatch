@@ -128,6 +128,10 @@ export function PreJoinScreen({ onFindPartner, onCancel }: PreJoinScreenProps) {
               </div>
             </div>
             <button
+              type="button"
+              role="switch"
+              aria-checked={cameraEnabled}
+              aria-label="Camera"
               onClick={() => setCameraEnabled((v) => !v)}
               className={cn("relative h-6 w-11 rounded-full transition-colors", cameraEnabled ? "bg-emerald-500" : "bg-zinc-600")}
             >
@@ -150,6 +154,10 @@ export function PreJoinScreen({ onFindPartner, onCancel }: PreJoinScreenProps) {
               </div>
             </div>
             <button
+              type="button"
+              role="switch"
+              aria-checked={micEnabled}
+              aria-label="Microphone"
               onClick={() => setMicEnabled((v) => !v)}
               className={cn("relative h-6 w-11 rounded-full transition-colors", micEnabled ? "bg-emerald-500" : "bg-zinc-600")}
             >
