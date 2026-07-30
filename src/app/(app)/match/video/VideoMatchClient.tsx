@@ -9,6 +9,7 @@ import { MatchConfigForm } from "@/components/match/MatchConfigForm"
 import { SearchingState } from "@/components/match/SearchingState"
 import { MatchFoundModal } from "@/components/match/MatchFoundModal"
 import { PreJoinScreen } from "@/components/session/PreJoinScreen"
+import { requestMatchNotificationPermission, useMatchFoundNotification } from "@/hooks/use-match-notification"
 import type { MatchDefaults } from "@/lib/match-defaults"
 import type { MatchPhase, MatchResult } from "@/types"
 
@@ -40,6 +41,7 @@ export function VideoMatchClient({ defaults }: { defaults: MatchDefaults }) {
   }
 
   const startSearching = async () => {
+    requestMatchNotificationPermission()
     setPhase("searching")
     const res = await fetch("/api/match/video", {
       method: "POST",
@@ -91,6 +93,7 @@ export function VideoMatchClient({ defaults }: { defaults: MatchDefaults }) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useMatchFoundNotification(phase, matchResult)
 
   if (phase === "searching") return (
     <SearchingState onCancel={handleCancel} />

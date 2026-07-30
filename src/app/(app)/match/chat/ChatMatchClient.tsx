@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { MatchConfigForm } from "@/components/match/MatchConfigForm"
 import { SearchingState } from "@/components/match/SearchingState"
 import { MatchFoundModal } from "@/components/match/MatchFoundModal"
+import { requestMatchNotificationPermission, useMatchFoundNotification } from "@/hooks/use-match-notification"
 import type { MatchDefaults } from "@/lib/match-defaults"
 import type { MatchPhase, MatchResult } from "@/types"
 
@@ -36,6 +37,7 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
   }
 
   const handleFind = async () => {
+    requestMatchNotificationPermission()
     setPhase("searching")
     try {
       const res = await fetch("/api/match/chat", {
@@ -87,6 +89,7 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
   }
 
   React.useEffect(() => () => stopPolling(), [])
+  useMatchFoundNotification(phase, matchResult)
 
   if (phase === "searching") {
     return <SearchingState onCancel={cancelQueue} />
