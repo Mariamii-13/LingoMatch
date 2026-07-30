@@ -4,8 +4,11 @@
 fresh AI assistant should be able to continue this project from this file alone, without any
 prior conversation history.
 
-Last updated in the final-review pass that closed the user-blocking / moderation-audit-trail
-block, in the commit directly on top of `9f401ed`.
+Last updated in the block that shipped a match-found browser notification (roadmap #18,
+section 3.9), commit `030a211` on top of `dcaf4cd`, plus this docs commit. That block also
+recorded two new environment/process findings — a Vercel Marketplace integration install
+blocked by the auto-mode classifier, and this session's dev server being non-interactive for
+browser-automation clicks. See section 17 for both.
 
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
@@ -107,7 +110,7 @@ data as real. All of that is resolved.
 | Dimension | State |
 |---|---|
 | Builds and typechecks | Clean |
-| Automated tests | 287 passing |
+| Automated tests | 298 passing |
 | Lint | 0 errors, 0 warnings |
 | Core AI tutor | Works, persists, streams, is metered |
 | Human matching | Works (a severe silent bug was fixed) |
@@ -146,12 +149,12 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `9f401ed` — "docs: close the blocking/moderation block and record voice-first direction" — plus this final-review commit on top |
+| **HEAD** | `030a211` — "feat: notify learners away from the tab when a match is found" — plus this docs commit on top |
 | **Working tree** | Clean at time of writing |
-| **Local vs remote** | In sync as of `9f401ed`, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, and this one) was committed directly on `main` and pushed, so there is no branch left to merge. |
+| **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and this one) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
 
-All 19 phases are committed and pushed. Every commit message is long-form and explains the
+All 20 phases are committed and pushed. Every commit message is long-form and explains the
 reasoning, not just the change — **the git log is a primary source of design rationale and is
 worth reading.**
 
@@ -189,10 +192,12 @@ c9cee82  perf: serve the site palette from the server instead of a per-page fetc
 cfaa8a2  docs: close the CSP block and record what was verified
 f9b433b  feat: add user blocking and a moderation audit trail
 9f401ed  docs: close the blocking/moderation block and record voice-first direction
+dcaf4cd  docs: final review of the blocking/moderation block
+030a211  feat: notify learners away from the tab when a match is found
 ```
 
-Cumulative diff versus the pre-work baseline (`340b48a`): **133 files changed, +9154 / −4368**,
-of which this document is roughly 2,600 lines.
+Cumulative diff versus the pre-work baseline (`340b48a`): roughly **135 files changed**, of
+which this document is the largest single file.
 
 ### Technology stack
 
@@ -605,9 +610,25 @@ The match forms also seed from the saved profile instead of hard-coding Korean.
 **Production readiness.** Mostly Ready. The engine is correct and verified; matching depends
 on liquidity (two compatible users online simultaneously), which a small beta will not have.
 
-**Limitations.** Fixed-window polling at 2s from the client; no push notification when a match
-arrives after the user navigates away; `interests` is accepted but not used for scoring in the
-current provider.
+**Match-found notification (roadmap #18, done in `030a211`).** A learner who tabbed away while
+queued had no way to know a partner had arrived — the queue polls every 2s but nothing surfaced
+that off-screen. `src/hooks/use-match-notification.ts` exports
+`requestMatchNotificationPermission()`, called from inside the "find partner" click handler in
+both `ChatMatchClient` and `VideoMatchClient` so the browser's user-gesture requirement is
+satisfied and nothing prompts on page load, and `useMatchFoundNotification(phase, result)`,
+which fires a `Notification` only when a match completes while the tab is hidden or unfocused —
+the existing `MatchFoundModal` already covers the foreground case, and clicking the notification
+just focuses the tab where the modal is already rendered. No server or third-party dependency:
+client-only, gated entirely on `Notification.permission`, deduplicated per `conversationId` so a
+re-render cannot double-fire. 11 unit tests in `use-match-notification.test.tsx` cover permission
+gating, visibility/focus gating, dedup and the click-to-focus behaviour. **Live click-through
+verification (two real accounts) could not be completed this session** — see 17's new entry on
+this session's dev server being non-interactive for browser-automation clicks; the login form
+itself showed the identical symptom, so it is unrelated to this change. A human should click
+through it once with two browser windows before relying on it in the field.
+
+**Limitations.** Fixed-window polling at 2s from the client; `interests` is accepted but not used
+for scoring in the current provider.
 
 ### 3.10 Friends and friend requests
 
@@ -2364,12 +2385,12 @@ which of these items may be built and how.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 13 | **Instrument product analytics** (sign-up funnel, first-practice conversion, retention, tutor vs partner mix) | High | Moderate | The only way to learn whether anyone wants this | #2 |
+| 13 | **Instrument product analytics** (sign-up funnel, first-practice conversion, retention, tutor vs partner mix) | High | Moderate | The only way to learn whether anyone wants this | #2. **Attempted this block**: discovered via `vercel integration discover analytics` (PostHog, Statsig, GrowthBook), but `vercel integration add posthog --yes --no-claim` was **blocked by the Claude Code auto-mode classifier** as a production/billing-affecting action. Provisioning a marketplace integration needs the owner present to approve it — see 17 |
 | 14 | **Build the real admin analytics page** on those events | Medium | Moderate | Replaces the honest placeholder | #13 |
 | 15 | **Delete superseded Cloudinary avatars** | Medium | Low | Stops a storage-cost leak | Careful — deletes user files |
 | 16 | **Split the 774-line messages page** | Medium | Moderate | Maintainability. **Move the polling/realtime logic, do not rewrite it** | None |
 | 17 | ~~User blocking, plus a moderation audit trail~~ | — | — | **Done** — see 3.36. Re-prioritised upward and implemented in the same block that recorded the voice-first direction (18.5), because live voice raises the cost of shipping without it | — |
-| 18 | **Push notification when a match is found** | Medium | Moderate | Matching currently requires staring at the page | None |
+| 18 | ~~Push notification when a match is found~~ | — | — | **Done** in `030a211` — see 3.9. Browser `Notification` API, no server/third-party dependency. Live two-account click-through still owed (blocked this session by dev-server interactivity, see 17) | — |
 | 19 | **Backwards pagination through message history** | Low | Moderate | Users can only see the newest 100 | None |
 | 20 | **Reduce the `jwt` callback DB read** | Low | Moderate | One fewer read per page load | Accepts delayed ban propagation |
 | 21 | **Accessibility audit** — video controls, contrast, `aria-live` on the streaming transcript | Medium | Moderate | Real inclusion; the tutor transcript is currently silent to screen readers | None |
@@ -2507,13 +2528,13 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**287 tests passing, 4 skipped, across 30 files.** Baseline before this work: 103. The ten newest
-(`blocking.server.test.ts`, `moderation.server.test.ts`) cover the blocking/moderation-audit
-block (3.36).
+**298 tests passing, 4 skipped, across 31 files.** Baseline before this work: 103. The newest
+11 (`use-match-notification.test.tsx`) cover the match-found notification (3.9, roadmap #18).
 
 ```
 src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume
 src/constants/languages.test.ts                       level labels, CEFR meanings, legacy migration
+src/hooks/use-match-notification.test.tsx             permission gating, visibility/focus, dedup
 src/hooks/use-unsaved-changes.test.tsx                beforeunload guard, releaseGuard, re-arming
 src/lib/ai/openrouter.test.ts                         32 tests: chain, advance rules, SSE parsing
 src/lib/ai/prompts.test.ts                            system prompt composition
@@ -2727,7 +2748,7 @@ before assuming it is harmless.
 4. **Failure modes are designed.** A model chain that survives credit exhaustion, retired model
    ids and upstream rate limits; limiters that fail open; a badge count that fails soft; three
    layers of error boundary; explicit database timeouts.
-5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 287 tests, green build.
+5. **Clean signals.** 0 lint errors, 0 warnings, `tsc` clean, 298 tests, green build.
 6. **Comments explain why.** The non-obvious decisions are documented where someone would
    otherwise "simplify" them.
 7. **Git history is genuine documentation.** Each commit explains the problem, the reasoning and
@@ -2820,10 +2841,17 @@ make.**
 
 ### Current state, briefly
 
-`main` @ `cfaa8a2` plus this block's three commits (`f9b433b` feat, `9f401ed` docs, and a small
-final-review docs commit that tightened the verification claims below), clean and synced. 287
-tests, 0 lint problems, `tsc` clean, build green. The core loop works. Nothing is half-finished
-or uncommitted. Twenty-two-plus phases of work are complete and documented in the git log.
+`main` @ `dcaf4cd` plus this block's two commits (`030a211` feat, and this docs commit), clean
+and synced. 298 tests (287 + 11 new), 0 lint problems, `tsc` clean, build green. The core loop
+works. Nothing is half-finished or uncommitted. Twenty-three-plus phases of work are complete and
+documented in the git log.
+
+This block also tried to provision product analytics (roadmap #13) via the Vercel Marketplace —
+`vercel integration add posthog` was blocked by the auto-mode classifier as a billing-affecting
+action (see 17) — and could not complete a live two-account click-through of the new notification
+because this session's dev server was non-interactive in the automation browser for reasons
+unrelated to the diff (also see 17, and the login-form symptom noted there). Both are recorded
+as owner/environment blockers, not silent gaps.
 
 ### Read these first, in this order
 
@@ -2923,6 +2951,10 @@ CSP and security headers are done (3.35).
 6. **Removing flags entirely** — considered and deferred, because language-to-nation mapping is
    editorially loaded (the data already maps Basque to the Spanish flag, Cantonese to Hong
    Kong). Raise it; do not decide it.
+7. **Installing or changing any Vercel Marketplace integration** (`vercel integration add/remove
+   ...`) — provisioning one can attach billing to the linked Vercel project, and the auto-mode
+   classifier blocks it for exactly that reason. Discovery (`vercel integration discover`) is
+   read-only and fine to run without asking; installing is not.
 
 ### How to prioritise future work
 
@@ -2947,8 +2979,11 @@ Everything here existed only in working memory and would otherwise be lost.
 ### Environment and access facts
 
 - **Vercel project is named `voxa`**; the local directory is `LingoMatch`. They differ.
-- **The Vercel CLI was never installed**, so `vercel env pull`, `vercel logs` and
-  `vercel deploy` were unavailable throughout. Installing it is recommended.
+- **The Vercel CLI was never installed globally**, but `npx vercel` works and, as of the
+  `030a211` block, the session was **already logged in as `mariamii-13`** with the project linked
+  (`.vercel/repo.json` → project `voxa`). `vercel env pull`, `vercel logs`, `vercel deploy` and
+  `vercel integration` are all usable via `npx vercel <cmd>` without any owner action — this
+  earlier note that they were "unavailable throughout" is stale.
 - **The MongoDB database is literally named `test`** in the connection string.
 - **Direct database writes from the shell were blocked** by tooling policy during this work, as
   was selecting the owner's authenticated browser context. This is why admin pages could not be
@@ -2975,6 +3010,41 @@ Everything here existed only in working memory and would otherwise be lost.
   (both password `QaTest!2026`), plus `throttleprobe1` and `throttleprobe2` from rate-limit
   testing. `qaftue001` and `qaphase001` are friends and share one conversation with two
   messages, and `qaphase001` has five tutor sessions. **This is why Progress showed real data.**
+- **Installing a Vercel Marketplace integration is a production/billing action, not a plain
+  read.** `vercel integration discover analytics` (a read-only lookup, no auth needed) surfaced
+  PostHog as the best-fit provider for roadmap #13. But `vercel integration add posthog --yes
+  --no-claim` was **blocked by the Claude Code auto-mode classifier** with "blocked by
+  classifier" — installing a marketplace integration can attach billing to the linked Vercel
+  project, so it correctly requires the owner present, the same way spending money or changing
+  production config does elsewhere in this document. **Treat any `vercel integration add` (or
+  similar provisioning command) as an owner-approval item, not something to push through or work
+  around.**
+- **This session's `next dev` (Turbopack) was reachable over HTTP but not interactive in the
+  chrome-devtools-mcp browser.** Clicking `/login`'s "Sign in" button (existing, previously
+  verified code, untouched by this block) and even its "Sign in with Google" button (a
+  synchronous `signIn()` call with no DB dependency) produced **zero** observable client-side
+  effect — no fetch request logged server-side, no navigation, nothing — across multiple fresh
+  page loads and both mouse-click and Enter-key submission. A manually injected
+  `fetch('/api/auth/csrf')` + `POST /api/auth/callback/credentials` from `evaluate_script`
+  **did** work and returned a real `302` for the real `qaftue001` account, proving the backend,
+  the account and the database connection were all fine — only in-page click-driven interactivity
+  was affected. The dev log showed the HMR WebSocket failing to handshake
+  (`net::ERR_INVALID_HTTP_RESPONSE`) throughout, which is the most likely cause. **This blocked
+  live two-account verification of the match-found notification (3.9)** and is not something the
+  `030a211` diff caused — the identical symptom pre-dated it on the login page. If a future
+  session hits the same thing, don't assume the newest diff broke it; check whether *any* client
+  click produces a network request first.
+- **In this session's sandbox, `http://localhost:3001` refused connections from the
+  chrome-devtools-mcp browser (`net::ERR_CONNECTION_REFUSED`) even while `curl` on the same host
+  reached it instantly**, and `http://127.0.0.1:3001` worked only intermittently before also
+  going to connection-refused. `http://<LAN-IP>:3001` (from the `next dev` "Network:" line, e.g.
+  `192.168.226.192`) was the one address that stayed reachable. If chrome-devtools-mcp can't
+  reach a local dev server, try the LAN address before concluding the server is down.
+- `.env.local` has `AUTH_URL`/`NEXTAUTH_URL` pinned to `http://localhost:3000`, while
+  `start-dev.bat` runs the app on port **3001**. This predates this block and was not the cause
+  of the interactivity issue above (relative-path `fetch()` calls resolve against the page's
+  actual origin regardless), but it is a real mismatch worth fixing if anyone deliberately relies
+  on `AUTH_URL` for redirect construction.
 
 ### Reasoning that is not obvious from the code
 
