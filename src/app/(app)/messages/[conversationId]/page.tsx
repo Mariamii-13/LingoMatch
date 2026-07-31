@@ -10,25 +10,7 @@ import { toast } from "sonner"
 import { avatarGradient, cn } from "@/lib/utils"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { useRealtimeMessages } from "@/components/messages/RealtimeMessagesProvider"
-import { reconcileMessages, type CanonicalMessage } from "@/lib/messages/reconcile"
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface Partner {
-  id: string
-  name: string
-  username: string
-  country: string
-  avatarInitials: string
-  avatarColor: string
-  lastSeenAt: string | null
-  nativeLanguages: { code: string; name: string; flag: string }[]
-}
-
-type ChatMessage = CanonicalMessage
-
-type SessionStatus = "active" | "ended"
+import { useConversationThread, type Partner } from "./use-conversation-thread"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -358,148 +340,60 @@ export default function ConversationPage({
   const { data: authSession } = useSession()
   const myId = authSession?.user?.id ?? ""
 
-  const [partner, setPartner] = React.useState<Partner | null>(null)
-  const [messages, setMessages] = React.useState<ChatMessage[]>([])
-  const [sessionStatus, setSessionStatus] =
-    React.useState<SessionStatus>("active")
-  const [loading, setLoading] = React.useState(true)
-  const [fetchError, setFetchError] = React.useState(false)
   const [inputValue, setInputValue] = React.useState("")
-  const [sending, setSending] = React.useState(false)
-  const { status: realtimeStatus, reconnect, subscribe, dispatch } = useRealtimeMessages()
-
-  const [showFeedback, setShowFeedback] = React.useState(false)
   const [showPostChat, setShowPostChat] = React.useState(false)
   const [showReport, setShowReport] = React.useState(false)
 
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const nearBottomRef = React.useRef(true)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
 
-  /** Cursor for incremental polling: the newest message currently held. */
-  const latestMessageAtRef = React.useRef<string | null>(null)
+  const {
+    partner,
+    messages,
+    sessionStatus,
+    loading,
+    fetchError,
+    sending,
+    hasMoreHistory,
+    loadingOlder,
+    showFeedback,
+    setShowFeedback,
+    realtimeStatus,
+    reconnect,
+    loadOlderMessages,
+    sendMessage: sendThreadMessage,
+    handleLeave,
+    handleFeedbackSubmit: submitFeedback,
+    handleAddFriend,
+  } = useConversationThread(conversationId, scrollContainerRef)
 
   React.useEffect(() => {
-    latestMessageAtRef.current = messages.length
-      ? messages[messages.length - 1].createdAt
-      : null
+    nearBottomRef.current = true
+  }, [conversationId])
 
+  React.useEffect(() => {
     if (nearBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }
   }, [messages])
 
-  React.useEffect(() => {
-    nearBottomRef.current = true
-
-    async function init() {
-      try {
-        const [infoRes, msgRes] = await Promise.all([
-          fetch(`/api/chat/${conversationId}`),
-          fetch(`/api/chat/${conversationId}/messages`),
-        ])
-
-        if (!infoRes.ok || !msgRes.ok) {
-          setFetchError(true)
-          return
-        }
-
-        const info = await infoRes.json()
-        const msgData = await msgRes.json()
-
-        setPartner(info.partner)
-        setSessionStatus(info.status)
-        setMessages(msgData.messages)
-
-        if (info.status === "ended") setShowFeedback(true)
-      } catch {
-        setFetchError(true)
-      } finally {
-        setLoading(false)
-      }
-    }
-    init()
-  }, [conversationId])
-
-  React.useEffect(
-    () =>
-      subscribe((event) => {
-        if (event.conversationId !== conversationId) return
-        setMessages((current) => reconcileMessages(current, [event.message]))
-      }),
-    [conversationId, subscribe]
-  )
-
-  React.useEffect(() => {
-    if (realtimeStatus !== "disconnected" || sessionStatus !== "active") return
-
-    const interval = setInterval(async () => {
-      // Ask only for what arrived since the newest message already held. This
-      // endpoint has always supported the cursor; polling was refetching the
-      // whole window every ten seconds without it.
-      const newest = latestMessageAtRef.current
-      const url = newest
-        ? `/api/chat/${conversationId}/messages?after=${encodeURIComponent(newest)}`
-        : `/api/chat/${conversationId}/messages`
-
-      const response = await fetch(url, { cache: "no-store" }).catch(() => null)
-      if (!response?.ok) return
-      const data = await response.json()
-      setMessages((current) => reconcileMessages(current, data.messages))
-      if (data.sessionStatus === "ended") setSessionStatus("ended")
-    }, 10_000)
-
-    return () => clearInterval(interval)
-  }, [conversationId, realtimeStatus, sessionStatus])
-
-  async function sendMessage() {
+  async function handleSend() {
     const content = inputValue.trim()
-    if (!content || sending || sessionStatus !== "active") return
+    if (!content || sending) return
 
-    setSending(true)
     setInputValue("")
-    try {
-      const res = await fetch(`/api/chat/${conversationId}/messages`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        if (res.status === 429) toast.error("Sending too fast — slow down a bit")
-        else
-          toast.error(
-            err.error === "Session ended"
-              ? "Chat session has ended"
-              : "Failed to send"
-          )
-        setInputValue(content)
-        return
-      }
-      const msg = await res.json()
-      dispatch({ type: "conversation.message", conversationId, message: msg })
-    } catch {
-      toast.error("Failed to send message")
-      setInputValue(content)
-    } finally {
-      setSending(false)
-      inputRef.current?.focus()
-    }
+    const ok = await sendThreadMessage(content)
+    if (ok === false) setInputValue(content)
+    inputRef.current?.focus()
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
-      sendMessage()
+      handleSend()
     }
-  }
-
-  async function handleLeave() {
-    await fetch(`/api/chat/${conversationId}/leave`, {
-      method: "POST",
-    }).catch(() => {})
-    setSessionStatus("ended")
-    setShowFeedback(true)
   }
 
   async function handleFeedbackSubmit(
@@ -507,28 +401,8 @@ export default function ConversationPage({
     wouldTalkAgain: boolean,
     note: string
   ) {
-    try {
-      await fetch(`/api/chat/${conversationId}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating, wouldTalkAgain, note }),
-      })
-    } catch {
-      // non-fatal
-    }
-    setShowFeedback(false)
+    await submitFeedback(rating, wouldTalkAgain, note)
     setShowPostChat(true)
-  }
-
-  async function handleAddFriend() {
-    if (!partner) return
-    const res = await fetch("/api/friends/request", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetUserId: partner.id }),
-    })
-    if (res.ok) toast.success("Friend request sent!")
-    else toast.error("Could not send request")
   }
 
   if (loading) {
@@ -636,12 +510,28 @@ export default function ConversationPage({
 
       {/* Messages */}
       <div
+        ref={scrollContainerRef}
         className="flex-1 overflow-y-auto px-4 py-4"
         onScroll={(event) => {
           const element = event.currentTarget
           nearBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120
+          if (element.scrollTop < 200) loadOlderMessages()
         }}
       >
+        {hasMoreHistory && (
+          <div className="mb-3 flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loadingOlder}
+              onClick={loadOlderMessages}
+            >
+              {loadingOlder && <Loader2 className="mr-1.5 size-4 animate-spin" />}
+              Load older messages
+            </Button>
+          </div>
+        )}
+
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
             <p className="text-sm text-muted-foreground">
@@ -721,7 +611,7 @@ export default function ConversationPage({
             <Button
               size="icon"
               disabled={!inputValue.trim() || sending}
-              onClick={sendMessage}
+              onClick={handleSend}
               aria-label="Send"
             >
               {sending ? (

@@ -20,6 +20,7 @@ export async function GET(
 
   const { sessionId } = await params
   const after = req.nextUrl.searchParams.get('after')
+  const before = req.nextUrl.searchParams.get('before')
 
   await connectDB()
 
@@ -35,6 +36,7 @@ export async function GET(
 
   const query: Record<string, unknown> = { conversationId: sessionId }
   if (after) query.createdAt = { $gt: new Date(after) }
+  else if (before) query.createdAt = { $lt: new Date(before) }
 
   /*
    * Without a cursor this has to return the NEWEST page, not the oldest.
@@ -43,6 +45,12 @@ export async function GET(
    * stuck looking at its beginning and never saw anything new. Fetch descending
    * and reverse, so the client always receives the latest window in
    * chronological order.
+   *
+   * `before` walks the same window backwards for history scrollback: also
+   * descending (oldest-first would skip straight to the very beginning of a
+   * long conversation instead of the page just above what's on screen), then
+   * reversed into chronological order like every other page this endpoint
+   * returns.
    */
   const docs = await Message.find(query)
     .sort({ createdAt: after ? 1 : -1 })
@@ -58,6 +66,9 @@ export async function GET(
     content: m.content as string,
     createdAt: (m.createdAt as Date).toISOString(),
   }))
+
+  // Only meaningful for `before`: whether an older page still exists to load.
+  const hasMore = before ? docs.length === 100 : undefined
 
   // Typing indicator: check if partner typed within TYPING_TIMEOUT_MS
   const typing = conv.typing as Map<string, Date> | Record<string, Date> | undefined
@@ -75,6 +86,7 @@ export async function GET(
     messages: result,
     sessionStatus: conv.status,
     partnerTyping,
+    ...(hasMore !== undefined ? { hasMore } : {}),
   })
 }
 
