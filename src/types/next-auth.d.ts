@@ -30,5 +30,7 @@ declare module 'next-auth/jwt' {
     role?: string
     onboardingCompleted?: boolean
     languageProfileComplete?: boolean
+    /** Epoch ms of the last time this token was refreshed from MongoDB. */
+    refreshedAt?: number
   }
 }

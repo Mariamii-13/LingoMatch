@@ -6,6 +6,7 @@ import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
 import { allowLoginAttempt } from '@/lib/auth-throttle'
 import { getClientIp } from '@/lib/request-identity'
+import { shouldRefreshToken } from '@/lib/auth-token-refresh'
 import {
   buildLanguageProfileUpdate,
   isLanguageProfileComplete,
@@ -141,8 +142,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             rawUser,
           )
           if (dbUser.displayName) token.name = dbUser.displayName
+          token.refreshedAt = Date.now()
         }
       } else if (token.id) {
+        // The jwt callback runs on every request under the JWT session
+        // strategy, so re-reading MongoDB here cost one query per page load
+        // just to keep role/plan/etc fresh (roadmap #20). Only refresh once
+        // the token is older than the interval; a stale-but-recent token is
+        // returned as-is. Accepted tradeoff: a ban or plan change can take up
+        // to that long to take effect on an already-issued session.
+        if (!shouldRefreshToken(token.refreshedAt, Date.now())) return token
+
         await connectDB()
         const dbUser = await User.findById(token.id)
           .select('role plan isBanned onboardingCompleted displayName languageProfile nativeLanguages spokenLanguages learningLanguages')
@@ -156,6 +166,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             dbUser,
           )
           if (dbUser.displayName) token.name = dbUser.displayName as string
+          token.refreshedAt = Date.now()
         }
       }
       return token
