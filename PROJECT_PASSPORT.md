@@ -44,6 +44,7 @@ see 17 for how that was distinguished from the two real bugs above).
 16. [Instructions for the next AI assistant](#16-instructions-for-the-next-ai-assistant)
 17. [Project memory](#17-project-memory)
 18. [Permanent product direction](#18-permanent-product-direction)
+19. [AI & voice architecture strategy](#19-ai--voice-architecture-strategy)
 
 ---
 
@@ -2455,13 +2456,16 @@ Priority reflects value per unit of effort and dependency order.
 **Read section 18 before picking anything from this list.** It records permanent
 product-direction constraints — AI provider independence, teaching in the learner's own
 language, SEO as a product requirement, and (18.5) voice-first human exchange — that decide
-which of these items may be built and how.
+which of these items may be built and how. **Read section 19 before touching anything AI-model
+or voice related specifically** — it's the evidence-based model/voice strategy 18.2 and 18.5
+both required before implementation, and it changes the concrete plan (not the constraints) for
+items #1 and #24 below, and adds new unblocked items #28–#30.
 
 ### Immediate (before any wider testing)
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 1 | **Buy ~$10 OpenRouter credits**; set `AI_MODEL_DEFAULT` to a paid model; raise `AI_DAILY_REQUEST_BUDGET` | Critical | Trivial | Unblocks the core product and makes it ~10× faster | Owner spending money |
+| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are now already configured for a specific paid chain (§19.3: `google/gemini-3-flash-preview` → `anthropic/claude-haiku-4.5` → free tier), verified live-reachable and correctly priced; only the credit purchase itself remains | Critical | Trivial | Unblocks the core product and makes it ~10× faster | Owner spending money |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | **Test live video with two real cameras** | High | Low | The only wholly unverified feature | Two devices |
@@ -2499,10 +2503,13 @@ which of these items may be built and how.
 |---|---|---|---|---|---|
 | 22 | **Payments and entitlements** — define the tier, wire it into the tutor budget (the natural enforcement point), then checkout | High if monetising | High | Revenue | #13 proving demand |
 | 23 | **AI-powered matching** via the existing `CompatibilityProvider` seam | Medium | High | Better pairings | Enough users to matter |
-| 24 | **Speaking practice** (voice in/out with the tutor) | Medium | High | The obvious product extension; `voiceIntro` already anticipates it | Cost modelling |
+| 24 | **Speaking practice** (voice in/out with the tutor) | Medium | High | The obvious product extension; `voiceIntro` already anticipates it | See §19.4 — architecture planned (half-cascade), one measurement spike needed before implementation |
 | 25 | **Structured curriculum or lesson suggestions** | Low | High | Retention beyond free conversation | #13 |
 | 26 | **Staging environment** | Medium | Low | Safe verification | #5 |
 | 27 | **Group practice rooms** | Low | High | Solves liquidity differently | None |
+| 28 | **Machine-check the tutor's explanation-language rule** (structured output + repair call, §19.6.1) | High | Moderate | Fixes the live-diagnosed defect (tutor explains in the wrong language) at the root, survives every future model swap | None — no owner action |
+| 29 | **Build the AI-quality eval harness** (§19.6.2) — synthetic 20-turn sessions per Tier-1 language pair, graded automatically | High | Moderate | The only way to actually verify any model pick (§19.3's chain is a hypothesis, not a conclusion) instead of guessing again | #28 makes the key metric machine-gradable |
+| 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
 
 ---
 
@@ -3475,3 +3482,417 @@ plan must now scope human-to-human voice matching alongside the tutor. **What th
 do** is update this passport with the direction and act on the one piece of preparatory work that
 is genuinely evidence-justified today and has no owner-approval dependency: user blocking and a
 moderation audit trail (roadmap #17), because voice-first raises the cost of shipping without it.
+
+---
+
+## 19. AI & voice architecture strategy
+
+**Status: first-principles strategy review, recorded 2026-07-31, requested by the owner before
+any further AI/voice implementation.** This section is the evidence-based architecture and
+product plan that 18.2 and 18.5 both said must exist before speech work starts. It supersedes
+nothing in 18.1/18.2/18.5 (those constraints are unchanged and this section was written to
+satisfy them) but it **is** the plan those sections were waiting on. Read this before touching
+`src/lib/ai/`, `src/config/ai-practice.ts`, or before starting any speech/voice work.
+
+**Method.** Same discipline as the free-model benchmarking in section 17: don't guess, verify.
+Every pricing, latency and benchmark figure below was looked up against a live source dated
+around this writing (late July 2026) rather than recalled from training data, because this
+market changes monthly and stale numbers would make a real production decision on fiction. Two
+of the picks below (the specific OpenRouter model ids) were independently re-verified live
+against OpenRouter's own model pages before being written here, and the account's actual credit
+balance was checked live (`GET /api/v1/key`) rather than assumed from the existing passport text.
+
+### 19.1 Why this review happened now
+
+The previous session (3.37-adjacent work, same day) live-diagnosed a real defect while
+investigating a user complaint about tutor quality: the free-tier model
+(`google/gemma-4-26b-a4b-it:free`) corrects mistakes acceptably but **frequently explains the
+correction in the target language instead of the learner's own language** — the exact case 18.2
+requires ("a user who speaks Spanish and does not understand English must be able to learn
+another supported language in Spanish"). Tightening the system prompt (explicit rule, a
+pre-send checklist item, a worked example showing the language switch) measurably improved this
+(0% → mostly-correct on a live retest) but did not fully fix it. That prompted the owner to ask
+for a first-principles reassessment of the whole AI strategy rather than another prompt patch.
+
+### 19.2 Diagnosis: this is a known failure class, not a prompt bug
+
+Three independent pieces of published evidence say the defect is **instruction-drift under a
+long, multi-rule system prompt across turns** — a property of small/mid models under sustained
+multi-turn constraint, not a wording problem in this prompt specifically:
+
+- *"Alignment Drift in CEFR-prompted LLMs for Interactive Spanish Tutoring"* tested four 7–12B
+  models as CEFR-constrained Spanish tutors; across nine turns, level-differentiated output
+  **converged back toward unconstrained behaviour**. Their own conclusion: "prompting alone is
+  too brittle for sustained, long-term interactional contexts."
+  ([arxiv.org/html/2505.08351v2](https://arxiv.org/html/2505.08351v2))
+- **Multi-IF** (IFEval extended to multi-turn, 8 languages) finds *every* tested model's
+  instruction-following failure rate rises with each additional turn, and rises further for
+  non-Latin-script languages.
+  ([arxiv.org/abs/2410.15553](https://arxiv.org/abs/2410.15553))
+- Model *class* separates further on this axis than prompt wording does — but the only public
+  leaderboard for it is already a generation stale (pre-dates the current GPT-5.x / Gemini 3.x /
+  Claude 5 models), so it is directional evidence about the axis, not a current ranking.
+
+**Consequence: pull two levers, not one.**
+1. **Model** — move off a free 26B model. Necessary, not provably sufficient by itself.
+2. **Architecture** — stop relying on the model to *volunteer* compliance; make the
+   explanation-language rule **machine-checkable** instead of prompt-only (19.6.1). This is the
+   single highest-leverage, lowest-cost recommendation in this section.
+
+Our own system prompt is itself part of the problem: it is roughly 1,600 tokens across six rule
+blocks plus a worked example, and per the drift research, prompt *length and rule count* are
+part of what drives convergence. 19.6.1's structured-output approach lets several of those rule
+blocks (and the entire pre-send checklist) be **deleted**, not reinforced — a shorter prompt is
+part of the fix, not just a side effect.
+
+### 19.3 Text tutor model — comparison and pick
+
+**Current architecture is already right and stays unchanged in shape:** direct OpenRouter HTTP
+(no SDK), an env-driven ordered model chain (`resolveModelChain()`), and advance-on-failure rules
+that only advance past 402/404/429/5xx (never past a timeout or a malformed reply, because those
+already cost time). This review changes *which models are in the chain*, not the mechanism.
+
+**Pricing (USD per 1M tokens, verified live against provider/OpenRouter pages, 31 Jul 2026):**
+
+| Model | Input | Output | Notes |
+|---|---|---|---|
+| DeepSeek V4 Flash | $0.14 | $0.28 | secondary source only — verify on OpenRouter before relying on it |
+| GPT-5.6 Luna | $0.20 | $1.20 | cheapest frontier-class model available; **latency trap**, see below |
+| Qwen3.6-Plus | $0.325 | $1.95 | secondary source only |
+| Gemini 3.1 Flash-Lite | $0.25 | $1.50 | half the cost of 3 Flash; untested on the explanation-language axis |
+| **Gemini 3 Flash Preview** | **$0.50** | **$3.00** | ✅ **re-verified live on OpenRouter** — matches Google's own list price |
+| GPT-5-mini | $0.25 | $2.00 | |
+| **Claude Haiku 4.5** | **$1.00** | **$5.00** | ✅ **re-verified live on OpenRouter** |
+| Claude Sonnet 5 | $2.00 → $3.00 (1 Sep 2026) | $10 → $15 | ~30% more tokens than pre-4.7 models on the same text (newer tokenizer) |
+| Claude Opus 5 | $5.00 | $25.00 | no evidence this project needs Opus-tier quality for a tutor reply |
+
+**Latency is the number that actually decides this, and it contains a trap.** Time-to-first-token
+for a *reasoning* model includes its thinking time. Artificial Analysis measured:
+
+| Model (non-reasoning / minimal) | TTFT | Output speed |
+|---|---|---|
+| Gemini 3 Flash (non-reasoning) | **0.83 s** | 176 tok/s |
+| Claude Haiku 4.5 (non-reasoning) | **0.98 s** | 88 tok/s |
+| Peer median | 1.68 s | 58 tok/s |
+| **GPT-5.6 Luna at max reasoning** | **117 s** | 178 tok/s |
+
+GPT-5.6 Luna is simultaneously the cheapest frontier-class model *and*, at default/high reasoning
+effort, nearly two minutes to first token — dramatically worse than today's 9-second free tier.
+**Any model pinned into this chain must have its reasoning/thinking level explicitly set to
+minimal**, or a routine model swap could silently reintroduce the exact latency complaint the
+tutor already had. Gemini 3 Flash exposes `minimal/low/medium/high`; keep it at `minimal` here.
+
+**Multilingual quality.** Artificial Analysis's Multilingual Index (Global-MMLU-Lite, 16
+languages) puts Gemini 3 Flash Preview at 91 overall / **94 on Spanish**, within 1–2 points of
+frontier Pro/Opus-tier models — you do not need Opus-tier pricing for Latin-script European
+language competence.
+([artificialanalysis.ai/models/multilingual](https://artificialanalysis.ai/models/multilingual))
+**Honest caveat:** this benchmark measures knowledge/reasoning *expressed in* a language. **No
+public benchmark measures LingoMatch's actual requirement** — holding a conversation in language
+Y while writing exactly one sentence in language X, and holding that split across 20 turns. This
+ranking is a proxy for "broadly competent," not a proof the explanation-language rule will hold.
+That gap is exactly why 19.6.2 (build the eval) exists.
+
+**Cost at LingoMatch's actual volume** (measured token profile: `PROVIDER_HISTORY_LIMIT = 20`
+messages replayed ≈ 4,000 input tokens/turn, `MAX_OUTPUT_TOKENS = 400` capped, typical reply
+~200 tokens):
+
+| Model | $ / 1,000 messages | Closed beta (~6k msg/mo) | 200 DAU × 20 msg (120k/mo) |
+|---|---|---|---|
+| Gemini 3.1 Flash-Lite | $1.30 | $8 | $156 |
+| **Gemini 3 Flash Preview** | **$2.60** | **$16** | **$312** |
+| Claude Haiku 4.5 | $5.00 (~$3.56 cached) | $30 | $600 |
+| Claude Sonnet 5 (from 1 Sep) | $15.00 | $90 | $1,800 |
+
+**At closed-beta scale, model cost is not a real variable** — the spread between the cheapest
+viable model and Sonnet 5 is under $60/month. Choosing on price alone right now would be
+optimising the wrong thing; choose on quality, revisit cost once DAU is real. Caching the
+~1,600-token system prompt (identical every turn of a session) is worth wiring in regardless —
+Gemini 3 Flash cache hits are $0.05/M vs $0.50/M input (−90%).
+
+**Recommended chain (text):**
+
+```
+AI_MODEL_DEFAULT   = google/gemini-3-flash-preview   # minimal thinking level
+AI_MODEL_FALLBACKS = anthropic/claude-haiku-4.5
+                     (then the existing FREE_TUTOR_MODELS, unchanged, as the safety net)
+```
+
+**Why Gemini 3 Flash Preview as primary:** best measured latency in its class (0.83s vs a
+1.68s peer median) — this directly answers the 9-second-wait complaint; multilingual index 94 on
+Spanish; $16/month at closed-beta volume; verified real and reachable on OpenRouter today.
+
+**Why Claude Haiku 4.5 as the paid fallback rather than a second Google model:** it is a
+*different vendor* — real provider diversity, not just model diversity, so a Google-side outage
+doesn't take down both chain entries at once. 0.98s TTFT; 0.1× cache-read pricing suits the
+repeated system prompt.
+
+**Do not default to:** Claude Sonnet 5 (10× the cost for quality with no evidence it's needed,
+and its price rises 50% on 1 Sep 2026); GPT-5.6 Luna (cheapest and smartest on paper, but *must*
+be pinned to minimal reasoning or the latency trap above reintroduces the original complaint —
+a good eval candidate, not a blind default); DeepSeek V4 Flash / Qwen3.6-Plus (plausible on
+price, but their pricing here is secondary-source only and neither has been checked on the
+explanation-language axis — eval candidates, not production defaults, until verified).
+
+**⚠️ Confirmed live, 2026-07-31: the account still has never purchased OpenRouter credits**
+(`GET /api/v1/key` → `"Insufficient credits. This account never purchased credits."`, HTTP 402).
+Setting the chain above does **not** require credits to be safe — a 402 on the paid entry
+advances to the next chain entry in well under a second by the existing `isModelUnavailable()`
+rule, so the tutor keeps working on the free tier exactly as it does today, and the chain is
+simply ready the moment credits exist. **Roadmap #1 (buy ~$10 of credits) is unchanged and is
+still the single highest-value action available** — it raises the daily cap from 50 to 1,000
+requests app-wide *and* is the only way the paid entries in this chain ever actually run.
+
+### 19.4 Voice — architecture decision (planning only, not implemented)
+
+Per 18.2/18.5, voice needs an evidence-based plan before any code. This is that plan for the
+*architecture choice*; it does not add a `voice` session type or start building.
+
+**Three architectures exist** (LiveKit's own vocabulary, since LiveKit is already this project's
+realtime vendor for video):
+
+- **Cascaded / pipeline:** STT → text LLM → TTS. Fully modular, every stage swappable and
+  auditable.
+- **Realtime speech-to-speech (S2S):** one model consumes and emits audio directly. No
+  transcript step, preserves prosody, but "sacrifices granular control."
+- **Half-cascade (hybrid):** a realtime model for speech *understanding* only, paired with a
+  separate TTS for output — "balances realtime input comprehension with scripted output control."
+
+LiveKit's own bar: conversations feel natural only when end-to-end latency stays under ~1s.
+(https://docs.livekit.io/agents/models/pipelines/)
+
+**Latency (verified, but genuinely contradictory between sources — flagged, not resolved):**
+
+| Path | Measured | Source |
+|---|---|---|
+| Realtime S2S, general | 320–800 ms | softcery LiveKit guide |
+| Cascaded, fully streamed | 450–950 ms | same |
+| Cascaded, production median | 1.4–1.7 s | same |
+| OpenAI gpt-realtime-1.5 | ~0.82 s | softcery |
+| **Google Gemini 3.1 Flash Live** | **~2.98 s** | softcery |
+
+The ~2.98s figure for Gemini Live flatly contradicts the general "S2S is 320–800ms" claim and
+Google's own marketing. **This must be measured directly before any voice decision leans on
+Gemini Live's cost advantage** — a 3-second gap before the tutor speaks would ruin the
+experience regardless of price. Also worth noting: ~90% of production LiveKit agents still run
+cascaded today — the market has not settled on S2S.
+
+**Cost per minute (verified):**
+
+| Option | $/min |
+|---|---|
+| Amazon Nova 2 Sonic (native audio) | ~$0.017 |
+| **Gemini 3.1 Flash Live (native audio)** | **~$0.023** |
+| **Cascaded pipeline (cheap STT + Gemini 3 Flash + cheap TTS)** | **~$0.023 — same as Gemini native audio** |
+| gpt-realtime-2.1-mini | ~$0.06–0.14 |
+| **OpenAI gpt-realtime-2.1** | **$0.18–0.46 uncached** ($0.05–0.10 cached) |
+
+**S2S-specific cost warning:** OpenAI Realtime re-sends conversation context every turn, so cost
+grows superlinearly with session length — a ~$0.30/min baseline can reach $1.50+/min in a
+30-minute session, which is exactly the shape of a tutor session. Gemini's Live API also caps
+audio-only sessions at 15 minutes (extendable via session resumption) — a hard constraint to
+design around, not a footnote.
+
+**How each option scores against this project's own constraints:**
+
+- **Constraint 18.4/"multiple teacher personas" (voices, personalities, genders, cultural
+  backgrounds):** decisive against pure S2S. Gemini Live ships **30 fixed voices across 24
+  languages**; OpenAI Realtime ships ~10 *style* personas, not real linguistic/accent variants.
+  A cascaded TTS stage (e.g. ElevenLabs: 70+ languages, 5,000+ voices) makes voice a **per-persona
+  config field** instead of a fixed catalogue pick — the only shape that can reach "many distinct
+  teacher identities" without hitting a wall.
+- **Constraint 18.1 (no vendor lock-in):** S2S is the *most* locked-in option on the table.
+  Migrating means rewriting the streaming integration and all conversation-state handling.
+  Neither existing routing layer rescues this: OpenRouter has no bidirectional realtime endpoint
+  at all (only one-shot `/audio/speech` and `/audio/transcriptions`), and Vercel AI Gateway's
+  realtime support is beta with a single model. **Going S2S means going direct to one vendor's
+  WebSocket — anti-lock-in has to be satisfied by our own adapter interface, not by a gateway.**
+- **The explanation-language rule, again, in voice form — the finding that most changes the
+  recommendation:** Google's own Live API docs state native-audio-output models
+  *"automatically choose the appropriate language and don't support explicitly setting the
+  language code"* — you may only "constrain language selection through system instructions."
+  System instructions are **precisely the mechanism already shown to fail on this exact
+  requirement** (19.2). Gemini native audio would hand LingoMatch's one core teaching rule
+  (converse in the target language, explain in the learner's own) to an autonomous heuristic with
+  no override. OpenAI's realtime prompting guide, by contrast, treats this as a first-class,
+  documented concern — explicit anti-triggers for switching language on accent, filler words, or
+  isolated foreign words — which reads like it was written for exactly this product's user base
+  (learners who by definition speak with a foreign accent).
+- **Pronunciation teaching:** genuinely favours S2S/half-cascade — a cascaded STT stage emits
+  normalised text, so a heavily-accented "the beach" transcribes identically to a native
+  pronunciation; the phonetic signal needed to *teach pronunciation* is discarded before the LLM
+  ever sees it. The correct response is **not** "therefore go full S2S" — it's to treat
+  pronunciation scoring as a **separate, optional module** (phoneme-level scoring, e.g.
+  Goodness-of-Pronunciation-style alignment) that either architecture can call, rather than
+  betting the whole architecture on one model's implicit phonetic awareness.
+- **A second, easy-to-miss risk that cuts against cascaded STT specifically:** STT word-error-rate
+  is measured on clean/native read-speech in most public benchmarks. This product's entire user
+  base speaks with a non-native accent in the target language. Every STT mis-transcription
+  becomes a **fabricated correction** — directly violating the tutor's own existing rule ("never
+  invent a mistake") and more damaging to learner trust than a missed one. **This must be measured
+  on real accented L2 audio before shipping, not assumed from FLEURS/read-speech numbers.**
+
+**Net conclusion — inverted from the naive "S2S is faster and simpler" take:** the cheapest S2S
+option (Gemini Live) is the one *least* able to satisfy the hardest requirement (language
+control); the option best documented for that requirement (OpenAI Realtime) is the most
+expensive and has the worst long-session cost curve. A cascaded/half-cascade stack costs the
+*same* per minute as Gemini native audio while keeping full control. There is no cost reason to
+accept S2S's lock-in and language-control tradeoffs.
+
+**Recommended target architecture (planning only): half-cascade.**
+- **Audio in:** a realtime/streaming speech-understanding path where available (preserves
+  prosody for pronunciation feedback), falling back to a plain STT model
+  (e.g. a ~2% WER, ~150ms, 90-language streaming STT model) if the realtime path isn't ready.
+- **Reasoning:** **the same text tutor chain as 19.3, unchanged.** One tutor brain, two input
+  modalities. This is the single most important design decision — it means 19.6's quality work
+  (structured output, eval) is shared between text and voice, the explanation-language rule stays
+  under this project's control either way, and swapping the LLM swaps both surfaces at once.
+- **Audio out:** dedicated TTS with **voice id as a per-persona config field** — this is the
+  literal implementation of the multi-teacher-persona constraint. A ~$15/M-character,
+  40+-language TTS model is a reasonable default; a larger, pricier voice-count model where
+  persona range matters more than per-minute cost.
+- **Pronunciation feedback:** a separate, optional phoneme-scoring module, not an emergent
+  property of whichever architecture is chosen.
+- **Transport:** LiveKit, already integrated for video. An audio-only room is a client/room-config
+  change (video minus the camera track), not a new realtime integration.
+
+**What to do next on voice — one spike, no product code, and not started yet:**
+1. Measure real end-to-end latency for the realtime-audio-in candidates from this app's actual
+   Vercel Fluid Compute runtime, and resolve the Gemini Live 2.98s-vs-320–800ms contradiction
+   directly rather than trusting either secondary source.
+2. Measure STT word-error-rate on **real accented L2 speech in the Tier-1 languages** (19.5), not
+   on read-speech benchmarks, and quantify the fabricated-correction rate this would introduce.
+3. Cost-model one realistic 20-minute tutor session end to end, including LiveKit agent-minute
+   cost, before committing a number to any roadmap estimate.
+4. Only then write the full 18.2/18.5-mandated implementation plan (session model, moderation
+   model for unreviewable live audio, persona/voice config schema, budget extension per 19.6.3).
+
+**Keep AI voice and human-to-human voice separate in sequencing.** Human-to-human voice matching
+needs no AI at all — it is a LiveKit audio-only room reusing `video`'s existing liveness/matching
+mechanics (3.9/18.5). It shares mic-permission UX, device selection, the pre-join screen, and the
+moderation model (3.36) with AI voice, but shares almost none of the backend. **Human voice is
+the lower-risk, cheaper, sooner-shippable half of 18.5** and does not need to wait on any of the
+AI-voice work above.
+
+### 19.5 Initial language-pair scope
+
+18.2 is explicit that broad language coverage from day one is not the goal — the goal is the
+highest-quality experience for the smallest scope that proves the model, and 18.2 already flags
+that "the per-pair quality has never been tested — only Spanish was exercised live."
+
+**Evidence used:** real-world learner demand (2025 Duolingo Language Report: English is the
+top-learned language in 79% of countries; Spanish leads 26 countries; French 12), the
+multilingual-quality data from 19.3 (Latin-script European languages sit within 1–2 points of
+frontier models even at Flash tier; non-Latin scripts show measurably higher multi-turn
+instruction-following error), and speech-quality data for 19.4 (STT error roughly doubles from
+Spanish to Japanese in public benchmarks; the deepest independent speech-benchmark coverage
+exists for English paired with German/Spanish/French/Italian/Portuguese, including explicit
+code-switching tests — which is exactly this product's explanation-language mechanism).
+
+**Recommended Tier 1 — explanation (native) languages: Spanish, English, Brazilian Portuguese.
+Target languages: English, Spanish, French.**
+
+| # | Pair (native → target) | Why this specific pair |
+|---|---|---|
+| 1 | Spanish → English | Largest real demand; the canonical 18.2 case (learner may know zero English) |
+| 2 | English → Spanish | Control condition — English is the strongest instruction language for every model. If a model fails here, it's disqualified outright |
+| 3 | Portuguese (BR) → English | Second-largest demand; proves the mechanism generalises past one native language |
+| 4 | **Spanish → French** | **The stress test** — two close Romance languages, zero English anywhere in the loop, maximum drift pressure on the explanation-language rule |
+| 5 | **Portuguese (BR) → Spanish** | **The extreme case** — languages close enough that L1 interference ("portuñol") is itself a teaching topic; any language-mixing weakness surfaces here first |
+| 6 | English → French | Completes English-native coverage for the 3rd most-learned target |
+| 7 | French → English | Reverse direction, satisfying 18.2's bidirectionality requirement |
+| 8 | Spanish → Portuguese (BR) | Reverse of #5 |
+
+**Why non-Latin-script languages (Japanese, Korean, Chinese) are deliberately excluded from
+launch scope despite real demand:** they sit in the *higher*-error regime for exactly the defect
+already found (multi-turn instruction-following degrades further on non-Latin scripts); STT error
+roughly doubles; TTS voice catalogues are thinner; tokenisation costs more per turn; and they need
+real product work the Latin set doesn't (script input methods, romanization toggles, tone
+feedback for Mandarin) — that is a distinct feature, not a config value. **Japanese is the
+correct first Tier-2 addition once the Latin-script tutor is proven and the eval harness (19.6.2)
+exists to measure that expansion's quality honestly**, not a launch-scope language.
+
+**Why German/Italian are Tier 2, not launch scope, despite being cheap to add:** precisely
+*because* they're cheap and low-risk to add later, they shouldn't consume launch QA budget now.
+
+**The real scoping constraint is explanation languages, not target languages.** Each explanation
+language needs a native-speaker reviewer to judge whether a grammar explanation is *actually good
+pedagogy* in that language, not just grammatically present. Three (Spanish, English, Brazilian
+Portuguese) is the realistic ceiling for genuine QA at this stage — this is why the table above
+has 3 native languages but reaches 6 target-language slots across 8 pairs.
+
+### 19.6 Concrete follow-up work this section unblocks
+
+Sequencing, highest-value-unblocked first:
+
+**19.6.1 — Make the explanation language machine-checkable.** *(Highest leverage, lowest cost;
+no owner action required.)* Ask the model for structured output instead of free text:
+`{ conversation, correction | null, explanation | null, explanation_language, practice }`. Then,
+server-side, run a language-ID check on `explanation` against the profile's
+`preferredExplanationLanguage`; if it doesn't match, issue one small, cheap repair call
+("translate this sentence into X") rather than the whole reply. This converts a
+**model-capability problem into a validated-output problem**, which per 19.2 is the only
+reliable fix — and it works identically regardless of which model is in the chain, so it survives
+every future model swap (18.1) rather than fighting it. It also lets several prompt rule blocks
+and the entire pre-send checklist be deleted, shortening the prompt (19.2). Tradeoffs to weigh
+honestly: complicates the existing NDJSON stream (needs a streaming JSON parser client-side),
+adds ~50–100 tokens/turn, and the rare repair-call path adds latency on failure — a good trade
+against an otherwise-unfixable core-product defect.
+
+**19.6.2 — Build the eval before trusting any model pick, including 19.3's.** Same discipline as
+"benchmarked all 17 free models on the live key, not by guessing" (section 17). No public
+benchmark measures LingoMatch's actual requirement (19.3), so this project has to measure it
+directly: seeded synthetic 20-turn sessions per Tier-1 pair (19.5), each containing a known error
+type (tense, gender agreement, word order, false friend, preposition), graded automatically on:
+correction present, **explanation-language correctness by turn** (the actual defect — this is the
+number that should decide the model), false-positive corrections on already-correct input,
+length-limit compliance, banned-opener compliance, Markdown-free. Run it on every model-chain
+change, not once.
+
+**19.6.3 — Extend the budget system from request-counting to cost-counting before raising any
+model or budget config further.** `tutor-budget.ts`'s three tiers currently count *requests*,
+which stops being the right unit the moment a paid model is actually live: a long session costs
+far more than a fresh one at the same request count. OpenRouter returns real cost via
+`usage: {include: true}` — meter that. The existing check *ordering* (burst → personal daily →
+shared global, global checked last so rejected spam can't inflate the shared counter) is a
+security property and must be preserved, just extended with a cost dimension. Voice will need a
+**second, separate dimension** entirely (per-minute, not per-request/token): per-session minute
+cap, per-user daily minutes, global daily minutes, and a hard mid-session cutoff with an in-call
+warning — Gemini's 15-minute audio session cap is a natural boundary to design around when that
+work starts.
+
+**19.6.4 — Generalise the provider seam only once it has a second real user.** `resolveModelChain()`
+returning bare model-id strings is correct and sufficient for OpenRouter-only today; reshaping it
+into `{provider, model}` pairs ahead of an actual second routing integration (e.g. Vercel AI
+Gateway) would be a type change with no behaviour behind it — exactly the kind of impressive-
+looking-but-hollow work 18's own rule against building things because they sound good warns
+against. Do this refactor in the same block that actually wires in a second provider, not before.
+Vercel AI Gateway is worth that second-provider slot when it happens: zero token markup, native
+per-project cost/latency observability OpenRouter doesn't have, and $5/month of free team credits
+— but confirm it's actually provisioned on this Vercel team before assuming it's free to turn on.
+
+**Not started by this section:** none of 19.6.1–19.6.4 has been implemented yet except where
+this same work session's log (below) says otherwise. This section is the plan; the log is the
+record of what was actually built against it.
+
+### 19.7 Honest uncertainty carried forward
+
+- Every model-quality ranking here is a **proxy** (general multilingual competence, not
+  LingoMatch's specific explanation-language-switch requirement). 19.6.2's eval is the only thing
+  that actually answers the real question — treat 19.3's pick as a starting hypothesis to
+  re-verify, not a settled conclusion.
+- **Model names and prices churn fast enough that this section will start going stale within
+  weeks.** Two of the specific ids above (`google/gemini-3-flash-preview`,
+  `anthropic/claude-haiku-4.5`) were re-verified live against OpenRouter on the day this was
+  written; the rest were not and should be re-checked before being trusted, especially the
+  secondary-sourced DeepSeek/Qwen figures.
+- The **Gemini Live latency contradiction (2.98s vs 320–800ms) is unresolved** and would change
+  the voice recommendation if it resolves toward the faster number — this must be measured
+  directly, not assumed either way.
+- STT word-error-rate figures vary roughly 3× between benchmark sources depending on dataset
+  choice — useful for relative ranking, not as an absolute expectation, and **useless at all**
+  for this product until measured on real accented L2 speech rather than read-speech corpora.
+- **Cost genuinely does not discriminate between text-model choices at current scale.** A
+  confident cost-driven pick for a closed beta with ~20 accounts would be over-fitting. Cost
+  becomes a real decision variable for voice (where the per-minute spread is 10–20×) and for text
+  only once DAU is real.
