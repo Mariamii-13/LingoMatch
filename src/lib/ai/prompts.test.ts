@@ -44,18 +44,32 @@ describe('buildSystemPrompt — correction behaviour', () => {
     expect(B1).toMatch(/never reply to a flawed message with conversation and a question only/i)
   })
 
-  it('ends with a pre-send checklist covering correction, openers, Markdown, and length', () => {
+  it('ends with a pre-send checklist covering correction, explanation language, openers, Markdown, and length', () => {
     expect(B1).toMatch(/CHECK BEFORE YOU SEND/)
     expect(B1).toMatch(/must already contain the corrected sentence written out/i)
+    expect(B1).toMatch(/is your explanation sentence actually written in the explanation language/i)
     expect(B1).toMatch(/engage the topic rather than compliment the learner/i)
     expect(B1).toMatch(/any Markdown characters\? Remove them\./i)
     expect(B1.trimEnd().endsWith('Cut it.')).toBe(true)
   })
 
-  it('shows one worked example of reply shape without licensing its wording', () => {
+  it('shows one worked example of reply shape, illustrating the explanation-language switch, without licensing its wording', () => {
     expect(B1).toMatch(/SHAPE OF A GOOD REPLY/)
-    expect(B1).toMatch(/Yesterday I went to the shop to buy bread/)
-    expect(B1).toMatch(/Copy that shape, never that wording, and never that example sentence\./)
+    expect(B1).toMatch(/Hier, je suis allé au magasin/)
+    expect(B1).toMatch(/Copy that shape and that language split/)
+  })
+
+  it('tells the model to write the explanation in the explanation language, not the target language', () => {
+    const prompt = buildSystemPrompt(
+      'Spanish',
+      'B1',
+      'Free Conversation',
+      ['English', 'Georgian'],
+      'Georgian',
+    )
+    expect(prompt).toMatch(
+      /Write this sentence in Georgian, not Spanish — a learner who only knows Georgian must be able to read it\./,
+    )
   })
 
   it('forbids inventing corrections when the learner is correct', () => {

@@ -496,6 +496,48 @@ describe('AIPracticeClient — resuming a stored session', () => {
     expect(screen.getByText('Travel')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /start practice/i })).not.toBeInTheDocument()
   })
+
+  /**
+   * Regression: a resumed session's language can be one the learner has
+   * since removed from their profile (e.g. edited in Settings). Ending that
+   * session and starting a new one used to leave `settings` pointed at that
+   * now-invalid code — the <select> silently fell back to displaying its
+   * first option while the stale code was still what got submitted, so
+   * "Start Practice" failed with INVALID_TARGET_LANGUAGE for a learner who
+   * had visibly picked a valid option and never touched anything else.
+   */
+  it('starts a new session with a language still in the profile, not the ended session\'s', async () => {
+    render(
+      <AIPracticeClient
+        profile={PROFILE}
+        initialSession={{
+          id: 'd'.repeat(24),
+          targetLanguageCode: 'fr', // not in PROFILE.learningLanguages
+          mode: 'Travel',
+          messages: [{ role: 'assistant', content: 'Bonjour!' }],
+        }}
+      />,
+    )
+
+    mockFetch({ ok: true })
+    fireEvent.click(screen.getByRole('button', { name: /new session/i }))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /yes, end/i }))
+    })
+
+    expect(await screen.findByRole('button', { name: /start practice/i })).toBeInTheDocument()
+
+    const fetchSpy = mockReply('¡Hola!')
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start practice/i }))
+    })
+
+    // calls[0] is the DELETE from ending the previous session; the start
+    // request this test cares about is the next one.
+    const [, init] = fetchSpy.mock.calls[1]
+    const body = JSON.parse((init as RequestInit).body as string)
+    expect(body.targetLanguageCode).toBe('es')
+  })
 })
 
 describe('AIPracticeClient — message sending', () => {

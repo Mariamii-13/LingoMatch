@@ -269,10 +269,18 @@ export function AIPracticeClient({
     setError(null)
     setInput('')
     setSessionId(null)
+    // The setup form's target-language <select> only ever offers options from
+    // the current profile. Leaving `settings` at whatever the just-ended
+    // session used breaks "Start Practice" the moment that language isn't one
+    // of them (e.g. the learner removed it from their profile since) — the
+    // <select> silently falls back to displaying its first option while the
+    // stale, invalid code is still what actually gets submitted. Reset to a
+    // language guaranteed to be valid right now.
+    setSettings({ targetLanguageCode: primaryTarget.code, mode: 'Free Conversation' })
     // Close the stored session too, or the next page load would resume the
     // conversation the user just chose to leave.
     await fetch('/api/ai-practice', { method: 'DELETE' }).catch(() => {})
-  }, [])
+  }, [primaryTarget.code])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
