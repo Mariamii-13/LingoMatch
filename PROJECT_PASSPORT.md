@@ -201,7 +201,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `232da26` — "feat: build the AI-quality eval harness, v1 (roadmap #29)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40) |
+| **HEAD** | `50889a2` — "feat: spaced-repetition review deck from real tutor corrections (roadmap #31)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -1772,6 +1772,84 @@ mode, empty-input safety) plus the live harness run above.
 **Production readiness.** Production Ready as a reusable tool — cheap to re-run (8 live calls),
 already found one real, actionable, evidence-based finding on its first run.
 
+### 3.41 Spaced-repetition review deck (roadmap #31, §20.8 Phase 1)
+
+**Purpose.** The first concrete piece of the "AI teacher as a real personal teacher, not a
+chatbot" vision (18.2, deepened 2026-08-01; §20.2; §20.8's architecture sketch): the tutor already
+corrects real mistakes every session — this turns each one into a labelled, schedulable review
+item, using Duolingo's own published mechanism family (Leitner intervals, the low-tech ancestor of
+their Half-Life Regression) rather than inventing something new, per 18.6.
+
+**Implementation, following §20.8's plan exactly:**
+1. **Population, reusing 3.38's structured output rather than a new AI capability.**
+   `StructuredTutorReply` gained one more field, `skill_tag` — a short, model-assigned label for
+   the grammar/vocabulary point a correction was about (e.g. `"preterite-tense"`,
+   `"ser-vs-estar"`), null when there's no correction. `buildSystemPrompt` asks for it directly in
+   the same JSON object; no second AI call.
+2. **Data model.** `src/lib/models/SkillReview.ts` — one document per (user, target language,
+   skill tag), unique-indexed on that triple. Fields: `intervalDays`, `dueAt`, `lastReviewedAt`,
+   `reviewCount`, plus the most recent real `exampleCorrection` to show during review.
+3. **Scheduling — Leitner, not a fitted curve, deliberately.** `src/lib/skill-review.server.ts`:
+   `nextIntervalDays(current, remembered)` is the whole algorithm — `[1, 3, 7, 21]` days,
+   advancing on a remembered review, resetting to 1 on a forgotten one. Pure, fully unit tested.
+   §20.9's own honesty note already flagged the skill-tag taxonomy as "a hypothesis to refine once
+   real data exists" — this ships the cheapest version that can generate that data, not a
+   speculative fitted model with nothing to fit yet.
+4. **Wiring.** `streamStructuredTutorReply` gained one new hook, `onParsed` — invoked once with the
+   final structured reply, right before the tail is yielded. The `ai-practice` route uses it to
+   fire-and-forget `recordCorrection()` whenever a real correction carries a skill tag.
+   `recordCorrection`/`countDueReviews` fail soft (reported via `reportServerError`, never thrown)
+   — the same reasoning as the friend-badge count and the moderation audit write: a missed
+   scheduling write must never break or slow down the tutor reply that triggered it.
+5. **API.** `GET /api/review` (due items), `POST /api/review` with `{reviewId, remembered}` — body
+   based, matching the established `/api/users/block` convention rather than adding a new dynamic
+   segment. Ownership-scoped in the query itself (`recordReviewOutcome` filters on
+   `userId` alongside `_id`), the same pattern `loadOwnedTutorSession` already uses.
+6. **UI.** `(app)/review` — a Server Component page fetching the due list, handed to a small
+   Client Component (`ReviewClient.tsx`): one item at a time, "Show answer" reveals the real
+   correction, then "I remembered" / "I didn't" submits the outcome and advances. Honest empty
+   states throughout (11.2's rule): "nothing due" and "all caught up" are both distinct, true
+   messages, never a fabricated congratulations screen.
+7. **Navigation — added deliberately, not an afterthought.** Both `Sidebar` and `MobileNav` gained
+   a "Review" entry with a due-count badge, exactly mirroring Friends' existing badge mechanism
+   (11.12/3.10). **This is not incidental**: 3.10's own lesson was that a feature with no reachable
+   entry point is "a broken loop, not a missing feature" — this block does not repeat that mistake.
+
+**Verified live, 2026-08-01, end-to-end against the real database — not mocks, and not just a
+route existing:**
+1. Sent a real message with a genuine mistake ("Ayer yo va al mercado y compro pan.") through the
+   actual `/api/ai-practice` endpoint to a real QA account (`qaphase001`) on a running dev server.
+   The tutor corrected it for real ("Ayer yo fui al mercado y compré pan...").
+2. Queried the real MongoDB Atlas `skillreviews` collection directly (raw driver, bypassing the
+   app) and found the record the correction should have produced: `skillTag: "preterite-tense"`,
+   the real corrected sentence, `intervalDays: 1`, `dueAt` one day out — created with zero errors
+   against the real schema and its unique index.
+3. Called the real `POST /api/review` endpoint against that record with `remembered: true`, then
+   re-queried MongoDB directly: `intervalDays` advanced 1→3, `dueAt` moved out three days,
+   `reviewCount` incremented to 1 — the Leitner progression working correctly against production
+   infrastructure, not a mock.
+4. `GET /api/review` correctly required authentication (307 to `/login` via the existing
+   middleware, same as every other protected route) and, once authenticated, returned `{"items":
+   []}` before the correction above existed — proving the empty case renders honestly rather than
+   erroring.
+
+**Testing.** 16 new unit tests: 4 for `nextIntervalDays` (the Leitner progression, pure), 9 for
+`recordCorrection`/`getDueReviews`/`countDueReviews`/`recordReviewOutcome` (mocked Mongoose, same
+pattern as `moderation.server.test.ts`), plus updated `structured-tutor-reply.test.ts` and
+`prompts.test.ts` coverage for the new `skill_tag` field and the `onParsed` hook. No route-level
+test file — matches this project's existing testing philosophy (pure logic unit tested, I/O
+verified by hand against a running server), which is exactly what the live verification above did.
+
+**What's honestly not done.** §20.8 Phase 2 (a fitted half-life estimate per skill per learner,
+Duolingo's actual published algorithm) is not built — there is no review-outcome data yet to fit
+one from, and building it now would be exactly the "sophistication ahead of evidence" 18.6 warns
+against. No dashboard card surfaces due-review count beyond the nav badge (Friends' own precedent
+doesn't have one either). The skill-tag taxonomy itself — how granular a "skill" is — is a
+hypothesis, per §20.9's own carried-forward uncertainty, not yet validated against real usage.
+
+**Production readiness.** Production Ready — every layer (population, scheduling, API, UI,
+navigation) verified live against real infrastructure, not just unit tests.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -1831,9 +1909,11 @@ work and appears to be a workaround for local DNS resolution of Atlas SRV record
 plausible contributor to the 13-minute stall. **Worth revisiting, but do not remove it blindly
 — it may be load-bearing on the owner's network.**
 
-**Twelve models.** `User` (large: identity, languages, interests, AI profile, plan, moderation,
-friends), `Conversation`, `Message`, `TutorSession`, `MatchRequest`, `RateLimit`, `Report`,
-`ConversationFeedback`, `Upload`, `PricingPlan`, `PageContent`, `ThemeSettings`.
+**Fourteen models** (was "twelve" before this correction — `ModerationAction`, 3.36, had already
+been added without updating this count; `SkillReview`, 3.41, is the other addition since). `User`
+(large: identity, languages, interests, AI profile, plan, moderation, friends), `Conversation`,
+`Message`, `TutorSession`, `MatchRequest`, `RateLimit`, `Report`, `ConversationFeedback`, `Upload`,
+`PricingPlan`, `PageContent`, `ThemeSettings`, `ModerationAction`, `SkillReview`.
 
 **Why Mongoose.** Already in place; the flexible document shape genuinely suits a user profile
 that gained a nested `languageProfile` while older documents kept flat arrays — the migration
@@ -2247,6 +2327,7 @@ load-time request, and is a small known waste.
 | Explanation-language validation & repair | **Mostly Ready** | Structured output + detection verified live and correct (3.38); repair triggers correctly but an end-to-end *successful* repair is unverified until roadmap #1 (credits) |
 | Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and metrics (§21.4 Phase 1) not yet built |
 | Tier-1 language-pair quality | **Needs Work for Portuguese(BR)↔Spanish specifically** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the current free-tier model (real code-mixed explanations, 2/2 samples) — do not present this pair as reliably supported yet |
+| Spaced-repetition review deck | **Production Ready** | Population, Leitner scheduling, API, UI and navigation all verified live end-to-end against the real database (3.41); Phase 2 (fitted half-life curve) and tutor-context injection of weak areas remain open |
 | Tutor persistence | **Production Ready** | Verified reload, resume, continue, end, cross-account refusal |
 | Tutor streaming | **Production Ready** | Verified incremental render; errors before commit stay HTTP |
 | Cost metering | **Production Ready** | Three tiers, ordering tested, live 429 verified |
@@ -2821,7 +2902,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 28 | ~~Machine-check the tutor's explanation-language rule~~ (structured output + repair call, §19.6.1) | — | — | **Done**, 2026-08-01 — see 3.38. Structured JSON output, independent `franc`-based language-ID validation, and a one-shot repair call now sit between the model and the learner. Detection verified live and correct (a false-negative bug found live was fixed and pinned with a regression test). **Successful repair is unverified** — the repair call's own model has no credits, same blocker as roadmap #1 | — |
 | 29 | ~~Build the AI-quality eval harness~~ (§19.6.2) — **v1 done, 2026-08-01, see 3.40**: one seeded mistake per Tier-1 pair (not yet the full 20-turn/multi-error-type version) | High | Moderate | Already paid for itself: found a real, confirmed weakness on the Portuguese↔Spanish pair (2/2 samples) — §19.5's own predicted "extreme case" risk, now evidenced rather than theoretical | #28 (done, 3.38) made the key metric machine-gradable |
 | 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
-| 31 | **Spaced-repetition review deck built from real tutor corrections** (§20.2) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real; no new AI capability needed — unblocked |
+| 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 done, 2026-08-01, see 3.41** | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
 | 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
 | 33 | **Invite-a-partner referral flow** (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | Solves acquisition and liquidity simultaneously; standard two-sided-marketplace playbook | None |
 | 34 | ~~Model registry + tier-eligibility hard filter~~ + circuit breaker (§21.4 Phase 1) | High | Moderate | **Partially done, 2026-08-01** — see 3.39. Registry + hard filter shipped and verified live (a free-tier request now skips the credit-less paid model entirely, both faster and cost-safe). **Circuit breaker not built** — remains open | Reuses `rateLimit.ts`'s existing counting infra (for the still-open circuit-breaker piece) |
@@ -2963,9 +3044,14 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**383 tests passing, 10 skipped, across 39 files** (as of the roadmap #29 block, 2026-08-01).
-Baseline before this work: 103. Since the last commit: 9 new tests for the eval-harness grading
-logic (roadmap #29, 3.40 — `eval-harness.test.ts`) plus a new gated live file
+**399 tests passing, 10 skipped, across 40 files** (as of the roadmap #31 block, 2026-08-01).
+Baseline before this work: 103. Since the last commit: 16 new tests for the spaced-repetition
+review deck (roadmap #31, 3.41 — 4 for the Leitner progression, 9 for
+`skill-review.server.ts`'s mocked-Mongoose functions, plus updated `structured-tutor-reply.test.ts`
+and `prompts.test.ts` coverage for the new `skill_tag` field and `onParsed` hook). No route-level
+test for `/api/review` — verified live against a running server and the real database instead,
+matching this project's existing I/O-testing philosophy. Before that: 9 new tests for the
+eval-harness grading logic (roadmap #29, 3.40 — `eval-harness.test.ts`) plus a new gated live file
 (`eval-harness.live.test.ts`) that found a real, confirmed weakness on its first run. Before that:
 13 new tests for the model registry and
 tier hard filter (roadmap #34, 3.39 — `model-registry.test.ts` plus a new describe block in
@@ -2994,6 +3080,7 @@ src/lib/ai/tutor-context.test.ts                      profile → tutor context
 src/lib/ai/tutor-live.test.ts                         live provider test (skipped by default), incl. live tier-filter check
 src/lib/ai/model-registry.test.ts                     registry construction, tier eligibility, ordering, dedup
 src/lib/ai/eval-harness.test.ts                       eval-harness grading logic (pure, no API calls)
+src/lib/skill-review.server.test.ts                   Leitner progression (pure) + mocked-Mongoose review functions
 src/lib/ai/eval-harness.live.test.ts                  live provider test (skipped by default) — the harness itself, roadmap #29
 src/lib/ai/structured-tutor-reply.test.ts             JSON extraction, parsing, language detection, repair, streaming
 src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression
@@ -4810,24 +4897,27 @@ phased rollout in this document:**
    schema with one more field — a `skillTag` the model assigns to its own correction — and every
    real tutoring exchange automatically produces a labelled data point for the learner model, with
    no separate classification system to build.
-3. **Phase 1 (build once #28 ships): Leitner-style fixed intervals, not a fitted regression.**
-   Wrong today → due again in 1 day → 3 → 7 → 21 on each success, reset to 1 on failure. This is
-   deliberately the simplest proven version, not Duolingo's fitted HLR model — there is no review
-   history yet to fit a per-user forgetting curve from, and 18.6 says use the smallest proven
-   mechanism the evidence supports, not the most sophisticated one available. This alone is
-   enough to power §20.2's spaced-repetition review deck (roadmap #31).
+3. **✅ Done, 2026-08-01 — see 3.41. Phase 1: Leitner-style fixed intervals, not a fitted
+   regression.** Wrong today → due again in 1 day → 3 → 7 → 21 on each success, reset to 1 on
+   failure. This is deliberately the simplest proven version, not Duolingo's fitted HLR model —
+   there is no review history yet to fit a per-user forgetting curve from, and 18.6 says use the
+   smallest proven mechanism the evidence supports, not the most sophisticated one available. This
+   alone is enough to power §20.2's spaced-repetition review deck (roadmap #31), verified live
+   end-to-end against the real database.
 4. **Phase 2 (only once there's real review data — gated on evidence, not a timeline): fit a
    simplified half-life estimate per skill per learner**, the same shape as Duolingo's published
    HLR, once Phase 1 has produced enough real attempts to make fitting meaningful. Upgrade only
    if Phase 1's fixed intervals demonstrably under- or over-schedule reviews against real
    retention data (#13) — do not build this speculatively.
-5. **Where this makes the tutor feel like "a real teacher, not a chatbot":** at the start of a
-   session, inject a short, factual summary of the learner's weakest 2–3 open skill tags into the
-   tutor's context (e.g. "this learner has struggled with preterite-vs-imperfect in 4 of their
-   last 6 attempts") so the model can naturally steer conversation toward it, the same way a human
-   tutor remembers a student's recurring mistake — without turning that into a graded quiz or a
-   lesson-tree screen. This is presentation-only; the underlying mechanism stays conversation
-   (18.2, 20.2), never a separate curriculum UI.
+5. **Not yet done.** Where this makes the tutor feel like "a real teacher, not a chatbot": at the
+   start of a session, inject a short, factual summary of the learner's weakest 2–3 open skill tags
+   into the tutor's context (e.g. "this learner has struggled with preterite-vs-imperfect in 4 of
+   their last 6 attempts") so the model can naturally steer conversation toward it, the same way a
+   human tutor remembers a student's recurring mistake — without turning that into a graded quiz or
+   a lesson-tree screen. This is presentation-only; the underlying mechanism stays conversation
+   (18.2, 20.2), never a separate curriculum UI. **3.41 shipped the review-deck consumer of this
+   data; this session-context consumer is the next increment**, and is now straightforward — the
+   `SkillReview` data it needs already exists and is populated live.
 
 **Never build:** a neural/deep knowledge-tracing model (RNN- or transformer-based mastery
 estimation) — genuinely more effective at large scale per the published research, but there is no
@@ -4835,10 +4925,11 @@ training data at LingoMatch's current size and no evidence the simpler mechanism
 insufficient. This would violate 18.6 directly: sophistication ahead of the evidence that
 justifies it.
 
-**Dependencies:** Phase 1 depends on roadmap #28 (structured tutor output) and directly powers
-roadmap #31 (SRS review deck, §20.2) — these are not three separate initiatives, they are one
-pipeline. No owner action required to start Phase 1 once #28 ships; Phase 2 depends on #13
-(analytics) producing real review-outcome data to fit against.
+**Dependencies:** Phase 1 depended on roadmap #28 (structured tutor output, done) and directly
+powers roadmap #31 (SRS review deck, §20.2, done — see 3.41) — these were not three separate
+initiatives, they were one pipeline. Phase 2 depends on #13 (analytics) producing real
+review-outcome data to fit against. The session-context injection (item 5 above) is unblocked and
+is the next concrete increment.
 
 ### 20.9 Honest uncertainty carried forward
 
