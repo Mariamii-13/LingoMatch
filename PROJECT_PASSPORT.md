@@ -17,10 +17,41 @@ blocked by the auto-mode classifier, and the dev server being non-interactive fo
 browser-automation clicks in this AI assistant's sandbox specifically (not a real app defect —
 see 17 for how that was distinguished from the two real bugs above).
 
+A further pass the same day (still 2026-07-31) was a full strategic review of this document,
+requested directly by the owner: is the passport a complete and accurate picture of LingoMatch's
+long-term vision, not just factually correct? That review found the AI/voice architecture (18/19)
+already rigorous, but four real gaps — no monetization hypothesis, no stated long-term shape for
+the AI teacher (conversation-only forever, or something more, and how that squares with the
+existing streak feature), no growth mechanic for the liquidity risk 18.5's voice-first direction
+makes worse, and no priority order across the competing big bets. The owner answered directly
+(quoted verbatim in section 20) and asked for evidence-based recommendations rather than an
+engineering guess. **Section 20 is the result** — first-principles, externally verified the same
+way section 19 was, and, like 19, a plan the owner asked for, not yet-built code.
+
+Two more owner-directed passes followed, both recorded in section 20: **20.5** works out, from
+real inference cost and realistic conversion/pricing evidence, why the free tier must default to
+the zero-cost model chain rather than the paid one (a volume cap on the paid model alone cannot
+satisfy "never lose money at scale" at any realistic price point); **20.6** then live-re-tested
+every available free OpenRouter model against that requirement and **found and fixed a real bug**
+— `nvidia/nemotron-3-super-120b-a12b:free`, the second entry in `FREE_TUTOR_MODELS`, was
+intermittently leaking raw chain-of-thought reasoning into the user-facing reply. Replaced with
+`inclusionai/ling-3.0-flash:free` in `src/lib/ai/models.ts`; full suite re-run clean (318 passed).
+
+A fourth pass, 2026-08-01, added three more permanent owner principles — provider/model
+independence at the *architecture* level (not just "stay swappable"), evidence-over-originality
+with a minimal, evidence-bounded language scope, and the AI teacher as an adaptive personal
+teacher with memory, not a stateless chatbot — recorded in the new **section 21**, **18.6**, and
+the deepened **18.2/20.8** respectively, with a full contradiction sweep across the rest of the
+document to keep everything consistent with them.
+
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
 > **Section 18 is binding product direction** set by the owner — it constrains architecture and
-> roadmap choices, and it is not a backlog of tasks to start.
+> roadmap choices, and it is not a backlog of tasks to start. **Section 20 is the owner's
+> business-strategy direction** — monetization shape, the AI teacher's long-term pedagogy, and
+> human-liquidity growth mechanics — read it before proposing what to build next, alongside 18.
+> **Section 21 is the target AI-routing architecture** — read it, with 18.1 and 18.6, before
+> touching `src/lib/ai/models.ts` or adding any model/provider.
 
 ---
 
@@ -45,6 +76,8 @@ see 17 for how that was distinguished from the two real bugs above).
 17. [Project memory](#17-project-memory)
 18. [Permanent product direction](#18-permanent-product-direction)
 19. [AI & voice architecture strategy](#19-ai--voice-architecture-strategy)
+20. [Business & growth strategy](#20-business--growth-strategy)
+21. [Provider-independent AI routing architecture](#21-provider-independent-ai-routing-architecture)
 
 ---
 
@@ -60,7 +93,10 @@ practise:
    level, and the language they want explanations in) and a chosen practice mode (Free
    Conversation, Daily Life, Travel, Job Interview, Vocabulary Practice, Grammar Practice). It
    corrects mistakes inline and keeps the conversation going. Available instantly, with no
-   partner and no waiting.
+   partner and no waiting. **This describes what's built today.** The owner's binding long-term
+   direction (18.2, deepened) is for this to become a genuinely personal teacher that remembers
+   a specific learner's strengths and weaknesses across sessions and adapts accordingly, not a
+   stateless chatbot — not yet implemented; see 18.2 and 20.8 before changing tutor personalization.
 2. **Human language exchange** — a learner is matched with another user on a reciprocal basis
    (A speaks what B is learning and vice versa) for a text conversation, with optional live
    video. Video is deliberately optional throughout the product, never a requirement. **This is
@@ -101,6 +137,14 @@ A learner opens LingoMatch and is practising within one screen — no lesson tre
 guilt, no forced video. The AI tutor is the always-available floor; human exchange is the
 ceiling. The product should feel honest: if a number cannot be counted it is not shown, and if
 a feature does not work it does not appear.
+
+**This line is a deliberate, evidence-based position, not a placeholder — see §20.2.** The
+existing streak (3.14/3.27) stays exactly as built: a day-count, inclusive of "practised
+yesterday," never framed as lives/hearts/energy that can run out. §20.2 adds a spaced-repetition
+review deck built from the tutor's own corrections as the retention mechanism instead of a
+lesson tree — evidence-based (published studies show spaced repetition roughly tripling
+long-term vocabulary retention) without reproducing the punitive mechanic that a direct
+competitor's own users have publicly rejected.
 
 ### Current maturity
 
@@ -157,7 +201,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `df823d0` — "fix: two demo-breaking bugs found in a pre-presentation review" — plus this docs commit on top |
+| **HEAD** | `30c22a5` — "feat: machine-check the tutor's explanation-language rule (roadmap #28)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -225,6 +269,7 @@ which this document is the largest single file.
 | Auth | Auth.js / NextAuth | 5.0.0-beta.31 |
 | Database | MongoDB via Mongoose | mongoose 9.6.3 |
 | AI | OpenRouter HTTP API (no SDK) | — |
+| Language detection | `franc` (explanation-language validation, 3.38) | 6.2.0 |
 | Realtime + video | LiveKit (`livekit-client`, `livekit-server-sdk`, `@livekit/components-react`) | 2.x |
 | File storage | Cloudinary | 2.10.0 |
 | Validation | Zod | 4.4.3 |
@@ -467,6 +512,17 @@ nvidia/nemotron-3-super-120b-a12b:free   1.7s
 google/gemma-4-31b-it:free               (rate-limited upstream at test time)
 ```
 Rejected: `openrouter/free` (33s — far too slow), `openai/gpt-oss-20b:free` (10s).
+
+**⚠️ Updated 2026-07-31 — see §20.6 for the live re-verification and why.** The free-model
+roster above is from the original benchmarking pass and is now **partly superseded**:
+`nvidia/nemotron-3-super-120b-a12b:free` was found, on a live re-test, to intermittently leak
+raw chain-of-thought reasoning directly into the user-visible reply (looked broken, not just
+lower-quality) and was **removed from `FREE_TUTOR_MODELS`**, replaced by
+`inclusionai/ling-3.0-flash:free` (not available at the time of the original benchmark). The
+`google/gemma-4-26b-a4b-it:free` primary pick was re-confirmed, live, as still the best available
+free option. **Free model slugs and quality churn — the standing instruction from section 17
+("model slugs churn; re-benchmark rather than trusting the list") applies to this list too, not
+only to the paid chain.**
 
 **Advance rules** (`src/lib/ai/openrouter.ts`). `isModelUnavailable(status)` returns true for
 402, 404, 429 and 5xx. Only those advance to the next model, because each fails in well under a
@@ -1477,6 +1533,95 @@ production build (`npm run build`) is clean. Neither bug was ever reachable in a
 deployment (genuine HTTPS throughout), so this block changes local/demo reliability, not anything
 about the deployed product's behavior.
 
+### 3.38 Explanation-language validation and repair (roadmap #28)
+
+**Purpose.** Implements §19.6.1 — the machine-checkable fix for the explanation-language defect
+diagnosed live in §19.1 (the tutor sometimes explains a correction in the target language instead
+of the learner's own, a known failure class per §19.2's cited research, not a prompt-wording bug).
+Converts a model-capability problem into a validated-output problem, so the fix holds regardless
+of which model is in the chain (18.1) and survives every future model swap.
+
+**Implementation.** New module `src/lib/ai/structured-tutor-reply.ts`, deliberately built as a
+wrapper around `streamTutor()` rather than a change to it — `src/lib/ai/openrouter.ts` is
+untouched, per section 16's "what not to rewrite" list, and its 32 existing tests pass unmodified.
+
+1. `buildSystemPrompt()` (`prompts.ts`) now asks the model for one JSON object —
+   `{conversation, correction, explanation, explanation_language, practice}` — instead of free
+   prose. This also let the old "CHECK BEFORE YOU SEND" pre-send checklist be deleted rather than
+   reinforced, shortening the prompt (§19.2's own point: prompt length and rule count are part of
+   what drives the drift in the first place).
+2. `extractConversationSoFar()` incrementally extracts the `conversation` field's string value as
+   raw text streams in — character-by-character, escape-aware, re-scanning the whole buffer on
+   each chunk rather than tracking parser state across chunk boundaries. This is what keeps the
+   3.8 streaming win (perceived wait falling from ~12s to ~9s): the learner sees the reply appear
+   incrementally exactly as before, structuring the output does not mean buffering the whole
+   reply before showing anything.
+3. Once the object is complete, `parseStructuredReply()` parses it and, if `explanation` is
+   non-empty, `explanationLanguageMismatch()` independently checks its language against the
+   profile's expected explanation language using `franc` (a small, dependency-light n-gram
+   language-ID library — added as a new dependency, chosen over a second LLM call because
+   detection needs to be cheap and does not benefit from being "smart"). **Does not trust the
+   model's own self-reported `explanation_language` field** — self-report is exactly the kind of
+   self-check §19.2's cited research found unreliable under drift; the check is independent by
+   design.
+4. On a confident mismatch, `repairTranslation()` issues one small, single-attempt, non-streaming
+   completion asking a model to translate just the `explanation` sentence — not the whole reply.
+   Deliberately does not reuse `callTutor`'s full chain-walking machinery: this is a
+   best-effort repair, and per §19.6.1's own honest tradeoff, a failed repair should silently keep
+   the original text rather than compounding latency by retrying across the whole model chain.
+   Both outcomes (repaired / not) are logged via `console.error` with a `[AI]` prefix, so a
+   triggered-but-failed repair is visible to an operator rather than silently swallowed — the same
+   reasoning that made the original 402 in 3.5 worth logging.
+5. Graceful degradation, in order: if the model ignores the JSON instruction entirely (first
+   character isn't `{`), the module falls back to pure pass-through — identical, unmodified
+   behaviour to before this block, so a non-compliant model degrades the *feature*, not the
+   *product*. If the JSON is malformed once the stream ends, whatever `conversation` text was
+   already extracted is shown (11.11's partial-reply principle); if literally nothing was
+   extracted, the raw buffer is shown as a last resort rather than a blank message.
+
+**Scope, per §18.6 and §19.5.** The language-ID validator only checks the three explanation
+languages this project claims support for (Spanish, English, Brazilian Portuguese, per §19.5's
+Tier-1 scope) — an explanation language outside that set is not validated, matching honesty about
+untested scope rather than a false claim of confidence.
+
+**A real bug found and fixed by live verification, not by the unit tests.** The first version of
+the language-ID candidate set passed to `franc` was restricted to only the three *explanation*
+languages. Live-tested against the real API (§19.5's harder French-target/Spanish-explanation
+case), this produced a false negative: a genuinely French explanation was force-classified as its
+trigram-nearest *explanation* language (Spanish) because French wasn't an allowed candidate, so
+the mismatch went undetected — the exact failure mode this feature exists to catch, silently
+missed. Fixed by including the Tier-1 *target* languages (French, alongside the three explanation
+languages) in the detection candidate set, since the diagnosed failure is specifically the model
+writing the explanation in the target language. A regression test using the real live output
+pins this. **Lesson repeated from section 13: the mocked unit tests (43 of them) all passed
+throughout — only driving the real model surfaced this**, the same reason section 13 already
+names "drive the real product" as this project's single most useful habit.
+
+**Verified live**, 2026-08-01, against the real API (walking the real chain past both credit-less
+paid entries to the free tier, exactly as production does):
+- Spanish-target/English-explanation: clean structured JSON, no `{"conversation"` ever visible to
+  the learner, explanation correctly in English.
+- French-target/Spanish-explanation (the harder, non-English-bridge case): the mismatch detector
+  correctly fired against real model output after the fix above.
+- The repair call was observed **correctly triggering** but **could not be observed completing
+  successfully** — the repair call's own model (`resolveModelChain()[0]`, currently
+  `google/gemini-3-flash-preview`) has no credits (5, unchanged), so the repair attempt itself
+  gets a 402 and the original text is kept, logged rather than silently swallowed. **This is an
+  honest, expected limitation tied to roadmap #1 (buy credits), not a defect in this block** — a
+  full end-to-end successful-repair verification is owed once credits exist.
+
+**Testing.** 43 unit tests in `structured-tutor-reply.test.ts` (extraction across simulated chunk
+boundaries including escaped quotes/unicode/split-escape-sequences, parsing, formatting,
+language-mismatch detection including the live-found regression above, the repair call's success
+and every failure path, and the full streaming orchestration including the pass-through and
+malformed-JSON fallbacks). A gated live-provider file,
+`structured-tutor-reply.live.test.ts` (same `LIVE_AI_TESTS=1` pattern as `tutor-live.test.ts`,
+skipped by default), is what actually found and confirmed the fix above.
+
+**Production readiness.** Production Ready for the detection and graceful-degradation paths,
+verified live. **Mostly Ready** for the repair path specifically — wired correctly and verified
+triggering live, but a successful end-to-end repair is unverified pending roadmap #1.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -1565,6 +1710,15 @@ SDK would have abstracted exactly those away. It is ~200 lines and fully tested 
 `buildSystemPrompt` (`src/lib/ai/prompts.ts`) composes the tutor persona from target language,
 level, mode, native languages and explanation language. `buildTutorContext` maps a stored
 language profile onto that, translating codes to display names and `unsure` to a distinct level.
+
+*This describes today's built state — single gateway, single vendor.* Permanent direction (18.1,
+deepened) requires this to become provider-independent; §21 is the target architecture and is not
+yet built. Do not read this subsection as the long-term design.
+
+**Structured output, added 2026-08-01 (3.38, roadmap #28).** The tutor's replies are now JSON,
+parsed and validated server-side by `src/lib/ai/structured-tutor-reply.ts` before the client ever
+sees plain text — the model layer above stays as described (direct HTTP, no SDK), this is a new
+layer on top of it, not a change to it.
 
 ### Matching
 
@@ -1940,6 +2094,7 @@ load-time request, and is a small known waste.
 | Onboarding | **Production Ready** | One required step, gated, unsaved-changes guard fixed |
 | AI tutor (code) | **Production Ready** | Chain, persistence, streaming, metering, all verified live |
 | AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker |
+| Explanation-language validation & repair | **Mostly Ready** | Structured output + detection verified live and correct (3.38); repair triggers correctly but an end-to-end *successful* repair is unverified until roadmap #1 (credits) |
 | Tutor persistence | **Production Ready** | Verified reload, resume, continue, end, cross-account refusal |
 | Tutor streaming | **Production Ready** | Verified incremental render; errors before commit stay HTTP |
 | Cost metering | **Production Ready** | Three tiers, ordering tested, live 429 verified |
@@ -2364,6 +2519,10 @@ deployment.
 *Why:* the integration needs a custom model chain, custom advance rules, SSE parsing and precise
 error classification — exactly what an SDK abstracts away. ~200 lines, 32 tests.
 
+*Still true as of §21 (2026-08-01):* the planned multi-gateway registry (§21.3) adds a thin
+adapter interface per gateway, not an SDK — each adapter still owns its own HTTP details
+directly, the same reasoning as this decision, just applied to more than one gateway.
+
 ### 11.21 One brand mark component
 
 *Why:* it was inlined six times and had already drifted, so the logo changed as a user moved
@@ -2465,7 +2624,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are now already configured for a specific paid chain (§19.3: `google/gemini-3-flash-preview` → `anthropic/claude-haiku-4.5` → free tier), verified live-reachable and correctly priced; only the credit purchase itself remains | Critical | Trivial | Unblocks the core product and makes it ~10× faster | Owner spending money |
+| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are now already configured for a specific paid chain (§19.3: `google/gemini-3-flash-preview` → `anthropic/claude-haiku-4.5` → free tier), verified live-reachable and correctly priced; only the credit purchase itself remains | Critical | Trivial | Unblocks the core product and makes it ~10× faster | Owner spending money. **⚠️ See §20.5 before flipping this on for all traffic**: once a free tier exists, routing every request through the paid chain is an unbounded per-free-user cost. Model routing must become plan-aware (free → `FREE_TUTOR_MODELS`, trial/paid → the paid chain) first or alongside this purchase |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | **Test live video with two real cameras** | High | Low | The only wholly unverified feature | Two devices |
@@ -2501,15 +2660,21 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 22 | **Payments and entitlements** — define the tier, wire it into the tutor budget (the natural enforcement point), then checkout | High if monetising | High | Revenue | #13 proving demand |
+| 22 | **Payments and entitlements** — define the tier, wire it into the tutor budget (the natural enforcement point), then checkout | High if monetising | High | Revenue | #13 proving demand. **Monetization shape is now specified — see §20.1.** Value-add tiers (usage headroom, personas, priority human-matching), never a gate on corrections or core conversation |
 | 23 | **AI-powered matching** via the existing `CompatibilityProvider` seam | Medium | High | Better pairings | Enough users to matter |
-| 24 | **Speaking practice** (voice in/out with the tutor) | Medium | High | The obvious product extension; `voiceIntro` already anticipates it | See §19.4 — architecture planned (half-cascade), one measurement spike needed before implementation |
-| 25 | **Structured curriculum or lesson suggestions** | Low | High | Retention beyond free conversation | #13 |
+| 24 | **Speaking practice** (voice in/out with the tutor) | Medium | High | The obvious product extension; `voiceIntro` already anticipates it | See §19.4 — architecture planned (half-cascade), one measurement spike needed before implementation. **Sequencing: see §20.4 — deliberately last**, after #13, #28–30, and the human-voice items below |
+| 25 | ~~Structured curriculum or lesson suggestions~~ **Superseded by §20.2** | Medium | Moderate | Retention beyond free conversation, evidence-based (spaced repetition, not a lesson tree) | #28 (needs structured tutor output first) |
 | 26 | **Staging environment** | Medium | Low | Safe verification | #5 |
-| 27 | **Group practice rooms** | Low | High | Solves liquidity differently | None |
-| 28 | **Machine-check the tutor's explanation-language rule** (structured output + repair call, §19.6.1) | High | Moderate | Fixes the live-diagnosed defect (tutor explains in the wrong language) at the root, survives every future model swap | None — no owner action |
-| 29 | **Build the AI-quality eval harness** (§19.6.2) — synthetic 20-turn sessions per Tier-1 language pair, graded automatically | High | Moderate | The only way to actually verify any model pick (§19.3's chain is a hypothesis, not a conclusion) instead of guessing again | #28 makes the key metric machine-gradable |
+| 27 | ~~Group practice rooms~~ **Superseded by #32/#33 below** — §20.3 found a more evidence-backed liquidity fix | — | — | — | — |
+| 28 | ~~Machine-check the tutor's explanation-language rule~~ (structured output + repair call, §19.6.1) | — | — | **Done**, 2026-08-01 — see 3.38. Structured JSON output, independent `franc`-based language-ID validation, and a one-shot repair call now sit between the model and the learner. Detection verified live and correct (a false-negative bug found live was fixed and pinned with a regression test). **Successful repair is unverified** — the repair call's own model has no credits, same blocker as roadmap #1 | — |
+| 29 | **Build the AI-quality eval harness** (§19.6.2) — synthetic 20-turn sessions per Tier-1 language pair, graded automatically | High | Moderate | The only way to actually verify any model pick (§19.3's chain is a hypothesis, not a conclusion) instead of guessing again | #28 (done, 3.38) makes the key metric machine-gradable — unblocked |
 | 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
+| 31 | **Spaced-repetition review deck built from real tutor corrections** (§20.2) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real; no new AI capability needed — unblocked |
+| 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
+| 33 | **Invite-a-partner referral flow** (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | Solves acquisition and liquidity simultaneously; standard two-sided-marketplace playbook | None |
+| 34 | **Model registry + tier-eligibility hard filter + circuit breaker** (§21.4 Phase 1) | High | Moderate | Formalises §20.5's cost-ceiling guarantee as a real mechanism; makes model changes a data edit, not a code change | Reuses `rateLimit.ts`'s existing counting infra |
+| 35 | **Production routing metrics** (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) | Reuses 3.34's structured-log pattern |
+| 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35, and a confirmed concrete reason per 19.6.4 |
 
 ---
 
@@ -2557,6 +2722,19 @@ no control.*
 
 **Two non-functional pages actively lied.** Both claimed to send email in an app with no email
 capability whatsoever. *Lesson: check that a feature's dependency exists before trusting its UI.*
+
+**A language-mismatch detector missed the exact case it existed to catch, and 43 passing unit
+tests never noticed (roadmap #28, 3.38).** The explanation-language validator restricted its
+`franc` candidate set to only the three supported *explanation* languages. Live-tested against a
+French-target/Spanish-explanation session, a genuinely French explanation was force-classified as
+its nearest allowed candidate (Spanish) — silently passing as "correct" the exact defect this
+feature was built to catch. Every unit test used synthetic strings the classifier happened to get
+right; none exercised the actual live failure mode. Fixed by including the Tier-1 target
+languages in the detection candidates, not just the explanation languages, and pinned with a
+regression test built from the real live output. *Lesson: this is section 13's oldest lesson
+recurring in new code — "drive the real product" applies exactly as much to a machine-checked
+validator as to a bug in a prompt. A correctness component's own test suite can be internally
+consistent and still wrong if every test shares an assumption the real world doesn't.*
 
 ### Unexpected architecture problems
 
@@ -2633,8 +2811,14 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**306 tests passing, 4 skipped, across 33 files.** Baseline before this work: 103. The newest 19
-split across three blocks: 11 in `use-match-notification.test.tsx` (match-found notification, 3.9,
+**361 tests passing, 8 skipped, across 36 files** (as of the roadmap #28 block, 2026-08-01).
+Baseline before this work: 103. Since then: 43 new tests in `structured-tutor-reply.test.ts`
+(roadmap #28, 3.38 — JSON extraction across simulated chunk boundaries, parsing, formatting,
+live-found language-detection regression, repair-call success/failure paths, full streaming
+orchestration) plus a new gated live-provider file, `structured-tutor-reply.live.test.ts`
+(4 tests, skipped by default, same pattern as `tutor-live.test.ts`) — this is what actually found
+the live false-negative bug the mocked tests could not. Earlier in this document's history: 11 in
+`use-match-notification.test.tsx` (match-found notification, 3.9,
 roadmap #18), 7 across `AIPracticeClient.test.tsx` (new describe block), `PreJoinScreen.test.tsx`
 and `SessionControls.test.tsx` (accessibility, 3.23, roadmap #21), and 1 more in
 `AIPracticeClient.test.tsx` pinning the `crypto.randomUUID` fallback (3.37).
@@ -2651,6 +2835,8 @@ src/lib/ai/prompts.test.ts                            system prompt composition
 src/lib/ai/tutor-budget.test.ts                       three tiers + check ordering
 src/lib/ai/tutor-context.test.ts                      profile → tutor context
 src/lib/ai/tutor-live.test.ts                         live provider test (skipped by default)
+src/lib/ai/structured-tutor-reply.test.ts             JSON extraction, parsing, language detection, repair, streaming
+src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression
 src/lib/auth-throttle.test.ts                         login/register limits, hashing, IP parsing
 src/lib/language-profile.test.ts                      normalisation, completeness
 src/lib/match-defaults.test.ts                        form seeding from profile
@@ -3300,12 +3486,27 @@ If you take one working practice from this handover, take that one.
 
 ## 18. Permanent product direction
 
-**Status: binding constraints set by the owner, recorded 2026-07-30 (18.1–18.3) and extended
-2026-07-30 (18.5).** These are not tasks in the current roadmap and none of them were
-implemented in the error-observability or CSP blocks. They constrain how future architecture and
-roadmap decisions are made. Read this section before proposing any change to the AI layer, the
-language model configuration, the human-matching/session model, or the public-facing surface —
-a design that violates one of these is wrong even if it is otherwise good.
+**Status: binding constraints set by the owner, recorded 2026-07-30 (18.1–18.3), extended
+2026-07-30 (18.5), and extended again 2026-08-01 (18.6, 18.7, and the deepened 18.2).** These are
+not tasks in the current roadmap and none of them were implemented in the error-observability or
+CSP blocks. They constrain how future architecture and roadmap decisions are made. Read this
+section before proposing any change to the AI layer, the language model configuration, the
+human-matching/session model, or the public-facing surface — a design that violates one of these
+is wrong even if it is otherwise good.
+
+**Governing philosophy, stated by the owner 2026-08-01 and applying to every constraint below and
+every section this passport contains, not just the AI layer:** *"My primary objective is building
+a successful, profitable, high-quality language-learning platform with long-term user growth and
+retention. I do not care about being original for the sake of originality. If existing products
+or learning methods have already proven to produce better learning outcomes, stronger retention,
+and better business results, I would rather build the best possible version of those ideas than
+invent something new that performs worse. Innovation is valuable only when it creates measurable
+value for learners or the business."* This is not a new constraint so much as the reasoning
+several existing sections were already built on — §19's model picks were chosen by benchmarking,
+not by novelty; §20.2's pedagogy recommendation explicitly chose a market-proven shape (Speak)
+over an invented one; §19.5's language scope is bounded by evidence, not ambition. **When
+evaluating any future proposal, including this passport's own recommendations, the test is: is
+there evidence this works, not is it original.**
 
 **18.5 supersedes the "text conversation, with optional live video" framing in section 1** and in
 3.9/3.11/3.24 as the long-term direction. Those sections still accurately describe what is
@@ -3335,6 +3536,17 @@ touching matching, messaging, video, or the AI tutor's product surface.
 provider-adapter versus tutor-domain, mirroring the `CompatibilityProvider` seam already used
 for matching (3.9).
 
+**⚠️ Deepened 2026-08-01 — see section 21 for the full architecture.** The owner strengthened
+this from "don't get locked in" to a concrete, permanent requirement: an intelligent,
+evidence-driven routing layer across multiple providers and models, not just a static ordered
+fallback chain, with production metrics feeding the routing decision over time. **Today's
+`resolveModelChain()` is a single-gateway, single-vendor implementation of this principle — it
+satisfies the letter of 18.1 (swappable, no SDK, no leaked vendor names) but not yet its full
+depth (no second gateway, no metrics-informed reordering, no circuit breaker, no tier-awareness
+baked into the routing decision itself rather than bolted on per §20.5).** Section 21 is the
+target architecture; this subsection's existing rules are unchanged and still govern in the
+meantime.
+
 ### 18.2 Core AI language-teaching requirement
 
 **The AI must directly teach a target language — not act as an English-based chatbot.**
@@ -3353,6 +3565,25 @@ for matching (3.9).
   language**.
 - **The teaching system must adapt** to the learner's level, goals, mistakes and progress —
   not behave like a generic assistant.
+
+**⚠️ Deepened 2026-08-01, owner's direction verbatim:** *"The AI teacher is one of the core
+products of LingoMatch. The long-term vision is that learners feel they have a real personal
+language teacher, not simply a chatbot. The teacher should naturally adapt to each learner,
+remember strengths and weaknesses, personalize practice, revisit forgotten topics using
+evidence-based learning methods, and continuously improve the learner's speaking ability.
+Conversation should remain the foundation of learning."* This extends the adaptability bullet
+above from "adapt within a session" to **adapt across a learner's entire history with the
+product** — the tutor should know, at the start of every session, what this specific learner
+tends to get wrong and what they haven't practised recently, not start from zero each time.
+**Conversation stays the foundation** (unchanged from the existing "no lesson tree" position,
+section 1, §20.2) — this is memory and personalization layered on top of conversation, not a
+curriculum replacing it. §20.2's spaced-repetition review deck (roadmap #31) is the first
+concrete piece of this — every real correction the tutor gives is already a data point about a
+specific learner's specific weakness; §20.8 sketches the fuller learner-model architecture this
+implies. **Do not build a generic one-size-fits-all tutor persona indefinitely** — this is now
+permanent direction, not a nice-to-have, even though (per the "before this is implemented" rule
+directly below, unchanged) the full personalization system still needs its own evidence-based
+plan before code, the same gate speech already has.
 
 **Before this is implemented it needs an evidence-based architecture and product plan** covering
 speech-to-text, text generation and reasoning, text-to-speech, pronunciation feedback,
@@ -3407,6 +3638,9 @@ governs *within* a release. Section 18 governs *what may be built at all*:
 | 24 — speaking practice | **Requires the written architecture and product plan first** (18.2), which 18.5 now says must cover human-to-human voice matching as well as the AI tutor, not the tutor alone. This is the largest planned initiative in the project |
 | — new | Public SEO surface (landing pages, sitemap, robots, structured data, per-pair content) is now an explicit future roadmap area (18.3) |
 | — new | Voice-first human exchange (18.5): audio-first matching UX, a moderation model that assumes conversations are not reviewable after the fact, and demoting text to a supporting role — see 18.5 for what this does and does not authorise building now |
+| — new | Business & growth strategy (section 20, recorded 2026-07-31): monetization shape, the AI teacher's long-term pedagogical model, and the liquidity/growth mechanics 18.5 makes more urgent — the owner-requested evidence-based plan this table's items 22, 25, 27, 31–33 now point back to |
+| — new | Provider-independent AI routing (section 21, recorded 2026-08-01): deepens 18.1 from "stay swappable" to a specified registry/metrics/circuit-breaker architecture — items 1, 28–30 now feed it directly (cost data, quality signals, live model picks all become router inputs rather than separate concerns), and new items 34–36 implement it |
+| — new | Language scope and evidence-over-originality (18.6, recorded 2026-08-01) elevates §19.5's Tier-1 language scope and §20's evidence-based choices from recommendations to binding direction; the deepened 18.2 (personal-teacher vision) adds §20.8's learner-model architecture, which items 28 and 31 now directly feed |
 
 ### 18.5 Voice-first human exchange (primary interaction model)
 
@@ -3482,6 +3716,46 @@ plan must now scope human-to-human voice matching alongside the tutor. **What th
 do** is update this passport with the direction and act on the one piece of preparatory work that
 is genuinely evidence-justified today and has no owner-approval dependency: user blocking and a
 moderation audit trail (roadmap #17), because voice-first raises the cost of shipping without it.
+
+### 18.6 Evidence over originality, and minimal scope over broad coverage
+
+**Status: binding, recorded 2026-08-01.** The owner's direction, verbatim (bundled as one
+principle): *"My primary objective is building a successful, profitable, high-quality
+language-learning platform with long-term user growth and retention. I do not care about being
+original for the sake of originality. If existing products or learning methods have already
+proven to produce better learning outcomes, stronger retention, and better business results, I
+would rather build the best possible version of those ideas than invent something new that
+performs worse. ... I also do not want to support every language from day one. Recommend the
+smallest initial scope that provides the highest-quality learning experience and justify that
+decision using evidence."*
+
+This is the general form of the governing philosophy stated at the top of section 18, applied
+specifically to feature scope and language coverage:
+
+- **Prefer a proven approach over an original one whenever the evidence points that way.** Two
+  standing examples already in this passport: §20.2 chose conversation-first pedagogy over an
+  invented curriculum specifically because it's independently market-proven (Speak, $1B
+  valuation), not because it was novel; §20.5–20.6 chose free-tier model routing and picks based
+  on live re-benchmarking, not assumption. Any future proposal should be held to the same test.
+- **Language and language-pair scope must stay as small as the evidence supports, not as large as
+  the product could theoretically claim.** §19.5 is the concrete answer to this — 8 Tier-1 pairs
+  across 3 explanation languages (Spanish, English, Brazilian Portuguese) and 3 target languages
+  (English, Spanish, French), chosen from real demand data, multilingual-quality benchmarks, and
+  speech-benchmark coverage, with non-Latin-script languages explicitly deferred to Tier 2 despite
+  real demand, because they sit in a measurably higher-error regime for exactly the defects
+  already found in this product. **This section formally elevates §19.5 from a recommendation to
+  permanent product direction** — nothing in its reasoning changes, but it now carries the same
+  binding weight as 18.1–18.5, and expanding language scope beyond it requires the same standard
+  of evidence 19.5 itself used, not a business decision to "just add more languages."
+- **The same discipline applies to the AI routing architecture (§21) and the adaptive learner
+  model (§20.8):** build the version already proven to work in production elsewhere (circuit
+  breakers, gateway-native failover, spaced repetition) rather than an original mechanism, and
+  resist adding sophistication (e.g. a learned/bandit routing policy) ahead of the evidence that
+  would justify it over a simpler rule-based version.
+
+**Never revert:** do not read "provider independence" (18.1/21) or "the AI teacher should
+personalize" (18.2/20.8) as licence to build something novel for its own sake — every
+implementation of those principles must still clear this section's evidence bar.
 
 ---
 
@@ -3642,6 +3916,16 @@ rule, so the tutor keeps working on the free tier exactly as it does today, and 
 simply ready the moment credits exist. **Roadmap #1 (buy ~$10 of credits) is unchanged and is
 still the single highest-value action available** — it raises the daily cap from 50 to 1,000
 requests app-wide *and* is the only way the paid entries in this chain ever actually run.
+
+**⚠️ Amendment from §20.5 (added after a free/paid split entered the plan, 2026-07-31): this
+chain must not become the account-wide default for every request once there is a free tier.**
+As written above, `AI_MODEL_DEFAULT` is a single global setting — every caller, free or paid,
+hits the paid entry first. That is fine today (zero paying users, zero cost risk) but becomes an
+unbounded per-free-user liability the moment free signups exist. §20.5 works the actual numbers
+and concludes the paid chain must be **plan-gated** — subscribers and a small one-time trial
+allotment only — with free-tier traffic routed to `FREE_TUTOR_MODELS` by default. **Do not flip
+`AI_MODEL_DEFAULT` to the paid chain for all traffic without that routing change landing first
+or alongside it.**
 
 ### 19.4 Voice — architecture decision (planning only, not implemented)
 
@@ -3839,6 +4123,14 @@ honestly: complicates the existing NDJSON stream (needs a streaming JSON parser 
 adds ~50–100 tokens/turn, and the rare repair-call path adds latency on failure — a good trade
 against an otherwise-unfixable core-product defect.
 
+**✅ Done, 2026-08-01 — see 3.38.** Implemented closer to plan than the tradeoffs above
+anticipated: the JSON parsing happens server-side (`extractConversationSoFar`, re-scanning the
+buffer per chunk), so the client never sees raw JSON and needed **no changes at all** — the
+"needs a streaming JSON parser client-side" tradeoff never materialised. Detection is live-verified
+correct (after fixing a real false-negative found by live testing, not the unit tests). The
+repair call is verified triggering correctly live but not yet verified *succeeding* end-to-end,
+because the repair model itself has no credits (roadmap #1) — same blocker, not a new one.
+
 **19.6.2 — Build the eval before trusting any model pick, including 19.3's.** Same discipline as
 "benchmarked all 17 free models on the live key, not by guessing" (section 17). No public
 benchmark measures LingoMatch's actual requirement (19.3), so this project has to measure it
@@ -3871,9 +4163,18 @@ Vercel AI Gateway is worth that second-provider slot when it happens: zero token
 per-project cost/latency observability OpenRouter doesn't have, and $5/month of free team credits
 — but confirm it's actually provisioned on this Vercel team before assuming it's free to turn on.
 
-**Not started by this section:** none of 19.6.1–19.6.4 has been implemented yet except where
-this same work session's log (below) says otherwise. This section is the plan; the log is the
-record of what was actually built against it.
+**⚠️ Refined, not overridden, by §21 (2026-08-01).** The owner has since made multi-provider
+routing a permanent architectural requirement (18.1, §21), which specifies the *target* shape
+(a registry-driven, metrics-informed router). **This item's restraint logic still holds**: §21
+itself phases its own rollout so the registry/metrics/circuit-breaker groundwork can be built
+now, against OpenRouter alone, without being hollow — it's real behaviour (metrics collection,
+circuit breaking, tier-gating) with a real single provider behind it today. Only the literal
+`{provider, model}` type reshape stays gated on an actual second provider being wired in, exactly
+as this item already said.
+
+**Not started by this section:** 19.6.1 is now done (2026-08-01, see 3.38 and the ✅ note above);
+19.6.2–19.6.4 remain unimplemented except where this same work session's log (below) says
+otherwise. This section is the plan; the log is the record of what was actually built against it.
 
 ### 19.7 Honest uncertainty carried forward
 
@@ -3896,3 +4197,726 @@ record of what was actually built against it.
   confident cost-driven pick for a closed beta with ~20 accounts would be over-fitting. Cost
   becomes a real decision variable for voice (where the per-minute spread is 10–20×) and for text
   only once DAU is real.
+
+---
+
+## 20. Business & growth strategy
+
+**Status: owner-directed strategy review, recorded 2026-07-31, same day as section 19.** A
+full strategic audit of this passport (not just a factual proofread) found four real gaps: no
+monetization hypothesis, no stated long-term shape for the AI teacher, no growth mechanic for
+the liquidity risk 18.5 makes worse, and no priority order across the competing big bets. The
+owner was asked directly and answered each question in their own words (quoted below, verbatim
+except for trimming). In every case the owner explicitly asked for an **evidence-based
+recommendation**, not just a record of their answer — so this section does that: real sources,
+checked live on 2026-07-31, in the same spirit and with the same "don't guess, verify" discipline
+as section 19. **This section is a plan the owner asked for. Nothing in it has been built.**
+Read it, like 18 and 19, before proposing what to build next.
+
+### 20.1 Monetization strategy
+
+**The owner's direction, verbatim:** *"My highest priority is building a high-quality product
+that users genuinely enjoy and recommend. I would rather have a smaller, sustainable business
+with excellent user retention than maximize short-term revenue through aggressive paywalls.
+Monetization should never significantly reduce the learning experience. The free tier should be
+good enough for users to experience the real value of LingoMatch, while the paid tier should
+provide additional value rather than simply removing frustrating limitations."*
+
+**Evidence checked live, 2026-07-31:**
+
+- **Freemium and hard-paywall apps retain almost identically after one year (28% vs 27%), while
+  hard paywalls convert roughly 5× better in the short run (10.7% vs 2.1% download-to-paid by
+  day 35).** Given that retention gap is statistically negligible but the owner has explicitly
+  ranked retention above conversion speed, **freemium is the evidence-supported choice, not just
+  a stated preference** — there is no real retention cost to paying for it.
+  ([revenuecat.com/blog/growth/subscription-app-trends-benchmarks-2026](https://www.revenuecat.com/blog/growth/subscription-app-trends-benchmarks-2026/))
+- **Value-metric SaaS pricing guidance converges on gating after activation, not before**, and
+  blending usage headroom with feature-based upsells rather than a single hard wall; one
+  case-study roundup found this hybrid shape raised free-to-paid conversion from 3.8% to 7.4%.
+  ([artisangrowthstrategies.com](https://www.artisangrowthstrategies.com/blog/feature-gating-economics-how-saas-companies-decide-what-goes-free-vs-paid),
+  [withdaydream.com/library/insights/freemium-conversion-rate](https://www.withdaydream.com/library/insights/freemium-conversion-rate))
+- **Duolingo's hearts/energy system is the direct cautionary tale, not a hypothetical one.**
+  Every mistake cost a heart; running out blocked further practice unless the user watched an ad
+  or subscribed. User backlash centres on exactly the mechanic LingoMatch must not copy: *"mistakes
+  are a natural, even essential, part of learning, and being punished for them felt wrong"*, and
+  the model is perceived as hurting "the people who most need extra practice — students, refugees,
+  and lower-income users" the most.
+  ([medium.com/@cibitoru/duolingo-is-dead](https://medium.com/@cibitoru/duolingo-is-dead-why-it-is-no-longer-recommended-aaed0ce18f79),
+  [fool.com — "Duolingo's Pushy Paywall Play"](https://www.fool.com/investing/2025/08/08/duolingos-pushy-paywall-play-smart-or-risky/))
+
+**Recommendation — value-add freemium, gated after activation, never on correction or
+conversation itself:**
+
+1. **Never gate the tutor's ability to converse or correct mistakes.** This is the Duolingo
+   hearts mistake specifically, applied to LingoMatch's own core mechanic. The free tier's
+   existing personal daily allowance (80 requests, 3.7) already comfortably covers a real daily
+   session — keep it generous enough that a casual learner never feels a wall.
+2. **The paid tier adds things the free tier doesn't have, rather than removing a frustration
+   the free tier was designed to have:**
+   - **Usage headroom** for heavy users, measured in real cost once 19.6.3's cost-counting
+     ships (roadmap #30) — not an arbitrary request cap. **§20.5 works the actual numbers**: the
+     free tier itself must default to the zero-cost model chain, not a volume cap on the paid
+     one, to genuinely satisfy "never capable of losing money at scale."
+   - **Premium tutor personas and voices** — a direct, low-effort implementation of 19.4's
+     "voice id as a per-persona config field" design: free tier gets one default persona, paid
+     unlocks the catalogue.
+   - **Priority or reserved human-matching slots** once 20.3's availability-window matching
+     exists — monetizes the genuinely scarce resource (a compatible human partner online) rather
+     than the abundant one (AI text), and only becomes available once there's something real to
+     sell.
+3. **Gate placement:** after a user has completed onboarding and had at least one real session
+   (AI or human) — i.e. after they have already experienced the product's actual value, matching
+   both the owner's instruction and the "gate after activation" evidence above.
+4. **Sequencing is unchanged from the existing passport position:** do not build checkout before
+   roadmap #13 (product analytics) produces real retention/usage evidence. The owner's own answer
+   reinforces, rather than overrides, that existing gate.
+
+**Never revert:** do not introduce a hearts/lives/energy mechanic on the AI tutor. Do not gate
+corrections or the ability to keep a conversation going. Do not build a hard paywall in place of
+freemium — the retention evidence does not support the short-term conversion gain outweighing the
+owner's explicit retention priority.
+
+### 20.2 The AI teacher's long-term pedagogical shape
+
+**The owner's direction, verbatim:** *"My primary goal is building a successful and profitable
+business. I don't care about being original for the sake of originality. If an existing learning
+approach has already been proven to produce better learning outcomes, higher user retention, and
+stronger revenue, I would rather build the best possible version of that than invent something
+completely new. ... Innovation is welcome when it creates real value, but never choose a weaker
+solution simply because it is more original."*
+
+**Evidence checked live, 2026-07-31:**
+
+- **Conversation-first AI tutoring, with no lesson tree at all, is independently proven at scale
+  by a direct comparable.** Speak — a pure-conversation AI speaking-practice app with no
+  structured curriculum — reached a **$1B valuation** (Series C, Dec 2024), **10M+ users doubling
+  every year for five years**, and roughly **$100M revenue**, explicitly on the premise that
+  users "couldn't speak comfortably until discovering Speak despite years of studying" a more
+  traditional, lesson-based product. This is direct market evidence that LingoMatch's existing
+  conversation-first identity is not merely defensible — it is a proven, fundable, profitable
+  shape, and the "no lesson tree" line in section 1 is an evidence-based position, not an
+  aesthetic one.
+  ([techcrunch.com/2024/12/10 — Speak $78M Series C at $1B](https://techcrunch.com/2024/12/10/openai-backed-speak-raises-78m-at-1b-valuation-to-help-users-learn-languages-by-talking-out-loud),
+  [finance.yahoo.com — Speak $100M revenue](https://finance.yahoo.com/news/1-billion-ai-startup-backed-144613265.html))
+- **Spaced repetition is separately, and very strongly, evidence-backed for the one thing
+  pure conversation doesn't reinforce: vocabulary retention.** Published studies report roughly
+  **79.77% recall after 10 days** from a spaced-repetition schedule, and one EFL study measured
+  **long-term vocabulary retention roughly tripling** from a few minutes of daily automatically-
+  generated review.
+  ([so06.tci-thaijo.org — spaced repetition vocabulary retention](https://so06.tci-thaijo.org/index.php/jomld/article/view/273598),
+  [andymatuschak.org — mobile-assisted spaced repetition L2 study](https://andymatuschak.org/files/papers/Seibert%20Hanson%20and%20Brown%20-%202020%20-%20Enhancing%20L2%20learning%20through%20a%20mobile%20assisted%20sp.pdf))
+
+**Recommendation — conversation stays the foundation; spaced repetition is layered on top of the
+tutor's own real output, not built as a parallel curriculum:**
+
+Roadmap #25 ("structured curriculum or lesson suggestions") is **superseded**, not merely
+deprioritised, by a more specific, evidence-backed item: **a spaced-repetition review deck built
+automatically from the tutor's own real corrections.** Concretely — once 19.6.1 (roadmap #28)
+ships structured tutor output (`{ conversation, correction, explanation, ... }`), every
+`correction` object the tutor already generates during a real session is a ready-made review
+item; no new AI capability, no invented lesson content, no fabricated curriculum. This:
+
+- Is evidence-based on both axes the owner asked for (proven retention mechanism, proven
+  conversation-first business model) rather than an original invention.
+- Reuses work already scoped (19.6.1) instead of adding new AI surface area.
+- Cannot regress into "demo content" (11.2's standing rule) — every review item is a real
+  mistake the user actually made, in a real session, never invented.
+- **Resolves the apparent tension with section 1's "no streak guilt" line** (flagged during this
+  review): the existing streak (3.14/3.27, already yesterday-inclusive per 11.17) stays exactly
+  as built — a low-pressure day-count, never a lives/hearts/energy mechanic that can run out or
+  block practice. The review deck surfaces as an invitation ("12 corrections ready to review"),
+  never a penalty for a missed day. Section 1's line is correct and now has direct market
+  evidence (Duolingo's own backlash, above) for why the alternative was rejected.
+
+**Never revert:** do not build a generic lesson tree, skill-tree gamification, or invented
+practice content — 11.2's rule against fabricated surfaces applies to pedagogy exactly as it did
+to admin charts and fake notifications. Do not turn the streak into a resource that can be lost
+(hearts/lives/energy) — that is the specific, evidenced-against mechanic.
+
+### 20.3 Human liquidity and growth strategy
+
+**The owner's direction, verbatim:** *"I don't want LingoMatch to depend on having two users
+online at the same time in order to provide value. The AI teacher should ensure that every user
+can immediately start learning, even if no human partner is available. At the same time, I
+believe human conversation is extremely valuable and should become a natural next step rather
+than a requirement. ... The product should never feel empty."*
+
+This directly extends the risk section 10 already named ("two-sided liquidity... the biggest
+matching risk") and 18.5 already flagged as getting *harder*, not easier, once voice becomes the
+primary human mode.
+
+**Evidence checked live, 2026-07-31:** two-sided marketplace liquidity literature converges on
+the same handful of levers, independent of vertical: **seed a narrow wedge first** rather than
+launching broad ("launch in a narrow enough wedge that both sides find each other, and build
+trust infrastructure before the first real transaction"), **referral incentives for early users**,
+and **embedding scheduling/availability into the product** so a match doesn't require both sides
+present at the same instant.
+([themarketplaceguide.com — sequencing, liquidity, what breaks at scale](https://themarketplaceguide.com/articles/the-two-sided-marketplace-playbook-sequencing-liquidity-and-what-actually-breaks-at-scale/),
+[sharetribe.com — two-sided marketplace guide](https://www.sharetribe.com/how-to-build/two-sided-marketplace/))
+This is the same playbook that solved liquidity for Airbnb, OpenTable and comparable
+marketplaces, applied here rather than invented — consistent with 20.2's "don't be original for
+its own sake" instruction.
+
+**Recommendation — three complementary mechanisms, all additive to what's already built:**
+
+1. **Narrow the wedge (roadmap-adjacent, no new engineering):** concentrate growth effort on
+   exactly the 8 Tier-1 pairs already scoped in §19.5 (Spanish↔English, Portuguese(BR)↔English,
+   Spanish↔French, etc.) instead of marketing all 74 languages in `constants/languages.ts` as
+   equally supported. Liquidity math only works in a concentrated pool early on — this is a
+   go-to-market decision layered on scoping work already done, not new code.
+2. **Declared-availability matching windows (roadmap #32):** let a user signal "I'm free to
+   practise around this time" and match within an overlapping window, rather than requiring both
+   participants online at the same instant. This is additive to the existing `MatchRequest`
+   TTL/liveness model (3.9) — instant queueing keeps working when it works; the window mechanism
+   covers when it doesn't, which is precisely the case 18.5's voice-first direction makes more
+   common.
+3. **Invite-a-partner referral flow (roadmap #33):** LingoMatch's reciprocal matching model
+   already encodes "A wants what B has" — inviting one's own real exchange partner is a natural
+   extension of that mechanic, not a generic "invite a friend for a discount" bolt-on. Per the
+   evidence above, referral incentives are a standard, proven liquidity lever for exactly this
+   class of product.
+
+**Never revert:** the AI tutor remains the unconditional floor regardless of any of the above —
+these three mechanisms only affect how liquidity is solved on the human side, per the owner's
+explicit instruction that the product must never feel empty while human partners are scarce.
+
+### 20.4 Strategic sequencing across the roadmap
+
+**The owner's direction, verbatim:** *"The priority should always be maximizing the probability
+of building a successful, profitable product with strong user growth and retention. ... Do not
+assume that voice, monetization, or growth must come first simply because they are large
+initiatives. If another sequence gives the product a higher probability of success, recommend
+that instead."*
+
+**Reasoning, as a dependency chain — not a re-statement of section 12's existing ordering
+principle, which still governs *within* a phase:**
+
+| Order | Item(s) | Why here, not earlier or later |
+|---|---|---|
+| 1 | Existing operational basics — roadmap #1, #5, #6, #7 | Unchanged from section 12; nothing else is safely buildable on a shared dev/prod database or with the tutor capped at 50 req/day |
+| 2 | **Product analytics — roadmap #13** | This is the evidence gate the owner's own answers repeatedly invoke ("evaluate objectively," "recommend based on evidence") — every hypothesis in 20.1–20.3 needs this to be checked against reality, and it was already section 10's stated precondition for monetization |
+| 3 | **AI-teacher quality loop — roadmap #28, #29, then #31** | Cheapest, highest-leverage, needs no owner action, and directly serves the owner's explicitly stated top priority (retention/quality) before any large bet is placed. Runs **in parallel** with #13, not after it — neither blocks the other |
+| 4 | **Human-to-human voice matching + liquidity mechanics — the human half of 18.5, plus roadmap #32, #33** | §19.4 already concluded human voice "needs no AI at all" and is "the lower-risk, cheaper, sooner-shippable half of 18.5." Combined with the liquidity mechanics in 20.3, this is the highest-leverage lever available that isn't gated on anything above, and it compounds directly with #13 (more signal, faster) |
+| 5 | **Growth/SEO surface — 18.3** | Worth writing once there is something genuinely differentiated to say (a working voice-matching product, Tier-1 pairs with real density) rather than generic content describing a still-changing product |
+| 6 | **Monetization — roadmap #22, per 20.1** | Deliberately last of the strategic bets — gated on #13 producing real retention/usage evidence, exactly as the owner's own answer requires ("smaller, sustainable business" over "short-term revenue") |
+| 7 | **AI tutor voice — roadmap #24** | Last, because §19.4 already flags an unresolved latency contradiction (Gemini Live 2.98s vs 320–800ms) and a real cost-curve risk that must be spiked before committing. By the time items 2–6 are done, the eval harness (#29) and cost-counting (#30) it depends on already exist, so it gets built once, safely, instead of twice |
+
+**This is a recommendation, in the same "plan, not yet-executed work" status as 18.5 and 19** —
+it does not authorise starting item 2 or beyond in this same session. It supersedes nothing in
+section 12's own prioritisation principle (unblock users → prevent silent failure → reduce data
+risk → produce learning), which still governs ordering *within* each numbered step above.
+
+### 20.5 Quantifying the free-tier cost ceiling
+
+**Status: owner-directed follow-up, recorded 2026-07-31, same day as the rest of section 20.**
+The instruction: the free tier must never be capable of losing money at scale, and the maximum
+sustainable free volume should be derived from real inference cost, realistic conversion, and
+long-term sustainability — not guessed. Same "verify, don't guess" discipline as the rest of this
+document; every price and rate figure below was checked live.
+
+**The number that matters most, worked from first principles, says the free tier cannot run on
+the paid model chain at any realistic volume — it has to run on the zero-cost one.**
+
+**Real unit cost (from §19.3, unchanged):** Gemini 3 Flash Preview costs **≈$0.0026 per tutor
+message** at LingoMatch's measured token profile (≈4,000 input tokens replayed history + system
+prompt, ≈200 output tokens), uncached. System-prompt caching (§19.3, already recommended, not yet
+built) would cut this further, but the sustainability math below deliberately uses the
+**uncached, worst-case number** — the same conservatism this document applies elsewhere (e.g.
+11.7's budget calibrated to the real provider cap, not a hoped-for one).
+
+**Realistic conversion and price, checked live, 2026-07-31:**
+
+- **Freemium consumer apps convert around 2–2.5% typically; 3–5% is "good"; 8–12% is "great" and
+  requires strong optimisation.** A well-executed hybrid gate-after-activation model has been
+  measured raising conversion from 3.8% to 7.4%.
+  ([dev.to/paywallpro — global subscription app conversion benchmarks](https://dev.to/paywallpro/global-subscription-app-conversion-benchmarks-3c75),
+  [growthunhinged.com — 2026 free-to-paid conversion report](https://www.growthunhinged.com/p/free-to-paid-conversion-report))
+- **Comparable language-app pricing:** Duolingo Super is **$12.99/month** (≈$7/month on the
+  annual plan, $83.99/year); Speak's premium tier runs **$19–20/month** (≈$4–8/month on annual
+  promotions). LingoMatch, per the owner's stated preference for a smaller, sustainable business
+  over aggressive monetization, does not need to match Speak's premium price point — this section
+  uses **$8/month** as a representative mid-market anchor, and shows the conclusion is robust
+  across a wide price range below.
+  ([spliiit.com — Duolingo 2026 pricing](https://www.spliiit.com/en/blog/duolingo-prix-famille),
+  [speakshark.com — Speak app pricing 2026](https://speakshark.com/blog/speak-app-pricing-per-month-2026))
+
+**The arithmetic.** Target: total AI-inference COGS should not exceed roughly **15% of
+subscription revenue** — a conservative slice of a healthy ~80%+ gross-margin subscription
+business, leaving room for LiveKit, Cloudinary, hosting and support. For every 1,000 free
+signups in steady state, revenue and the resulting AI-cost budget are:
+
+| Conversion rate | Monthly revenue (1,000 free users × $8) | 15%-of-revenue AI budget | Sustainable messages / free user / **month** | Sustainable messages / free user / **day** |
+|---|---|---|---|---|
+| 2% (typical) | $160 | $24 | ≈9 | ≈0.3 |
+| 3% (conservative "good") | $240 | $36 | ≈14 | ≈0.5 |
+| 5% (optimistic "good") | $400 | $60 | ≈23 | ≈0.8 |
+| 7.4% (best-case, optimized gate) | $592 | $89 | ≈34 | ≈1.1 |
+
+**This is the load-bearing finding: if every free user's messages run on the paid model, the
+"never lose money at scale" constraint caps a free user at roughly half a message per day** —
+nowhere near a real practice session (naturally 10–30 exchanges), and incompatible with the
+owner's own instruction that "the free tier should be good enough for users to experience the
+real value of LingoMatch." **Volume-capping the paid model is not the answer here — the model
+tier has to change, not just the quantity.**
+
+**The resolution: decouple free-tier plan from paid-model cost by construction, not by hoping a
+volume cap holds.**
+
+1. **Free-tier default: route to `FREE_TUTOR_MODELS` only** (the existing zero-cost chain,
+   §3.5/§19.3's safety net) — marginal cost **≈$0 per message, regardless of volume or how large
+   the free user base grows.** This is what actually satisfies "never capable of losing money at
+   scale": the constraint isn't a cap that could be exceeded, it's removed at the architecture
+   level. Keep today's existing 3-tier limiter shape unchanged (burst 15/60s, personal daily 80,
+   shared global budget) — it was already tuned to sit just under OpenRouter's real free-model
+   quota (11.7's own principle), which is what actually bounds this tier now: **OpenRouter caps
+   `:free` models at 20 requests/minute and 1,000 requests/day once the account has ever
+   purchased $10+ in credits (a permanent threshold, confirmed live)** — a rate ceiling, not a
+   cost one, and one this architecture already knows how to sit just under.
+   ([openrouter.zendesk.com — rate limits explained](https://openrouter.zendesk.com/hc/en-us/articles/39501163636379-OpenRouter-Rate-Limits-What-You-Need-to-Know))
+2. **A small, one-time, bounded "taste of paid quality" allotment per free signup** — e.g. the
+   first **~15–20 messages** (one real practice session) or the first 3 days of activity,
+   whichever comes first, routed through the paid chain exactly once per user, lifetime, then
+   permanently reverting to the free-model chain unless the user subscribes. Cost: **≈$0.05 per
+   free signup** (20 × $0.0026) — a fixed, trivial, **one-time** cost that scales with new
+   acquisition, not with the size of the retained free user base, so it genuinely cannot
+   compound into a liability no matter how large the product grows. At 10,000 free signups in a
+   month, total exposure is ≈$520 — bounded, predictable, and the same order of magnitude as a
+   normal CAC line item. This is also the direct mechanism that answers 20.1's "free tier good
+   enough to experience real value": the "aha" moment (the ~9s free-model wait actually
+   disappearing, per §3.8) happens for every signup at least once, at negligible total cost.
+3. **Paid subscribers get the full paid chain — but still behind a generous fair-use ceiling**,
+   sized off the same unit economics rather than left open-ended. At $8/month and 15%-of-revenue
+   target, a subscriber's own usage should stay under ≈$1.20/month AI cost to hold that margin —
+   at $0.0026/message that's ≈460 messages/month (≈15/day), which comfortably covers a real daily
+   session. A heavy outlier hitting today's existing 80/day personal cap would cost ≈$6.24/month
+   against an $8 subscription — a thin, power-user-only margin case worth protecting against with
+   the **same** cost-counting work already planned in roadmap #30 (§19.6.3), applied to paid users
+   too, not only free ones.
+
+**Concrete numbers, restated as the actual free-tier design:**
+
+| Tier | Model routing | Daily/lifetime cap | Marginal cost |
+|---|---|---|---|
+| Free | `FREE_TUTOR_MODELS` only | Unchanged from today: burst 15/60s, personal 80/day, shared global just under OpenRouter's real free-model quota | ≈$0, structurally, at any scale |
+| Free, one-time trial | Paid chain (§19.3) | First ≈15–20 messages or 3 days, lifetime-once | ≈$0.05/signup, one-time, scales with acquisition not retention |
+| Paid subscriber | Paid chain (§19.3) | ≈15/day (≈460/month) as the fair-use ceiling protecting margin at an $8/month anchor price; revisit once #13 gives a real usage distribution | ≈$1.20/month at the cap, ≈15% of an $8 subscription |
+
+**Prerequisite this section adds to the roadmap:** `resolveModelChain()` and the request path
+currently have no concept of plan or trial state — every caller gets the same chain. **Making
+the model chain plan-aware (free vs one-time-trial-active vs subscribed) must land before or
+alongside roadmap #1's credit purchase**, not after — buying credits and pointing
+`AI_MODEL_DEFAULT` at a paid model for 100% of traffic, as roadmap #1 was originally written,
+would immediately reintroduce the exact unbounded-cost risk this section exists to prevent, the
+moment there is more than a handful of free users. See the amendment added to §19.3 above.
+
+**Never revert:** do not let free-tier traffic reach the paid model chain by default once this
+routing exists. Do not make the one-time trial allotment recurring (daily, weekly) — its
+sustainability guarantee depends specifically on being a one-time, per-acquisition cost, not a
+per-day one. Do not raise the paid-subscriber fair-use ceiling without cost-counting (#30) data
+showing real usage first — an ungated "unlimited" paid tier reintroduces the same unbounded-cost
+risk on the revenue-generating side instead of the free side.
+
+**Honest caveat carried into 20.6:** every number above depends on a $8/month price point and a
+2–7.4% conversion range that are both still hypotheses (20.1, 20.4) — re-run this table the
+moment roadmap #13 (analytics) and an actual chosen price exist. The conclusion that matters most
+(free tier must not run on the paid model by default) is robust across the entire price/
+conversion range tested; the exact fair-use numbers for paid subscribers are not, and should be
+treated as a starting point, not a settled constant.
+
+### 20.6 Is the free model itself good enough? A live re-check, not a guess
+
+**The owner's direction, verbatim:** *"I want to ensure that the free experience is still good
+enough to convince users that LingoMatch is worth using. The free model should not feel broken
+or low quality. If the current free model cannot consistently teach well enough, evaluate whether
+another free model would provide a significantly better first impression. The goal is not simply
+minimizing cost; it is maximizing long-term user growth, retention, and sustainable profit."*
+
+§20.5 decided the free tier should default to `FREE_TUTOR_MODELS` (zero cost) rather than the
+paid chain. That decision is only sound if the free chain's actual quality holds up — so rather
+than assume it does, this re-tested it live, 2026-07-31, the same day, against the project's own
+`OPENROUTER_API_KEY`.
+
+**Step 1 — what's actually live right now.** `GET /api/v1/models` returned **14** zero-cost
+(`:free`) model ids today, down from the 17 benchmarked in section 17 and the 20 reported nine
+days earlier by an external tracker — confirming, again, that this roster is volatile and worth
+re-checking rather than trusting a written-down list.
+
+**Step 2 — a real tutor-prompt benchmark, not a generic leaderboard.** Five live candidates were
+sent an actual grammar-correction prompt built from `buildSystemPrompt`'s core rule (converse in
+the target language, explain **only** in the learner's own language) — including the current
+pick, the current second-fallback, and every plausible new candidate from the fresh model list.
+One candidate (`nvidia/nemotron-3-ultra-550b-a55b:free`, a new 550B model) returned a live 502
+`"Worker local total request limit reached (32/32)"` — an availability problem disqualifying it
+outright regardless of quality. The remaining four were then run across **three prompts each**:
+two Spanish-target/English-explanation grammar errors, and one **French-target/Spanish-explanation**
+case — the harder, non-English-bridge scenario 18.2 specifically requires and the original
+section-17 benchmark never tested.
+
+**Results (12 live calls, verbatim outputs kept for the record):**
+
+| Model | Explanation-language correctness | Output integrity | Latency |
+|---|---|---|---|
+| **`google/gemma-4-26b-a4b-it:free`** (current primary) | **3/3 correct** — English when required, Spanish when required | Clean, well-structured, appropriately paced every time | 0.9–2.4s |
+| `nvidia/nemotron-3-super-120b-a12b:free` (was 2nd fallback) | 2/3 correct | **1/3 calls leaked raw chain-of-thought reasoning directly into the reply** ("We need to respond in Spanish mostly... Let's produce 2-3 sentences...") — reads as visibly broken, not just lower quality | 0.35–0.38s |
+| `nvidia/nemotron-3-nano-30b-a3b:free` (new candidate) | Unusable — reasoning leak makes the language question moot | **3/3 calls leaked raw chain-of-thought reasoning** into every reply, no exceptions | 0.34–0.41s |
+| `inclusionai/ling-3.0-flash:free` (new candidate) | **0/3 correct** — explained in the target/conversation language every time, never in the learner's own language | Clean, fluent, no reasoning leaks | 0.77–1.45s |
+
+**What this means, concretely:**
+
+- **The current pick is confirmed, live, as still the best available free option** — not by
+  reputation or an old benchmark, but by direct re-test on the exact defect this project already
+  diagnosed (19.1/19.2). Nothing faster beats it without a new, worse failure mode.
+- **A real, previously-undiscovered defect was found and fixed today:**
+  `nvidia/nemotron-3-super-120b-a12b:free` — the *current* second-fallback in `FREE_TUTOR_MODELS`
+  — intermittently outputs its own internal reasoning as the user-facing reply. This is exactly
+  the "feels broken" failure the owner is asking to guard against, and it is **worse than the
+  known explanation-language defect**, because 19.6.1's planned fix (structured output + a repair
+  call) can correct a wrong-language explanation but cannot cleanly recover from a model that
+  never emits valid structured output in the first place. **Removed from `FREE_TUTOR_MODELS`**
+  (`src/lib/ai/models.ts`), replaced with `inclusionai/ling-3.0-flash:free` — clean and fast, with
+  only the class-wide explanation-language weakness every free model here shares. 32 existing
+  tests in `openrouter.test.ts` re-run clean against the change (they assert on `[0]`, length and
+  uniqueness, not on the specific fallback model ids).
+- **`nvidia/nemotron-3-nano-30b-a3b:free`**, despite being the fastest candidate tested
+  (≈340–410ms), is **disqualified outright** — it leaked raw reasoning into 100% of replies. This
+  is the sharpest illustration yet of a point this document has made before (7ff87da's own
+  lesson, restated): the fastest option is worthless if what it produces would make a real user
+  think the product is broken.
+- **This reconfirms 19.2's central thesis rather than contradicting it:** every free model tested
+  today either failed the explanation-language rule outright (`ling-3.0-flash`, 0/3) or
+  demonstrated a worse structural defect (`nemotron-3-super`, `nemotron-3-nano`). Swapping models
+  alone does not solve the defect 19.1 diagnosed — it was worth checking directly rather than
+  assuming, but the conclusion is the same: **19.6.1 (machine-checkable explanation-language
+  validation) remains the real fix**, and it is model-agnostic by design, so it will also correct
+  `gemma-4-26b`'s rare misses and any future free-model swap this roster's volatility will force.
+
+**Sample-size honesty.** This is 3 samples per model on 2 prompt shapes — enough to catch and act
+on an obvious, severe defect (the reasoning leak) immediately, not enough to certify
+`gemma-4-26b-a4b-it:free`'s explanation-language accuracy at the confidence level 19.6.2's eval
+harness (roadmap #29) will eventually provide. Re-run this exact check through that harness once
+it exists, across all Tier-1 pairs (§19.5), not just Spanish/French.
+
+**Never revert:** do not restore `nvidia/nemotron-3-super-120b-a12b:free` to `FREE_TUTOR_MODELS`
+without first confirming, live, that the reasoning-leak behaviour is gone — this was observed
+directly, not inferred. Do not add `nvidia/nemotron-3-nano-30b-a3b:free` to the chain for its
+speed alone; the same defect was observed on every single call. Do not treat any free-model
+roster in this document, including this one, as stable — the account listed 20 free models nine
+days before this check and 14 the day of it.
+
+### 20.8 The AI teacher as an adaptive personal teacher — architecture sketch
+
+**Status: owner-directed extension of 18.2, recorded 2026-08-01. Planning only, same status as
+19.4's voice architecture — not implemented, does not authorise starting implementation on its
+own.** 18.2 now requires the tutor to "naturally adapt to each learner, remember strengths and
+weaknesses, personalize practice, revisit forgotten topics using evidence-based learning
+methods." This sketches the architecture, applying 18.6's rule directly: **use a proven
+mechanism, don't invent one.**
+
+**Evidence, checked live, 2026-08-01:** the proven mechanism already exists, is published, and is
+open-sourced by the closest direct comparable in this exact market. Duolingo's **Half-Life
+Regression (HLR)** models each learner's forgetting curve per lexical item — the probability of
+recall decays exponentially with a "half-life" fitted from that learner's actual practice history
+(correct/incorrect attempts, time since last practice) — and schedules review at the moment
+recall probability drops toward 50%. It's grounded in Ebbinghaus's century-old forgetting-curve
+research, trained originally on 13M real user-word interactions, and the reference implementation
+is public.
+([research.duolingo.com/papers/settles.acl16.pdf](https://research.duolingo.com/papers/settles.acl16.pdf),
+[github.com/duolingo/halflife-regression](https://github.com/duolingo/halflife-regression)) The
+older, simpler **Leitner system** (box-based spaced repetition, no regression model, review
+interval doubles on success and resets on failure) is the same idea's low-tech ancestor and is
+what most flashcard tools still run in production. Separately, **Bayesian Knowledge Tracing**
+(BKT) is the standard intelligent-tutoring-system technique for per-skill mastery estimation from
+a sequence of right/wrong attempts, decades-proven in production tutoring systems.
+([emergentmind.com/topics/bayesian-knowledge-tracing](https://www.emergentmind.com/topics/bayesian-knowledge-tracing))
+
+**Recommended architecture — phased, cheapest-proven-mechanism first, matching every other
+phased rollout in this document:**
+
+1. **Data model:** a new, small collection — one document per (`userId`, `skillTag`) pair, where
+   `skillTag` is a short identifier for a grammar point, lexeme, or mistake type (e.g.
+   `es:preterite-vs-imperfect`, `es:ser-vs-estar`). Fields: correct/incorrect counts, last-seen
+   timestamp, next-review-due timestamp. This reuses the project's existing Mongoose/MongoDB
+   pattern (4 — "Twelve models") rather than adding a new datastore.
+2. **Population — reuses work already planned, doesn't duplicate it.** 19.6.1 already plans to
+   make the tutor emit a structured `correction` object per mistake (roadmap #28). Extend that
+   schema with one more field — a `skillTag` the model assigns to its own correction — and every
+   real tutoring exchange automatically produces a labelled data point for the learner model, with
+   no separate classification system to build.
+3. **Phase 1 (build once #28 ships): Leitner-style fixed intervals, not a fitted regression.**
+   Wrong today → due again in 1 day → 3 → 7 → 21 on each success, reset to 1 on failure. This is
+   deliberately the simplest proven version, not Duolingo's fitted HLR model — there is no review
+   history yet to fit a per-user forgetting curve from, and 18.6 says use the smallest proven
+   mechanism the evidence supports, not the most sophisticated one available. This alone is
+   enough to power §20.2's spaced-repetition review deck (roadmap #31).
+4. **Phase 2 (only once there's real review data — gated on evidence, not a timeline): fit a
+   simplified half-life estimate per skill per learner**, the same shape as Duolingo's published
+   HLR, once Phase 1 has produced enough real attempts to make fitting meaningful. Upgrade only
+   if Phase 1's fixed intervals demonstrably under- or over-schedule reviews against real
+   retention data (#13) — do not build this speculatively.
+5. **Where this makes the tutor feel like "a real teacher, not a chatbot":** at the start of a
+   session, inject a short, factual summary of the learner's weakest 2–3 open skill tags into the
+   tutor's context (e.g. "this learner has struggled with preterite-vs-imperfect in 4 of their
+   last 6 attempts") so the model can naturally steer conversation toward it, the same way a human
+   tutor remembers a student's recurring mistake — without turning that into a graded quiz or a
+   lesson-tree screen. This is presentation-only; the underlying mechanism stays conversation
+   (18.2, 20.2), never a separate curriculum UI.
+
+**Never build:** a neural/deep knowledge-tracing model (RNN- or transformer-based mastery
+estimation) — genuinely more effective at large scale per the published research, but there is no
+training data at LingoMatch's current size and no evidence the simpler mechanisms above are
+insufficient. This would violate 18.6 directly: sophistication ahead of the evidence that
+justifies it.
+
+**Dependencies:** Phase 1 depends on roadmap #28 (structured tutor output) and directly powers
+roadmap #31 (SRS review deck, §20.2) — these are not three separate initiatives, they are one
+pipeline. No owner action required to start Phase 1 once #28 ships; Phase 2 depends on #13
+(analytics) producing real review-outcome data to fit against.
+
+### 20.9 Honest uncertainty carried forward
+
+- All monetization and pedagogy evidence above is drawn from public benchmarks, competitor
+  reporting and academic studies **about the market and about second-language learning in
+  general** — none of it is LingoMatch-specific. The eval harness (19.6.2) and product analytics
+  (#13) are what will tell us whether any of it holds for this product's actual users; treat
+  20.1–20.3 as well-evidenced hypotheses to re-verify against real data, exactly as 19.7 already
+  says about the model pick in §19.3.
+- The Speak comparison (20.2) is suggestive, not conclusive — Speak's product, market entry
+  (South Korea, 2019) and scale are different from LingoMatch's; it is evidence that
+  conversation-first *can* work at scale, not proof that it will work identically here.
+- Pricing benchmarks in 20.1 (freemium/paywall conversion and retention figures) are aggregate
+  SaaS/consumer-app statistics, not language-learning-specific — directionally useful, not a
+  guarantee for this category.
+- **20.8's learner-model architecture is a design sketch, not a validated one.** The Leitner/HLR
+  evidence supports spaced repetition working *in general* — it says nothing about whether
+  LingoMatch's specific skill-tagging granularity (one tag per grammar point/lexeme) is the right
+  level, too coarse, or too fine, for a conversational tutor rather than a flashcard app. Treat
+  Phase 1's skill-tag taxonomy as a hypothesis to refine once real data exists, the same way
+  19.3's model pick is a hypothesis §19.6.2's eval harness exists to check.
+
+---
+
+## 21. Provider-independent AI routing architecture
+
+**Status: owner-directed permanent architecture requirement, recorded 2026-08-01. Planning only —
+same status as 18.5/19/20: a design the owner asked for, not yet built.** The owner's direction,
+verbatim:
+
+*"LingoMatch must never depend on a single AI model or a single AI provider. Design the AI
+architecture so multiple providers and models can coexist behind a provider-independent routing
+layer. The routing system should intelligently choose the most appropriate model based on real
+production evidence, including teaching quality, latency, reliability, language support,
+availability, cost, user subscription tier, and any other relevant metrics. If the preferred
+model is unavailable, rate-limited, overloaded, too slow, produces invalid output, or otherwise
+fails quality requirements, the system should automatically fail over to the next most appropriate
+model whenever possible without interrupting the learner's experience. I do not want a simple
+static fallback chain. ... The architecture must make it easy to add, remove, reorder, replace, or
+experiment with models over time without requiring changes throughout the application. The
+routing layer should also collect production metrics such as latency, failure rate, fallback
+rate, repair rate, estimated cost, and quality signals so routing decisions can improve over time
+using real production evidence instead of assumptions."*
+
+Per §18.6 (recorded the same day): the mandate here is to build the version of this **already
+proven in production elsewhere**, not to invent one. This section does that — every mechanism
+below is a named, evidence-checked pattern already running at scale in comparable systems, not a
+new idea.
+
+### 21.1 What today's architecture already gets right, and the real gap
+
+`resolveModelChain()` (`src/lib/ai/models.ts`) already has real strengths worth keeping exactly as
+they are: it's ordered, deduplicated, env-driven (reorderable without a code change), advances
+past 402/404/429/5xx but not past timeouts or malformed replies (11.4 — a tested, deliberate
+asymmetry), and commits to a streaming response only after the first chunk succeeds (11.9 — this
+is *already* the mechanism that makes failover invisible to the learner, and nothing below
+replaces it). **This is a legitimate static fallback chain, not an anti-pattern** — the gap the
+owner is naming isn't that it fails over, it's that it fails over *blindly*: every model is tried
+in a fixed order regardless of which one is actually fast/healthy/cheap/good right now, there is
+no memory of past outcomes, and the "chain" is really one provider (OpenRouter) exposing many
+models, not genuinely independent providers.
+
+**The three concrete gaps, matched directly to the owner's list of routing signals:**
+
+1. **No production metrics feed the decision.** Order is fixed at deploy time (env var), never
+   adjusted by what's actually happening in production.
+2. **No quality signal reaches the router at all.** A model that returns syntactically valid but
+   pedagogically wrong output (19.1/19.2's explanation-language defect, or 20.6's discovered
+   reasoning-leak defect) is treated identically to a perfect reply — nothing here currently
+   distinguishes "answered" from "answered well."
+3. **Single gateway.** Every model in the chain is one HTTP integration to one vendor
+   (OpenRouter). OpenRouter itself aggregates 300+ models from many underlying labs — real
+   *model* diversity already exists — but the app has exactly one dependency on OpenRouter *the
+   company* staying up, priced fairly, and policy-stable. That is the literal single point of
+   failure "must never depend on a single AI provider" is naming, and no amount of model-list
+   diversity inside one gateway fixes it.
+
+### 21.2 Evidence: how production LLM routing is actually built in 2026
+
+Checked live, 2026-08-01, rather than designed from first principles:
+
+- **The standard shape is a router/gateway middleware layer between the app and a pool of
+  models**, using rule-based, semantic, or predictive selection strategies — not a single
+  hard-coded call site per model.
+  ([redis.io/blog/llm-router-architecture-best-practices](https://redis.io/blog/llm-router-architecture-best-practices/))
+- **Circuit breakers are the named, standard pattern for this exact failure mode.** A circuit
+  breaker tracks per-provider failure rate; once it crosses a threshold, it stops sending new
+  requests there for a cooldown window instead of letting every request fail individually — three
+  states: CLOSED (healthy, normal traffic), OPEN (failing, fail fast without calling the API),
+  HALF-OPEN (cooldown elapsed, probe with limited traffic to test recovery). One documented 2026
+  incident: an agent stuck in a retry loop against a down provider ran up a $437 bill overnight —
+  the exact class of failure a circuit breaker exists to prevent. Genuinely different from
+  ordinary microservice circuit breakers in one respect worth designing for: LLM failures include
+  **partial failures and quality degradation**, not just binary up/down — matching exactly the
+  "produces invalid output... fails quality requirements" clause in the owner's own instruction.
+  ([getmaxim.ai — retries, fallbacks, circuit breakers in LLM apps](https://www.getmaxim.ai/articles/retries-fallbacks-and-circuit-breakers-in-llm-apps-a-production-guide/),
+  [dev.to/waxell — AI agent circuit breakers](https://dev.to/waxell/ai-agent-circuit-breakers-the-reliability-pattern-production-teams-are-missing-5bpg))
+- **Multi-provider failover is the standard reliability lever, and it measurably works.** Teams
+  running more than one provider report ~99.99% uptime; production benchmarking on ~50,000 real
+  requests found gateway-level failover absorbed three separate provider outages over two weeks
+  with zero user-visible interruption.
+  ([dev.to/ash_dubai — multi-provider LLM orchestration 2026](https://dev.to/ash_dubai/multi-provider-llm-orchestration-in-production-a-2026-guide-1g10),
+  [datastudios.org — OpenRouter provider selection](https://www.datastudios.org/post/openrouter-provider-selection-explained-latency-availability-model-quality-and-cost-trade-offs-f))
+- **Vercel AI Gateway (already in this stack's ecosystem, per 19.6.4) is a proven, off-the-shelf
+  implementation of most of the mechanical layer this section needs**: a `models` fallback array
+  tried in order per request, per-provider timeouts, one dashboard for cross-provider spend and
+  latency, and — in aggregate, across its own real traffic — fallback rescuing 3.5% of requests
+  and 5.1% of tokens (over 1 trillion tokens/month) that would otherwise have errored. This is
+  exactly the "don't invent it, use what's proven" case §18.6 asks for, at the transport layer.
+  ([vercel.com/changelog — model fallbacks in AI Gateway](https://vercel.com/changelog/model-fallbacks-now-available-in-vercel-ai-gateway),
+  [vercel.com/docs/ai-gateway/models-and-providers/model-fallbacks](https://vercel.com/docs/ai-gateway/models-and-providers/model-fallbacks))
+- **OpenRouter's own provider-routing layer already does gateway-native latency/availability/cost
+  routing** *underneath* a given model id (it tracks p50/p75/p90/p99 latency and throughput over a
+  rolling 5-minute window per upstream provider) — worth knowing so this section doesn't
+  duplicate what OpenRouter already does well for a single model id; the gap this section closes
+  is *above* that layer (across models and across gateways, with LingoMatch-specific quality
+  signals no generic gateway can know).
+  ([datastudios.org — OpenRouter provider selection](https://www.datastudios.org/post/openrouter-provider-selection-explained-latency-availability-model-quality-and-cost-trade-offs-f))
+
+**Conclusion this evidence points to:** don't build a bespoke retry/circuit-breaker/failover
+engine from scratch — that work is solved, proven, and in one case (Vercel AI Gateway) already
+sitting in this project's own toolchain. **What has to be built in-house is the layer no generic
+gateway can provide**: LingoMatch-specific quality scoring (explanation-language correctness,
+teaching-quality signals), subscription-tier eligibility (§20.5), and a registry that lets this
+product's own routing policy span *multiple* gateways, not just multiple models within one.
+
+### 21.3 Recommended architecture
+
+**Three layers, matching the provider-adapter/domain split 18.1 already established and the
+`CompatibilityProvider` seam already proven in this codebase for matching (3.9) — the same shape,
+applied to a second subsystem, not a new one:**
+
+**Layer 1 — Gateway adapters.** A thin `TutorGatewayAdapter` interface (one per transport:
+`openrouter` today, `vercel-ai-gateway` when a second one is wired per 19.6.4) — each adapter owns
+its own HTTP/SDK details and exposes one shape: submit a completion request, stream back deltas,
+report the outcome (status, latency, usage/cost if the gateway provides it). **Rely on each
+gateway's own native retry/circuit-breaking for transport-level failures** (§21.2) — LingoMatch's
+own logic sits one level up, deciding *which model, on which gateway* to try, not re-implementing
+HTTP retry semantics per model.
+
+**Layer 2 — The model registry.** Replace the flat `FREE_TUTOR_MODELS` array and
+`AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` env-string convention with a small, structured registry —
+still simple data (a config module or a DB-backed table, not a new database), one entry per
+model:
+
+```
+{ modelId, gateway, tierEligibility: ['free' | 'trial' | 'paid'],
+  costPerMTokIn, costPerMTokOut, minReasoningEffort,
+  languagePairSupport: [...verified pairs, from §19.6.2's eval harness],
+  status: 'active' | 'deprecated' | 'circuit-open' }
+```
+
+This is what literally satisfies "easy to add, remove, reorder, replace, or experiment with
+models... without requiring changes throughout the application" — adding a model is one registry
+row, not a call-site change, and every one of the owner's named routing signals (tier, language
+support, cost, availability) becomes a queryable field instead of logic scattered across the
+request handler.
+
+**Layer 3 — The routing decision.** For a given request (learner's language pair, subscription
+tier, current registry state):
+
+1. **Hard filters first, non-negotiable, never overridden by a quality/latency score:**
+   `tierEligibility` includes the caller's plan (this *is* §20.5's plan-aware routing requirement,
+   formalised as the first filter rather than a separate bolt-on — a free user must never reach a
+   paid-tier model no matter how well it scores, full stop); `languagePairSupport` includes the
+   session's pair; `status !== 'circuit-open'`.
+2. **Then rank the survivors by a weighted score** — quality signal (from 19.6.2's eval harness
+   offline score, blended with 19.6.1's live explanation-language-correctness rate once that
+   exists), reliability (rolling success rate from §21.5's metrics), latency (rolling p50 TTFT),
+   and cost fit. **Phase 1 (below) keeps this step a fixed priority number, not a live-computed
+   score** — the weighted version is Phase 2, gated on having real metrics to weight with.
+3. **Attempt the top candidate; on failure, advance** — reusing 11.4's existing, tested
+   asymmetry unchanged (402/404/429/5xx advance, timeouts and malformed replies do not).
+   **On invalid structured output** (19.6.1), the repair call happens before falling back to the
+   next model, not instead of it — a wrong-language explanation gets a cheap repair attempt first;
+   only a genuinely broken model (20.6's reasoning-leak case) should cause the router to advance.
+4. **Never break 11.9's guarantee:** all of the above happens before the stream commits to a 200,
+   exactly as today — this is the actual mechanism behind "without interrupting the learner's
+   experience," and it must survive having more candidates to try, not just two.
+
+### 21.4 Phased rollout — deterministic first, scored once there's evidence, learned only if justified
+
+Directly applying §18.6: build the cheapest version that satisfies the requirement, then earn the
+next layer of sophistication with real data, exactly the same shape as §19.4's voice rollout and
+§20.8's learner-model rollout.
+
+**Phase 1 — buildable now, against OpenRouter alone, no second provider required (roadmap #34,
+#35):**
+- Convert `FREE_TUTOR_MODELS`/env-chain into the Layer-2 registry above. Ordering stays a fixed
+  priority field (equivalent to today's array order) — **not yet score-computed.**
+- Make §20.5's tier-eligibility a registry field and a hard filter, replacing the "must be added
+  before/alongside roadmap #1" ad-hoc requirement flagged in §19.3/§20.5 with a real mechanism.
+- **Circuit breaker, built on infrastructure this project already has**, not a new dependency:
+  the existing MongoDB fixed-window counter (`src/lib/rateLimit.ts`, 3.21) already does exactly
+  the counting a circuit breaker needs (atomic `findOneAndUpdate`+`$inc`, TTL cleanup, fails
+  open) — track failures-per-model-per-window the same way, open the circuit (mark
+  `status: 'circuit-open'` for a cooldown) when a model's failure rate crosses a threshold within
+  a window. This is 18.6 in miniature: the proven mechanism (rate limiter) reused for the proven
+  pattern (circuit breaker), not a new library.
+- **Metrics logging**, reusing 3.34's existing structured-log pattern rather than a new
+  observability vendor (11.27's reasoning applies identically here): one `lm-model-metric` line
+  per attempt — `modelId, gateway, tier, latencyMs, ttftMs, outcome
+  (success|advanced|repaired|failed), costUsd (from usage.cost when the gateway reports it),
+  explanationLanguageCorrect (once 19.6.1 exists)`. This is what makes Phase 2 possible later —
+  without it, "improve over time using real production evidence" has no evidence to use.
+
+**Phase 2 — once Phase 1 has produced real metrics, and/or a second gateway is wired per 19.6.4's
+existing gate (roadmap #36):**
+- Add the second `TutorGatewayAdapter` (Vercel AI Gateway is the natural candidate, per 19.6.4 —
+  confirm it's actually provisioned on this Vercel team first).
+- Turn the fixed priority number in Layer 3, step 2 into a real weighted score computed from
+  Phase 1's collected metrics — this is the point at which routing genuinely becomes
+  evidence-driven rather than a snapshot ordering from a one-time benchmark.
+
+**Phase 3 — explicitly optional, evidence-gated, not a commitment:** a learned/adaptive policy
+(e.g. a simple multi-armed-bandit weighting of candidates by a quality-minus-cost reward) is the
+documented ceiling of this architecture, listed here only so the destination is clear — **do not
+build it ahead of evidence that Phase 2's weighted-but-deterministic scoring is insufficient.**
+This is the direct, concrete application of §18.6's "innovation only when it creates measurable
+value" test to this specific subsystem.
+
+### 21.5 Never revert / guardrails
+
+- **Tier eligibility is a hard filter, never a weighted signal.** If a free user's request could
+  be routed to a paid model because it scored well on quality/latency, §20.5's entire
+  cost-ceiling guarantee is void — the whole point of a hard filter ahead of scoring is that no
+  combination of other signals can override it.
+- **Do not build Phase 2's scored routing before Phase 1 has produced real metrics to score
+  with.** A "smart" router computing a weighted score from zero real data is not smarter than
+  today's static chain — it's the static chain with extra steps and a false sense of rigor.
+- **Do not re-implement per-gateway retry/circuit-breaking that the gateway already does well**
+  (§21.2) — LingoMatch's own layer decides *which* model/gateway, not how many times to retry a
+  single HTTP call.
+- **Do not add a second gateway before there's a concrete reason** — 19.6.4's original restraint
+  is preserved, only refined (§19.6.4's own amendment, above) to note the registry/metrics/circuit
+  breaker groundwork is real, non-hollow work even with one gateway.
+- **Preserve 11.9's commit-after-first-chunk guarantee** as the chain grows — this is the actual
+  mechanism behind "without interrupting the learner's experience," not a side effect to
+  re-derive later.
+- **Provider and model names still must not leak to the user** (18.1, unchanged) — the registry
+  is an internal implementation detail exactly like `resolveModelChain()` is today.
+
+**Roadmap additions (append, not renumber, per this document's existing convention):**
+
+| # | Task | Priority | Difficulty | Impact | Dependencies |
+|---|---|---|---|---|---|
+| 34 | **Build the model registry + tier-eligibility hard filter + circuit breaker** (§21.4 Phase 1) | High | Moderate | Formalises §20.5's cost-ceiling guarantee as a real mechanism instead of an env-var convention; makes adding/removing/reordering models a data change, not a code change | Reuses `src/lib/rateLimit.ts`'s existing counting infra — no new dependency |
+| 35 | **Add production routing metrics** (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | The prerequisite for any evidence-driven (rather than snapshot-benchmarked) routing decision — nothing in Phase 2 is possible without this | Reuses 3.34's existing structured-log pattern |
+| 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing using #35's real metrics** (§21.4 Phase 2) | Medium | High | The literal fulfilment of "intelligently choose... based on real production evidence" | #34, #35, and a confirmed concrete reason per 19.6.4's unchanged restraint |
