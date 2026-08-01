@@ -1,5 +1,6 @@
 import 'server-only'
 import { resolveModelChain } from './models'
+import { resolveChainForTier, type ModelTier } from './model-registry'
 import { buildSystemPrompt } from './prompts'
 import type { PracticeMode, SupportedLanguage, TutorLevel } from '@/config/ai-practice'
 
@@ -16,6 +17,15 @@ export type TutorRequest = {
   mode: PracticeMode
   history: HistoryMessage[]
   userMessage?: string
+  /**
+   * Caller's subscription tier (§21.3/§20.5). When omitted, behaviour is
+   * unchanged from before this field existed — the full env-configured
+   * chain is used, exactly as every existing caller and test already
+   * assumes. Every real request path must pass this explicitly; the
+   * permissive default exists only for backward compatibility, not as a
+   * safe-by-default guarantee — see PROJECT_PASSPORT.md §21.4/roadmap #34.
+   */
+  tier?: ModelTier
 }
 
 export type TutorResponse = {
@@ -98,8 +108,8 @@ function requireApiKey(): string {
   return apiKey
 }
 
-function requireChain(): string[] {
-  const chain = resolveModelChain('defaultTutor')
+function requireChain(tier?: ModelTier): string[] {
+  const chain = tier ? resolveChainForTier(tier) : resolveModelChain('defaultTutor')
   if (chain.length === 0) {
     throw new OpenRouterError('No AI model is configured', 'MISSING_CONFIG')
   }
@@ -133,7 +143,7 @@ function buildMessages(req: TutorRequest): { role: string; content: string }[] {
  */
 async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>> {
   const apiKey = requireApiKey()
-  const chain = requireChain()
+  const chain = requireChain(req.tier)
   const messages = buildMessages(req)
 
   let lastError: OpenRouterError | null = null
@@ -249,7 +259,7 @@ export async function* streamTutor(req: TutorRequest): AsyncGenerator<string> {
 
 export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
   const apiKey = requireApiKey()
-  const chain = requireChain()
+  const chain = requireChain(req.tier)
   const messages = buildMessages(req)
 
   let lastError: OpenRouterError | null = null

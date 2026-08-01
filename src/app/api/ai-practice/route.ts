@@ -3,7 +3,7 @@ import { auth } from '@/auth'
 import { aiPracticeRequestSchema } from '@/lib/validations/ai-practice'
 import { callTutor, OpenRouterError } from '@/lib/ai/openrouter'
 import { streamStructuredTutorReply } from '@/lib/ai/structured-tutor-reply'
-import { resolveModelChain } from '@/lib/ai/models'
+import { resolveChainForTier, type ModelTier } from '@/lib/ai/model-registry'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { buildTutorContext } from '@/lib/ai/tutor-context'
 import { checkTutorBudget } from '@/lib/ai/tutor-budget'
@@ -16,6 +16,18 @@ import {
   MAX_SESSION_MESSAGES,
   startTutorSession,
 } from '@/lib/ai/tutor-session.server'
+
+/**
+ * Maps the account's billing plan to a routing tier (§21.3/§20.5). Defaults
+ * to the most restrictive tier — 'free' — for anything other than an exact
+ * 'premium' match, including a missing/unrecognised value. This is the
+ * boundary where the hard filter's safety property actually lives: the
+ * lower-level chain resolver stays permissive-by-default for testability,
+ * but this, the one real production call site, must never guess upward.
+ */
+function resolveTier(plan: unknown): ModelTier {
+  return plan === 'premium' ? 'paid' : 'free'
+}
 
 const FORBIDDEN_CLIENT_FIELDS = [
   'model',
@@ -47,6 +59,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   const userId = session.user.id
+  const tier = resolveTier((session.user as { plan?: string }).plan)
 
   let body: unknown
   try {
@@ -136,10 +149,14 @@ export async function POST(req: NextRequest) {
         mode: mode as Parameters<typeof callTutor>[0]['mode'],
         history,
         userMessage: parsed.action === 'message' ? parsed.message : undefined,
+        tier,
       },
       {
         explanationLanguageName: tutorContext.explanationLanguage,
-        repairModelId: resolveModelChain('defaultTutor')[0],
+        // The repair call is a single direct attempt (structured-tutor-reply.ts),
+        // not the full chain-walking path — it must still respect the same
+        // tier hard filter, or a free caller's repair could reach a paid model.
+        repairModelId: resolveChainForTier(tier)[0],
       },
     )
 

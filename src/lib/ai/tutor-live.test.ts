@@ -112,6 +112,39 @@ describe.skipIf(!LIVE)('tutor behaviour against the real provider', () => {
     }
   }, 90_000)
 
+  // Roadmap #34 (§21.3/§20.5): confirms the tier hard filter live, not just
+  // against mocks — a 'free'-tier request must never even attempt the
+  // credit-less paid model, unlike an unscoped request which tries it first
+  // and falls through on a real 402.
+  it('never attempts the configured paid model for tier: "free"', async () => {
+    const originalConsoleError = console.error
+    const calls: string[] = []
+    console.error = ((...args: unknown[]) => {
+      calls.push(String(args[0]))
+      return originalConsoleError(...(args as []))
+    }) as typeof console.error
+
+    try {
+      const { reply } = await callTutor({
+        targetLanguage: 'Spanish',
+        nativeLanguages: ['English'],
+        explanationLanguage: 'English',
+        level: 'B1',
+        mode: 'Free Conversation',
+        history: [],
+        userMessage: 'Hola',
+        tier: 'free',
+      })
+      expect(reply.length).toBeGreaterThan(0)
+    } finally {
+      console.error = originalConsoleError
+    }
+
+    const attemptedPaidModel = calls.some((line) => line.includes('gemini-3-flash-preview'))
+    console.log(`attempted the paid model while tier: "free": ${attemptedPaidModel}`)
+    expect(attemptedPaidModel).toBe(false)
+  }, 30_000)
+
   it('mostly avoids complimenting the learner’s message in the opening line', async () => {
     const replies = [
       ...(await sample('can you give me plan for study new english beter?')),

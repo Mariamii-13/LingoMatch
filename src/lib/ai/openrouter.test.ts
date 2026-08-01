@@ -367,3 +367,43 @@ describe('streamTutor', () => {
     })
   })
 })
+
+// Roadmap #34 (§21.3/§20.5): a 'free'-tier request must never reach an
+// env-configured (paid) model, regardless of it being tried first in the
+// unscoped chain — this is what makes the free-tier cost ceiling (§20.5) a
+// real mechanism rather than an env-var convention.
+describe('TutorRequest.tier hard filter', () => {
+  it('skips the paid model entirely for tier: "free", going straight to the free chain', async () => {
+    const spy = mockFetch(MOCK_VALID_RESPONSE)
+    const result = await callTutor({ ...BASE_REQ, tier: 'free' })
+    expect(result.reply).toBe('Hello! How can I help you practise today?')
+    const body = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.model).toBe(FREE_TUTOR_MODELS[0])
+  })
+
+  it('still tries the configured paid model first for tier: "paid"', async () => {
+    const spy = mockFetch(MOCK_VALID_RESPONSE)
+    await callTutor({ ...BASE_REQ, tier: 'paid' })
+    const body = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.model).toBe('google/gemini-2.5-flash')
+  })
+
+  it('preserves today\'s exact behaviour (full env chain) when tier is omitted, for backward compatibility', async () => {
+    const spy = mockFetch(MOCK_VALID_RESPONSE)
+    await callTutor(BASE_REQ)
+    const body = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.model).toBe('google/gemini-2.5-flash')
+  })
+
+  it('a free-tier caller never falls through to the paid model even if every free model fails', async () => {
+    const spy = mockFetchAlways({ error: { code: 500 } }, 500)
+    await expect(callTutor({ ...BASE_REQ, tier: 'free' })).rejects.toMatchObject({
+      code: 'PROVIDER_ERROR',
+    })
+    const modelsCalled = spy.mock.calls.map(
+      (call) => JSON.parse((call[1] as RequestInit).body as string).model,
+    )
+    expect(modelsCalled).not.toContain('google/gemini-2.5-flash')
+    expect(modelsCalled).toEqual([...FREE_TUTOR_MODELS])
+  })
+})
