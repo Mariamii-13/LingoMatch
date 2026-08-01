@@ -7,6 +7,7 @@ import { resolveChainForTier, type ModelTier } from '@/lib/ai/model-registry'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { buildTutorContext } from '@/lib/ai/tutor-context'
 import { checkTutorBudget } from '@/lib/ai/tutor-budget'
+import { recordCorrection } from '@/lib/skill-review.server'
 import { internalErrorResponse, reportServerError } from '@/lib/observability/report.server'
 import {
   appendAssistantMessage,
@@ -157,6 +158,20 @@ export async function POST(req: NextRequest) {
         // not the full chain-walking path — it must still respect the same
         // tier hard filter, or a free caller's repair could reach a paid model.
         repairModelId: resolveChainForTier(tier)[0],
+        // Roadmap #31: every real correction is a labelled data point for the
+        // learner's own spaced-repetition schedule. Fire-and-forget —
+        // recordCorrection fails soft internally, so a missed write here must
+        // never slow down or break the tutor's actual reply.
+        onParsed: (reply) => {
+          if (reply.correction && reply.skill_tag) {
+            void recordCorrection({
+              userId,
+              targetLanguageCode,
+              skillTag: reply.skill_tag,
+              exampleCorrection: reply.correction,
+            })
+          }
+        },
       },
     )
 

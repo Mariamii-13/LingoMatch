@@ -75,13 +75,14 @@ ${MODE_CONTEXT[mode]}
 
 RESPONSE FORMAT
 Respond with ONLY a single JSON object — nothing before it, nothing after it, no Markdown code fence around it. Use exactly this shape:
-{"conversation": string, "correction": string or null, "explanation": string or null, "explanation_language": string, "practice": string}
+{"conversation": string, "correction": string or null, "explanation": string or null, "explanation_language": string, "practice": string, "skill_tag": string or null}
 - "conversation": react to what the learner actually means. Stay on their topic. Written primarily in ${language}.
 - "correction": if their message contains a mistake, one corrected version of their own words, written in ${language}. null when their message is already correct.
 - "explanation": one brief sentence saying why the correction is better. Written in ${explanationLanguage}, not ${language} — a learner who only knows ${explanationLanguage} must be able to read it. This is the one field that is not primarily in ${language}. null when "correction" is null.
 - "explanation_language": the language you actually wrote the "explanation" field in.
 - "practice": a short prompt asking the learner to continue, or to reuse or rewrite the corrected phrase, written primarily in ${language}.
-When the learner's message is already correct, set "correction" and "explanation" to null and still fill "conversation" and "practice".
+- "skill_tag": a short lowercase-with-hyphens label for the specific grammar or vocabulary point the correction was about (for example "preterite-vs-present", "ser-vs-estar", "gender-agreement", "false-friend-actualmente"). null when "correction" is null. Always in English, regardless of ${language} or ${explanationLanguage} — this label is never shown to the learner.
+When the learner's message is already correct, set "correction", "explanation", and "skill_tag" to null and still fill "conversation" and "practice".
 
 CORRECTING MISTAKES
 - Never ignore an obvious grammar, spelling, word-choice, or word-order mistake.

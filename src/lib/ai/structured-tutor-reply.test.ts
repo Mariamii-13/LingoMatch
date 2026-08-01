@@ -178,6 +178,7 @@ describe('formatStructuredTail / formatStructuredReply', () => {
       explanation: null,
       explanation_language: null,
       practice: null,
+      skill_tag: null,
     }
     expect(formatStructuredReply(noTail)).toBe('Hola')
 
@@ -441,6 +442,39 @@ describe('streamStructuredTutorReply', () => {
       }),
     )
     expect(deltas.join('')).toContain('Aquí necesitas el pretérito')
+  })
+
+  it('invokes onParsed with the final structured reply, including skill_tag, before yielding the tail', async () => {
+    const json = JSON.stringify({
+      conversation: 'Hola',
+      correction: 'Fui al mercado.',
+      explanation: 'Use the past tense here.',
+      explanation_language: 'English',
+      practice: 'Try it.',
+      skill_tag: 'preterite-vs-present',
+    })
+    vi.mocked(streamTutor).mockReturnValue(gen([json]))
+    const onParsed = vi.fn()
+
+    await collect(
+      streamStructuredTutorReply(BASE_REQ, { explanationLanguageName: 'English', onParsed }),
+    )
+
+    expect(onParsed).toHaveBeenCalledTimes(1)
+    expect(onParsed).toHaveBeenCalledWith(
+      expect.objectContaining({ correction: 'Fui al mercado.', skill_tag: 'preterite-vs-present' }),
+    )
+  })
+
+  it('does not invoke onParsed in pass-through mode (nothing structured to report)', async () => {
+    vi.mocked(streamTutor).mockReturnValue(gen(['Hola', ', ', '¿qué tal?']))
+    const onParsed = vi.fn()
+
+    await collect(
+      streamStructuredTutorReply(BASE_REQ, { explanationLanguageName: 'English', onParsed }),
+    )
+
+    expect(onParsed).not.toHaveBeenCalled()
   })
 
   it('does not call the repair endpoint when the explanation language already matches', async () => {

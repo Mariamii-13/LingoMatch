@@ -9,6 +9,7 @@ import {
   Inbox,
   LayoutDashboard,
   Menu,
+  RotateCcw,
   Settings,
   Users,
 } from "lucide-react"
@@ -36,15 +37,31 @@ const moreItems = [
   // but it is a lower-frequency destination than practising or messaging. The
   // badge below surfaces pending requests without spending a primary slot.
   { label: "Friends", href: "/friends", icon: Users },
+  // Same reasoning as Friends: roadmap #31's review deck needs to be
+  // reachable, but it is not a primary-frequency destination.
+  { label: "Review", href: "/review", icon: RotateCcw },
   { label: "Progress", href: "/progress", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
 
-export function MobileNav({ pendingFriendRequests = 0 }: { pendingFriendRequests?: number }) {
+function countFor(href: string, pendingFriendRequests: number, dueReviews: number): number {
+  if (href === "/friends") return pendingFriendRequests
+  if (href === "/review") return dueReviews
+  return 0
+}
+
+export function MobileNav({
+  pendingFriendRequests = 0,
+  dueReviews = 0,
+}: {
+  pendingFriendRequests?: number
+  dueReviews?: number
+}) {
   const pathname = usePathname()
   const moreActive = moreItems.some(
     (item) => pathname === item.href || pathname.startsWith(item.href + "/")
   )
+  const moreBadgeTotal = pendingFriendRequests + dueReviews
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t bg-background/90 backdrop-blur-md lg:hidden">
@@ -76,11 +93,11 @@ export function MobileNav({ pendingFriendRequests = 0 }: { pendingFriendRequests
         >
           <span className="relative">
             <Menu className="size-5" />
-            {pendingFriendRequests > 0 && (
-              // Without this, a pending request would be invisible on mobile
-              // until the user happened to open the More menu.
+            {moreBadgeTotal > 0 && (
+              // Without this, a pending request or due review would be
+              // invisible on mobile until the user happened to open the menu.
               <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold leading-none text-white">
-                {pendingFriendRequests > 9 ? "9+" : pendingFriendRequests}
+                {moreBadgeTotal > 9 ? "9+" : moreBadgeTotal}
               </span>
             )}
           </span>
@@ -91,7 +108,7 @@ export function MobileNav({ pendingFriendRequests = 0 }: { pendingFriendRequests
           <DropdownMenuSeparator />
           {moreItems.map((item) => {
             const Icon = item.icon
-            const count = item.href === "/friends" ? pendingFriendRequests : 0
+            const count = countFor(item.href, pendingFriendRequests, dueReviews)
             return (
               <DropdownMenuItem key={item.href} render={<Link href={item.href} />}>
                 <Icon className="size-4" /> {item.label}

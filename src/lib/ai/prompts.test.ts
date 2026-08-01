@@ -87,13 +87,18 @@ describe('buildSystemPrompt — correction behaviour', () => {
     expect(B1).toMatch(/RESPONSE FORMAT/)
     expect(B1).toMatch(/ONLY a single JSON object/i)
     expect(B1).toContain(
-      '{"conversation": string, "correction": string or null, "explanation": string or null, "explanation_language": string, "practice": string}',
+      '{"conversation": string, "correction": string or null, "explanation": string or null, "explanation_language": string, "practice": string, "skill_tag": string or null}',
     )
     expect(B1).toMatch(/"conversation":\s*react to what the learner actually means/i)
     expect(B1).toMatch(/"correction":.*one corrected version of their own words/i)
     expect(B1).toMatch(/"explanation":.*one brief sentence/i)
     expect(B1).toMatch(/"practice":.*short prompt asking the learner to continue/i)
-    expect(B1).toMatch(/set "correction" and "explanation" to null/i)
+    expect(B1).toMatch(/set "correction", "explanation", and "skill_tag" to null/i)
+  })
+
+  it('asks for a machine-readable skill_tag on every correction, for roadmap #31\'s spaced-repetition deck', () => {
+    expect(B1).toMatch(/"skill_tag":.*grammar or vocabulary point/i)
+    expect(B1).toMatch(/never shown to the learner/i)
   })
 
   it('asks the learner to reuse the corrected phrase', () => {

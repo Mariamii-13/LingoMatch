@@ -9,6 +9,7 @@ import {
   Inbox,
   LayoutDashboard,
   type LucideIcon,
+  RotateCcw,
   Settings,
   Shield,
   Users,
@@ -30,6 +31,10 @@ const productNav: NavItem[] = [
   // the navigation the only page that can accept one was unreachable, so
   // recipients could never respond.
   { label: "Friends", href: "/friends", icon: Users },
+  // Same reasoning as Friends above: built without this, roadmap #31's review
+  // deck would exist with no reachable entry point — a broken loop (13's
+  // "audit features as complete round trips, not endpoints" lesson).
+  { label: "Review", href: "/review", icon: RotateCcw },
   { label: "Progress", href: "/progress", icon: BarChart3 },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
@@ -74,12 +79,20 @@ function NavLink({
   )
 }
 
+function countFor(href: string, pendingFriendRequests: number, dueReviews: number): number {
+  if (href === "/friends") return pendingFriendRequests
+  if (href === "/review") return dueReviews
+  return 0
+}
+
 export function Sidebar({
   identity,
   pendingFriendRequests = 0,
+  dueReviews = 0,
 }: {
   identity: NavIdentity
   pendingFriendRequests?: number
+  dueReviews?: number
 }) {
   const pathname = usePathname()
   const { name, username, image, role } = identity
@@ -97,7 +110,7 @@ export function Sidebar({
             key={item.href}
             item={item}
             pathname={pathname}
-            count={item.href === "/friends" ? pendingFriendRequests : 0}
+            count={countFor(item.href, pendingFriendRequests, dueReviews)}
           />
         ))}
         {role === "admin" && (

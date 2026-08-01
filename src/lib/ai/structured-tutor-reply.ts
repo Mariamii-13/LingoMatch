@@ -21,6 +21,16 @@ export type StructuredTutorReply = {
   explanation: string | null
   explanation_language: string | null
   practice: string | null
+  /**
+   * A short, free-form identifier for the grammar/vocabulary point the
+   * correction was about (e.g. "preterite-vs-present", "ser-vs-estar"), or
+   * null when there is no correction. Added for roadmap #31 (§20.2/§20.8):
+   * every real correction the tutor already makes is a labelled data point
+   * for a learner's own spaced-repetition schedule, once tagged — no new AI
+   * capability, reusing this same structured-output mechanism (§19.6.1).
+   * Metadata only; never shown to the learner as part of the reply text.
+   */
+  skill_tag: string | null
 }
 
 /**
@@ -141,6 +151,7 @@ export function parseStructuredReply(raw: string): StructuredTutorReply | null {
     explanation: str(obj.explanation),
     explanation_language: str(obj.explanation_language),
     practice: str(obj.practice),
+    skill_tag: str(obj.skill_tag),
   }
 }
 
@@ -248,6 +259,16 @@ export type StructuredStreamOptions = {
   explanationLanguageName: string
   /** Model to use for the repair call. Defaults to the chain's first entry. */
   repairModelId?: string
+  /**
+   * Invoked once with the final (post-repair) structured reply, right before
+   * the tail is yielded — never invoked in pass-through/malformed-JSON
+   * fallback mode, since there's nothing structured to report. Roadmap #31's
+   * only hook into this module: recording a correction is the caller's
+   * responsibility (kept out of this file so an AI-reply module doesn't grow
+   * a database dependency), this just guarantees the caller sees the parsed
+   * data at the moment it's known to be final.
+   */
+  onParsed?: (parsed: StructuredTutorReply) => void
 }
 
 /**
@@ -321,6 +342,9 @@ export async function* streamStructuredTutorReply(
     if (repaired) explanation = repaired
   }
 
-  const tail = formatStructuredTail({ ...parsed, explanation })
+  const final: StructuredTutorReply = { ...parsed, explanation }
+  opts.onParsed?.(final)
+
+  const tail = formatStructuredTail(final)
   if (tail) yield ` ${tail}`
 }
