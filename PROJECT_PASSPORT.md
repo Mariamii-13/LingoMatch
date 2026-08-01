@@ -201,7 +201,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `50889a2` — "feat: spaced-repetition review deck from real tutor corrections (roadmap #31)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41) |
+| **HEAD** | `74e25ac` — "feat: the tutor uses its own weak-area data (20.8 item 5)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41), `74e25ac` (§20.8 item 5, §3.42) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -1850,6 +1850,56 @@ hypothesis, per §20.9's own carried-forward uncertainty, not yet validated agai
 **Production readiness.** Production Ready — every layer (population, scheduling, API, UI,
 navigation) verified live against real infrastructure, not just unit tests.
 
+**Update, 2026-08-01, same day: §20.8 item 5 (tutor-context weak-area injection) is now also
+done — see 3.42.** This paragraph's other gaps (Phase 2, no dashboard card, taxonomy-as-hypothesis)
+still stand.
+
+### 3.42 The tutor uses its own weak-area data (§20.8 item 5)
+
+**Purpose.** Closes the last open piece of §20.8's Phase 1: not just recording and scheduling
+corrections (3.41), but the tutor actually *using* that history — the concrete difference between
+a review deck bolted onto a chatbot and "a real personal teacher [who] naturally adapt[s] to each
+learner, remember[s] strengths and weaknesses" (18.2, deepened).
+
+**Implementation.**
+1. `getWeakSkillsSummary(userId, targetLanguageCode)` (`skill-review.server.ts`) — a narrow,
+   honest definition of "struggling": `reviewCount >= 1` (genuinely reviewed and reset/tested at
+   least once, not just corrected in passing) and still on a short interval (≤3 days). A brand-new
+   correction with no review history is not reported — nothing is ever fabricated. Fails soft to
+   `[]` (same reasoning as the friend-badge count and `countDueReviews`): this sits on the critical
+   path of starting a session, so a DB hiccup must degrade to "no context line," never block the
+   tutor from responding at all.
+2. `TutorRequest` (`openrouter.ts`) gained one more optional field, `learnerWeakAreas`.
+   `buildSystemPrompt` (`prompts.ts`) adds a short, clearly-scoped paragraph only when the array is
+   non-empty: the real skill labels, plus an explicit instruction to treat them as something to
+   *reinforce naturally if it fits* — not a quiz, not a drill, and not to be mentioned to the
+   learner as tracked data. This is the literal implementation of 20.8's own worked example
+   ("the model can naturally steer conversation toward it... without turning that into a graded
+   quiz").
+3. **Fetched only at session start (`action: 'start'`), never per-message.** Re-fetching and
+   re-injecting on every turn would only add prompt tokens for no benefit — §19.2's own research
+   finding is that prompt length and rule count are themselves part of what drives instruction
+   drift, so this context is deliberately not repeated turn-to-turn.
+4. Shares a new small pure helper, `src/lib/skill-tag-format.ts` (`formatSkillTag`), with the
+   review-deck UI (3.41) — the exact same plain-language rendering of a raw skill tag is used
+   whether it's shown to the learner in the review deck or described to the model in its own
+   prompt, rather than two independent, potentially-diverging implementations.
+
+**Verified live, 2026-08-01, against the real database and a real tutor session**, not mocks: a
+temporary debug line (removed before commit) confirmed the route computed
+`learnerWeakAreas=["Preterite tense"]` for `qaphase001` on starting a fresh Spanish session —
+exactly the record 3.41's own live verification created and then advanced via a real review
+outcome. The underlying query was independently re-verified by running the identical filter
+directly against the real MongoDB collection outside the app and getting the same result.
+
+**Testing.** 3 new tests in `prompts.test.ts` (no line when omitted, no line when the array is
+empty — never fabricates a weakness, and the real wording when populated), 3 new tests in
+`skill-review.server.test.ts` for `getWeakSkillsSummary` (correct query shape, empty-when-nothing-
+qualifies, fails soft on a DB error), and 2 for the new shared `skill-tag-format.test.ts`.
+
+**Production readiness.** Production Ready — verified live end-to-end, fails soft on the one path
+that could otherwise block a session from starting.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -2902,7 +2952,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 28 | ~~Machine-check the tutor's explanation-language rule~~ (structured output + repair call, §19.6.1) | — | — | **Done**, 2026-08-01 — see 3.38. Structured JSON output, independent `franc`-based language-ID validation, and a one-shot repair call now sit between the model and the learner. Detection verified live and correct (a false-negative bug found live was fixed and pinned with a regression test). **Successful repair is unverified** — the repair call's own model has no credits, same blocker as roadmap #1 | — |
 | 29 | ~~Build the AI-quality eval harness~~ (§19.6.2) — **v1 done, 2026-08-01, see 3.40**: one seeded mistake per Tier-1 pair (not yet the full 20-turn/multi-error-type version) | High | Moderate | Already paid for itself: found a real, confirmed weakness on the Portuguese↔Spanish pair (2/2 samples) — §19.5's own predicted "extreme case" risk, now evidenced rather than theoretical | #28 (done, 3.38) made the key metric machine-gradable |
 | 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
-| 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 done, 2026-08-01, see 3.41** | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
+| 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 fully done, 2026-08-01, see 3.41 and 3.42** (including tutor-context weak-area injection) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
 | 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
 | 33 | **Invite-a-partner referral flow** (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | Solves acquisition and liquidity simultaneously; standard two-sided-marketplace playbook | None |
 | 34 | ~~Model registry + tier-eligibility hard filter~~ + circuit breaker (§21.4 Phase 1) | High | Moderate | **Partially done, 2026-08-01** — see 3.39. Registry + hard filter shipped and verified live (a free-tier request now skips the credit-less paid model entirely, both faster and cost-safe). **Circuit breaker not built** — remains open | Reuses `rateLimit.ts`'s existing counting infra (for the still-open circuit-breaker piece) |
@@ -3044,9 +3094,13 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**399 tests passing, 10 skipped, across 40 files** (as of the roadmap #31 block, 2026-08-01).
-Baseline before this work: 103. Since the last commit: 16 new tests for the spaced-repetition
-review deck (roadmap #31, 3.41 — 4 for the Leitner progression, 9 for
+**407 tests passing, 10 skipped, across 41 files** (as of the §20.8-item-5 block, 2026-08-01).
+Baseline before this work: 103. Since the last commit: 8 new tests for the tutor-context
+weak-area injection (§20.8 item 5, 3.42 — 3 in `prompts.test.ts`, 3 for `getWeakSkillsSummary` in
+`skill-review.server.test.ts`, 2 in a new `skill-tag-format.test.ts` for the small shared
+formatter extracted from `ReviewClient.tsx`). No route-level test — verified live against a real
+DB and a real tutor session at the start of a real session instead. Before that: 16 new tests for
+the spaced-repetition review deck (roadmap #31, 3.41 — 4 for the Leitner progression, 9 for
 `skill-review.server.ts`'s mocked-Mongoose functions, plus updated `structured-tutor-reply.test.ts`
 and `prompts.test.ts` coverage for the new `skill_tag` field and `onParsed` hook). No route-level
 test for `/api/review` — verified live against a running server and the real database instead,
@@ -3080,7 +3134,8 @@ src/lib/ai/tutor-context.test.ts                      profile → tutor context
 src/lib/ai/tutor-live.test.ts                         live provider test (skipped by default), incl. live tier-filter check
 src/lib/ai/model-registry.test.ts                     registry construction, tier eligibility, ordering, dedup
 src/lib/ai/eval-harness.test.ts                       eval-harness grading logic (pure, no API calls)
-src/lib/skill-review.server.test.ts                   Leitner progression (pure) + mocked-Mongoose review functions
+src/lib/skill-review.server.test.ts                   Leitner progression (pure) + mocked-Mongoose review functions, incl. getWeakSkillsSummary
+src/lib/skill-tag-format.test.ts                      shared plain-language skill-tag formatter (review deck + tutor context)
 src/lib/ai/eval-harness.live.test.ts                  live provider test (skipped by default) — the harness itself, roadmap #29
 src/lib/ai/structured-tutor-reply.test.ts             JSON extraction, parsing, language detection, repair, streaming
 src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression
@@ -4909,15 +4964,13 @@ phased rollout in this document:**
    HLR, once Phase 1 has produced enough real attempts to make fitting meaningful. Upgrade only
    if Phase 1's fixed intervals demonstrably under- or over-schedule reviews against real
    retention data (#13) — do not build this speculatively.
-5. **Not yet done.** Where this makes the tutor feel like "a real teacher, not a chatbot": at the
-   start of a session, inject a short, factual summary of the learner's weakest 2–3 open skill tags
-   into the tutor's context (e.g. "this learner has struggled with preterite-vs-imperfect in 4 of
-   their last 6 attempts") so the model can naturally steer conversation toward it, the same way a
-   human tutor remembers a student's recurring mistake — without turning that into a graded quiz or
-   a lesson-tree screen. This is presentation-only; the underlying mechanism stays conversation
-   (18.2, 20.2), never a separate curriculum UI. **3.41 shipped the review-deck consumer of this
-   data; this session-context consumer is the next increment**, and is now straightforward — the
-   `SkillReview` data it needs already exists and is populated live.
+5. **✅ Done, 2026-08-01 — see 3.42.** Where this makes the tutor feel like "a real teacher, not a
+   chatbot": at the start of a session, inject a short, factual summary of the learner's weakest
+   open skill tags into the tutor's context so the model can naturally steer conversation toward
+   it, the same way a human tutor remembers a student's recurring mistake — without turning that
+   into a graded quiz or a lesson-tree screen. This is presentation-only; the underlying mechanism
+   stays conversation (18.2, 20.2), never a separate curriculum UI. Verified live: the route
+   correctly resolved a real learner's real weak area at session start.
 
 **Never build:** a neural/deep knowledge-tracing model (RNN- or transformer-based mastery
 estimation) — genuinely more effective at large scale per the published research, but there is no
@@ -4927,9 +4980,9 @@ justifies it.
 
 **Dependencies:** Phase 1 depended on roadmap #28 (structured tutor output, done) and directly
 powers roadmap #31 (SRS review deck, §20.2, done — see 3.41) — these were not three separate
-initiatives, they were one pipeline. Phase 2 depends on #13 (analytics) producing real
-review-outcome data to fit against. The session-context injection (item 5 above) is unblocked and
-is the next concrete increment.
+initiatives, they were one pipeline. **Phase 1 is now fully done, including item 5 (see 3.42).**
+Phase 2 (a fitted half-life curve) remains open, gated on #13 (analytics) producing real
+review-outcome data to fit against.
 
 ### 20.9 Honest uncertainty carried forward
 
