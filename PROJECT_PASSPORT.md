@@ -201,7 +201,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `30c22a5` — "feat: machine-check the tutor's explanation-language rule (roadmap #28)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38) |
+| **HEAD** | `0d3a141` — "feat: model registry and a real tier-eligibility hard filter (roadmap #34)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -1622,6 +1622,68 @@ skipped by default), is what actually found and confirmed the fix above.
 verified live. **Mostly Ready** for the repair path specifically — wired correctly and verified
 triggering live, but a successful end-to-end repair is unverified pending roadmap #1.
 
+### 3.39 Model registry and the tier-eligibility hard filter (roadmap #34, partial)
+
+**Purpose.** Implements the first, scoped piece of §21.4 Phase 1 — the part of the
+provider-independent routing architecture (18.1 deepened, section 21) that makes §20.5's "the free
+tier must never reach the paid model chain" guarantee a real mechanism rather than an env-var
+convention and a hope. **Deliberately scoped down from the full roadmap #34 item**: the circuit
+breaker §21.4 also describes is not part of this change — see "What remains" below.
+
+**The gap this closes.** Before this block, every caller — free or paid, and today there are no
+paid callers at all — shared one env-configured chain. A free-tier request would try
+`AI_MODEL_DEFAULT` first, get a real 402 (the account has no credits), and only then fall through
+to a free model: a wasted round trip on every single free-tier request, and, once billing
+eventually exists, the exact unbounded-cost risk §20.5 was written to prevent if nobody remembered
+to gate it by hand.
+
+**Implementation.** New module `src/lib/ai/model-registry.ts`:
+- `buildModelRegistry()` — a small, structured list, one entry per model: `modelId`, `gateway`
+  (`'openrouter'`, the only one today), `tierEligibility` (`'free' | 'trial' | 'paid'`, whichever
+  subset may reach it), `priority` (try order). Env-configured models (`AI_MODEL_DEFAULT`,
+  `AI_MODEL_FALLBACKS`) are eligible only for `'trial'`/`'paid'` callers; `FREE_TUTOR_MODELS` are
+  eligible for everyone, unchanged from today.
+- `resolveChainForTier(tier)` — filters the registry to a tier's eligible models, in priority
+  order. This is the actual hard filter: it runs *before* anything else, exactly as §21.3
+  specifies, so a future scored router (§21.4 Phase 2) can never weight a free caller into a paid
+  model no matter how well it might score.
+- `TutorRequest` (`openrouter.ts`) gained one new optional field, `tier`. **`openrouter.ts`'s own
+  logic is otherwise untouched** — `requireChain()` now accepts an optional tier and calls
+  `resolveChainForTier()` only when one is given; omitted, behaviour is byte-for-byte what it was
+  before this field existed, which is why all 32 pre-existing tests needed zero changes. The
+  safety property does not live in this low-level default (which stays permissive, for backward
+  compatibility) — it lives at the one real call site, the API route, which computes the tier from
+  the account's plan and always passes it explicitly.
+- `resolveTier()` (`src/app/api/ai-practice/route.ts`) maps the account's `plan` field to a tier:
+  anything other than exactly `'premium'` — including `'free'`, missing, or unrecognised —
+  resolves to `'free'`, the most restrictive tier. This is the actual boundary where the guarantee
+  is enforced: default toward safety at the point real user data enters the system, not toward
+  permissiveness, matching 11.8's "normalise at the boundary" principle applied to cost instead of
+  language codes.
+- The repair call added in 3.38 is a single direct attempt, not a full chain walk, so it does not
+  automatically inherit the hard filter — the route now computes its `repairModelId` via
+  `resolveChainForTier(tier)[0]` instead of the unscoped chain's first entry, so a free caller's
+  repair attempt is tier-scoped too.
+
+**Verified live**, 2026-08-01: a `tier: 'free'` request against the real API never attempted the
+configured paid model at all (confirmed by asserting no failure log line for it appeared) and
+answered directly from the free chain in ~7 seconds — both a real cost-safety improvement and a
+real latency improvement over the previous try-the-paid-model-first-then-fall-through pattern.
+
+**Testing.** 13 new unit tests: `model-registry.test.ts` (registry construction, tier
+eligibility, ordering, deduplication) and a new describe block in `openrouter.test.ts`
+(`TutorRequest.tier` hard filter, including "never falls through to the paid model even when
+every free model fails"). Plus the live test above, added to `tutor-live.test.ts`.
+
+**What remains (honestly not done by this block).** §21.4 Phase 1 also specifies a circuit
+breaker (open a model's circuit on a rolling failure-rate threshold, reusing `rateLimit.ts`'s
+counting infrastructure) and production metrics logging (`lm-model-metric`, roadmap #35). Neither
+is built yet — scoped out to keep this change reviewable and fully verified rather than rushing
+three mechanisms into one pass. Both remain open roadmap items.
+
+**Production readiness.** Production Ready — the registry and hard filter are simple, fully
+tested, and verified live; the change is additive and backward compatible by construction.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -2095,6 +2157,7 @@ load-time request, and is a small known waste.
 | AI tutor (code) | **Production Ready** | Chain, persistence, streaming, metering, all verified live |
 | AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker |
 | Explanation-language validation & repair | **Mostly Ready** | Structured output + detection verified live and correct (3.38); repair triggers correctly but an end-to-end *successful* repair is unverified until roadmap #1 (credits) |
+| Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and metrics (§21.4 Phase 1) not yet built |
 | Tutor persistence | **Production Ready** | Verified reload, resume, continue, end, cross-account refusal |
 | Tutor streaming | **Production Ready** | Verified incremental render; errors before commit stay HTTP |
 | Cost metering | **Production Ready** | Three tiers, ordering tested, live 429 verified |
@@ -2672,7 +2735,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 31 | **Spaced-repetition review deck built from real tutor corrections** (§20.2) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real; no new AI capability needed — unblocked |
 | 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
 | 33 | **Invite-a-partner referral flow** (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | Solves acquisition and liquidity simultaneously; standard two-sided-marketplace playbook | None |
-| 34 | **Model registry + tier-eligibility hard filter + circuit breaker** (§21.4 Phase 1) | High | Moderate | Formalises §20.5's cost-ceiling guarantee as a real mechanism; makes model changes a data edit, not a code change | Reuses `rateLimit.ts`'s existing counting infra |
+| 34 | ~~Model registry + tier-eligibility hard filter~~ + circuit breaker (§21.4 Phase 1) | High | Moderate | **Partially done, 2026-08-01** — see 3.39. Registry + hard filter shipped and verified live (a free-tier request now skips the credit-less paid model entirely, both faster and cost-safe). **Circuit breaker not built** — remains open | Reuses `rateLimit.ts`'s existing counting infra (for the still-open circuit-breaker piece) |
 | 35 | **Production routing metrics** (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) | Reuses 3.34's structured-log pattern |
 | 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35, and a confirmed concrete reason per 19.6.4 |
 
@@ -2811,8 +2874,10 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**361 tests passing, 8 skipped, across 36 files** (as of the roadmap #28 block, 2026-08-01).
-Baseline before this work: 103. Since then: 43 new tests in `structured-tutor-reply.test.ts`
+**374 tests passing, 8 skipped, across 37 files** (as of the roadmap #34 block, 2026-08-01).
+Baseline before this work: 103. Since the last commit: 13 new tests for the model registry and
+tier hard filter (roadmap #34, 3.39 — `model-registry.test.ts` plus a new describe block in
+`openrouter.test.ts`), on top of 43 new tests in `structured-tutor-reply.test.ts`
 (roadmap #28, 3.38 — JSON extraction across simulated chunk boundaries, parsing, formatting,
 live-found language-detection regression, repair-call success/failure paths, full streaming
 orchestration) plus a new gated live-provider file, `structured-tutor-reply.live.test.ts`
@@ -2834,7 +2899,8 @@ src/lib/ai/openrouter.test.ts                         32 tests: chain, advance r
 src/lib/ai/prompts.test.ts                            system prompt composition
 src/lib/ai/tutor-budget.test.ts                       three tiers + check ordering
 src/lib/ai/tutor-context.test.ts                      profile → tutor context
-src/lib/ai/tutor-live.test.ts                         live provider test (skipped by default)
+src/lib/ai/tutor-live.test.ts                         live provider test (skipped by default), incl. live tier-filter check
+src/lib/ai/model-registry.test.ts                     registry construction, tier eligibility, ordering, dedup
 src/lib/ai/structured-tutor-reply.test.ts             JSON extraction, parsing, language detection, repair, streaming
 src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression
 src/lib/auth-throttle.test.ts                         login/register limits, hashing, IP parsing
@@ -4859,18 +4925,20 @@ next layer of sophistication with real data, exactly the same shape as §19.4's 
 
 **Phase 1 — buildable now, against OpenRouter alone, no second provider required (roadmap #34,
 #35):**
-- Convert `FREE_TUTOR_MODELS`/env-chain into the Layer-2 registry above. Ordering stays a fixed
-  priority field (equivalent to today's array order) — **not yet score-computed.**
-- Make §20.5's tier-eligibility a registry field and a hard filter, replacing the "must be added
-  before/alongside roadmap #1" ad-hoc requirement flagged in §19.3/§20.5 with a real mechanism.
-- **Circuit breaker, built on infrastructure this project already has**, not a new dependency:
+- ✅ **Done, 2026-08-01 (3.39):** Convert `FREE_TUTOR_MODELS`/env-chain into the Layer-2 registry
+  above. Ordering stays a fixed priority field (equivalent to today's array order) — **not yet
+  score-computed.**
+- ✅ **Done, 2026-08-01 (3.39):** Make §20.5's tier-eligibility a registry field and a hard
+  filter, replacing the "must be added before/alongside roadmap #1" ad-hoc requirement flagged in
+  §19.3/§20.5 with a real mechanism — verified live.
+- **Not yet done. Circuit breaker, built on infrastructure this project already has**, not a new dependency:
   the existing MongoDB fixed-window counter (`src/lib/rateLimit.ts`, 3.21) already does exactly
   the counting a circuit breaker needs (atomic `findOneAndUpdate`+`$inc`, TTL cleanup, fails
   open) — track failures-per-model-per-window the same way, open the circuit (mark
   `status: 'circuit-open'` for a cooldown) when a model's failure rate crosses a threshold within
   a window. This is 18.6 in miniature: the proven mechanism (rate limiter) reused for the proven
   pattern (circuit breaker), not a new library.
-- **Metrics logging**, reusing 3.34's existing structured-log pattern rather than a new
+- **Not yet done. Metrics logging**, reusing 3.34's existing structured-log pattern rather than a new
   observability vendor (11.27's reasoning applies identically here): one `lm-model-metric` line
   per attempt — `modelId, gateway, tier, latencyMs, ttftMs, outcome
   (success|advanced|repaired|failed), costUsd (from usage.cost when the gateway reports it),
@@ -4917,6 +4985,6 @@ value" test to this specific subsystem.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 34 | **Build the model registry + tier-eligibility hard filter + circuit breaker** (§21.4 Phase 1) | High | Moderate | Formalises §20.5's cost-ceiling guarantee as a real mechanism instead of an env-var convention; makes adding/removing/reordering models a data change, not a code change | Reuses `src/lib/rateLimit.ts`'s existing counting infra — no new dependency |
+| 34 | ~~Build the model registry + tier-eligibility hard filter~~ + circuit breaker (§21.4 Phase 1) | High | Moderate | **Registry + hard filter done, 2026-08-01 — see 3.39.** Formalises §20.5's cost-ceiling guarantee as a real mechanism instead of an env-var convention; verified live. **Circuit breaker still open** — no owner action, just not yet built | Reuses `src/lib/rateLimit.ts`'s existing counting infra for the circuit breaker — no new dependency |
 | 35 | **Add production routing metrics** (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | The prerequisite for any evidence-driven (rather than snapshot-benchmarked) routing decision — nothing in Phase 2 is possible without this | Reuses 3.34's existing structured-log pattern |
 | 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing using #35's real metrics** (§21.4 Phase 2) | Medium | High | The literal fulfilment of "intelligently choose... based on real production evidence" | #34, #35, and a confirmed concrete reason per 19.6.4's unchanged restraint |
