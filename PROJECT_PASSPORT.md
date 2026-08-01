@@ -201,7 +201,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `0d3a141` — "feat: model registry and a real tier-eligibility hard filter (roadmap #34)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39) |
+| **HEAD** | `232da26` — "feat: build the AI-quality eval harness, v1 (roadmap #29)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -1684,6 +1684,94 @@ three mechanisms into one pass. Both remain open roadmap items.
 **Production readiness.** Production Ready — the registry and hard filter are simple, fully
 tested, and verified live; the change is additive and backward compatible by construction.
 
+### 3.40 The AI-quality eval harness (roadmap #29, v1) — and a real weakness it found
+
+**Purpose.** Implements §19.6.2: "no public benchmark measures LingoMatch's actual requirement...
+this project has to measure it directly." Closes the loop 19.3 itself left open — the current
+model pick is "a starting hypothesis to re-verify, not a settled conclusion" — by actually running
+the real production pipeline against real, natural, seeded mistakes across every Tier-1 pair
+(§19.5), not just the 2 pairs spot-checked live in 3.38/20.6.
+
+**Scope, deliberately v1.** `src/lib/ai/eval-cases.ts` holds one genuine seeded-mistake sentence
+per Tier-1 pair (8 cases total — the 8 pairs in §19.5's table, one grammar mistake each,
+hand-written to be natural, not synthetic filler). This is **not yet** §19.6.2's full spec (20-turn
+sessions, multiple error types per pair) — a full matrix would be many more live calls per run for
+a first pass; this ships the part that already produces real signal, per 18.6's "smallest scope
+that provides real evidence" principle, with the fuller version as a documented next increment.
+
+**Implementation.** `src/lib/ai/eval-harness.ts` — pure grading functions, so the harness itself is
+unit tested without spending a single API call:
+- `gradeCase(testCase, rawModelOutput)` checks: parses as valid structured JSON; a correction is
+  present (every seeded case contains a real mistake, so this should always fire); an explanation
+  is present; **the explanation is independently language-checked against the pair's explanation
+  language** (reusing 3.38's `explanationLanguageMismatch` — the metric §19.6.2 names as "the
+  number that should decide the model"); no Markdown; no banned compliment opener (reusing the
+  same regexes `tutor-live.test.ts` already established).
+- **Deliberately grades the raw model output, before any repair call.** Grading the post-repair
+  result (`streamStructuredTutorReply`'s output) would let the repair call in 3.38 paper over a
+  wrong-language explanation regardless of which model produced it — exactly the one axis this
+  harness exists to differentiate models on. The repair call is production's safety net; this
+  harness measures what it's a net *under*.
+- `eval-harness.live.test.ts` — gated behind `LIVE_AI_TESTS=1`, same pattern as the other live
+  test files. Runs all 8 cases through `callTutor` (the real chain, no mocks), grades each, and
+  prints a per-metric pass-rate report. Asserts a floor (not a strict pass rate) on parse rate and
+  correction presence, so it catches a real regression on a future model-chain change without
+  being flaky on ordinary sample-to-sample variance — the same "floor, not a threshold" philosophy
+  `tutor-live.test.ts` already uses. **Per §19.6.2: "run it on every model-chain change, not
+  once."**
+
+**Run live, 2026-08-01, against the real chain's current fallback (`google/gemma-4-26b-a4b-it:free`
+— the account still has no credits, so both configured paid entries 402 and every case falls
+through, exactly as designed):**
+
+| Metric | Result |
+|---|---|
+| Parsed as valid JSON | 8/8 (100%) |
+| Correction present | 8/8 (100%) |
+| Markdown-free | 8/8 (100%) |
+| Clean (non-compliment) opener | 8/8 (100%) |
+| **Explanation language correct** | **6/8 (75%)** |
+
+**The finding: a real, confirmed weakness, exactly where §19.5 predicted one.** Both
+Portuguese(BR)↔Spanish cases (#5 and #8 — the pair §19.5 itself flagged as "the extreme case...
+languages close enough that L1 interference ('portuñol') is itself a teaching topic; any
+language-mixing weakness surfaces here first") failed. Not a near-miss — genuine code-mixed
+output in both directions:
+- Case #5 (expected Portuguese): *"Em espanhol, o verbo gustar se usa con 'e' para indicar que
+  algo te agrada, y la palabra 'uy' se escribe con 'y'."* — mixes Portuguese ("Em espanhol", "se
+  usa") with Spanish function words ("con", "que", "te", "y"). The model's own self-reported
+  `explanation_language` field claimed "Portuguese" anyway — the self-report was wrong, which is
+  exactly why 3.38 doesn't trust it and checks independently.
+- Case #8 (expected Spanish): *"Como estás hablando de algo que ocurrió ayer, debes usar o
+  pretérito perfeito."* — Spanish throughout except the grammar term itself ("o pretérito
+  perfeito" is Portuguese; Spanish would be "el pretérito perfecto"), also self-reported as
+  correct ("Spanish") when it wasn't.
+
+**Every other pair passed cleanly**, including pair #4 (Spanish→French, the other pair §19.5 calls
+a stress test) — evidence the current model's weakness is specifically Spanish/Portuguese
+proximity, not language-switching under load in general.
+
+**What this means for the roadmap, not just the model.** §18.2's own rule — "do not claim support
+for a language pair that has not been tested" — now has a concrete answer for this pair:
+Portuguese(BR)↔Spanish should not be presented as reliably supported on the current free-tier
+model. Once roadmap #1 (credits) is done, re-running this exact harness against
+`google/gemini-3-flash-preview` (§19.3's pick, chosen partly on a multilingual-competence
+benchmark that doesn't specifically test this failure mode) on just these two cases is the
+concrete next step — cheap, and it directly answers whether a stronger model closes this gap or
+whether it needs its own repair-call-level intervention regardless of model.
+
+**Honest sample-size caveat, per §19.7's own standard.** 1 sample per pair. Enough to catch and act
+on a 100%-repeatable failure on the pair predicted to be highest-risk (2/2, in both directions),
+not enough to certify the 75% figure as a stable rate. Expanding to §19.6.2's full multi-sample,
+multi-error-type, 20-turn design is what would earn that certification — this v1 exists to prove
+the harness produces real signal cheaply, which it did.
+
+**Testing.** 9 unit tests in `eval-harness.test.ts` (grading logic, all-pass and every failure
+mode, empty-input safety) plus the live harness run above.
+
+**Production readiness.** Production Ready as a reusable tool — cheap to re-run (8 live calls),
+already found one real, actionable, evidence-based finding on its first run.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -2158,6 +2246,7 @@ load-time request, and is a small known waste.
 | AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker |
 | Explanation-language validation & repair | **Mostly Ready** | Structured output + detection verified live and correct (3.38); repair triggers correctly but an end-to-end *successful* repair is unverified until roadmap #1 (credits) |
 | Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and metrics (§21.4 Phase 1) not yet built |
+| Tier-1 language-pair quality | **Needs Work for Portuguese(BR)↔Spanish specifically** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the current free-tier model (real code-mixed explanations, 2/2 samples) — do not present this pair as reliably supported yet |
 | Tutor persistence | **Production Ready** | Verified reload, resume, continue, end, cross-account refusal |
 | Tutor streaming | **Production Ready** | Verified incremental render; errors before commit stay HTTP |
 | Cost metering | **Production Ready** | Three tiers, ordering tested, live 429 verified |
@@ -2730,7 +2819,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 26 | **Staging environment** | Medium | Low | Safe verification | #5 |
 | 27 | ~~Group practice rooms~~ **Superseded by #32/#33 below** — §20.3 found a more evidence-backed liquidity fix | — | — | — | — |
 | 28 | ~~Machine-check the tutor's explanation-language rule~~ (structured output + repair call, §19.6.1) | — | — | **Done**, 2026-08-01 — see 3.38. Structured JSON output, independent `franc`-based language-ID validation, and a one-shot repair call now sit between the model and the learner. Detection verified live and correct (a false-negative bug found live was fixed and pinned with a regression test). **Successful repair is unverified** — the repair call's own model has no credits, same blocker as roadmap #1 | — |
-| 29 | **Build the AI-quality eval harness** (§19.6.2) — synthetic 20-turn sessions per Tier-1 language pair, graded automatically | High | Moderate | The only way to actually verify any model pick (§19.3's chain is a hypothesis, not a conclusion) instead of guessing again | #28 (done, 3.38) makes the key metric machine-gradable — unblocked |
+| 29 | ~~Build the AI-quality eval harness~~ (§19.6.2) — **v1 done, 2026-08-01, see 3.40**: one seeded mistake per Tier-1 pair (not yet the full 20-turn/multi-error-type version) | High | Moderate | Already paid for itself: found a real, confirmed weakness on the Portuguese↔Spanish pair (2/2 samples) — §19.5's own predicted "extreme case" risk, now evidenced rather than theoretical | #28 (done, 3.38) made the key metric machine-gradable |
 | 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
 | 31 | **Spaced-repetition review deck built from real tutor corrections** (§20.2) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real; no new AI capability needed — unblocked |
 | 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
@@ -2874,8 +2963,11 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**374 tests passing, 8 skipped, across 37 files** (as of the roadmap #34 block, 2026-08-01).
-Baseline before this work: 103. Since the last commit: 13 new tests for the model registry and
+**383 tests passing, 10 skipped, across 39 files** (as of the roadmap #29 block, 2026-08-01).
+Baseline before this work: 103. Since the last commit: 9 new tests for the eval-harness grading
+logic (roadmap #29, 3.40 — `eval-harness.test.ts`) plus a new gated live file
+(`eval-harness.live.test.ts`) that found a real, confirmed weakness on its first run. Before that:
+13 new tests for the model registry and
 tier hard filter (roadmap #34, 3.39 — `model-registry.test.ts` plus a new describe block in
 `openrouter.test.ts`), on top of 43 new tests in `structured-tutor-reply.test.ts`
 (roadmap #28, 3.38 — JSON extraction across simulated chunk boundaries, parsing, formatting,
@@ -2901,6 +2993,8 @@ src/lib/ai/tutor-budget.test.ts                       three tiers + check orderi
 src/lib/ai/tutor-context.test.ts                      profile → tutor context
 src/lib/ai/tutor-live.test.ts                         live provider test (skipped by default), incl. live tier-filter check
 src/lib/ai/model-registry.test.ts                     registry construction, tier eligibility, ordering, dedup
+src/lib/ai/eval-harness.test.ts                       eval-harness grading logic (pure, no API calls)
+src/lib/ai/eval-harness.live.test.ts                  live provider test (skipped by default) — the harness itself, roadmap #29
 src/lib/ai/structured-tutor-reply.test.ts             JSON extraction, parsing, language detection, repair, streaming
 src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression
 src/lib/auth-throttle.test.ts                         login/register limits, hashing, IP parsing
@@ -4148,7 +4242,7 @@ Target languages: English, Spanish, French.**
 | 2 | English → Spanish | Control condition — English is the strongest instruction language for every model. If a model fails here, it's disqualified outright |
 | 3 | Portuguese (BR) → English | Second-largest demand; proves the mechanism generalises past one native language |
 | 4 | **Spanish → French** | **The stress test** — two close Romance languages, zero English anywhere in the loop, maximum drift pressure on the explanation-language rule |
-| 5 | **Portuguese (BR) → Spanish** | **The extreme case** — languages close enough that L1 interference ("portuñol") is itself a teaching topic; any language-mixing weakness surfaces here first |
+| 5 | **Portuguese (BR) → Spanish** | **The extreme case** — languages close enough that L1 interference ("portuñol") is itself a teaching topic; any language-mixing weakness surfaces here first. **Confirmed, not just predicted, 2026-08-01 — see 3.40**: the eval harness's first live run found genuine code-mixed explanations in both directions of this pair (2/2 samples), the only pair to fail while every other Tier-1 pair passed cleanly |
 | 6 | English → French | Completes English-native coverage for the 3rd most-learned target |
 | 7 | French → English | Reverse direction, satisfying 18.2's bidirectionality requirement |
 | 8 | Spanish → Portuguese (BR) | Reverse of #5 |
@@ -4206,6 +4300,14 @@ correction present, **explanation-language correctness by turn** (the actual def
 number that should decide the model), false-positive corrections on already-correct input,
 length-limit compliance, banned-opener compliance, Markdown-free. Run it on every model-chain
 change, not once.
+
+**✅ v1 done, 2026-08-01 — see 3.40.** One seeded mistake per pair (not yet full 20-turn/
+multi-error-type sessions), grading the raw pre-repair output specifically so the harness can
+still differentiate models on the one axis that matters even after repair (roadmap #28) exists.
+**Already found a real result on its first run**: 75% explanation-language-correct overall, with
+both failures on Portuguese(BR)↔Spanish — exactly the pair this section's own §19.5 flagged as
+highest-risk, now confirmed rather than theoretical. The full multi-sample, multi-error-type,
+20-turn version remains the next increment.
 
 **19.6.3 — Extend the budget system from request-counting to cost-counting before raising any
 model or budget config further.** `tutor-budget.ts`'s three tiers currently count *requests*,
