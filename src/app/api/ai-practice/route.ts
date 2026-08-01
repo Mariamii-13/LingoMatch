@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { aiPracticeRequestSchema } from '@/lib/validations/ai-practice'
-import { callTutor, OpenRouterError, streamTutor } from '@/lib/ai/openrouter'
+import { callTutor, OpenRouterError } from '@/lib/ai/openrouter'
+import { streamStructuredTutorReply } from '@/lib/ai/structured-tutor-reply'
+import { resolveModelChain } from '@/lib/ai/models'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { buildTutorContext } from '@/lib/ai/tutor-context'
 import { checkTutorBudget } from '@/lib/ai/tutor-budget'
@@ -128,12 +130,18 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const generator = streamTutor({
-      ...tutorContext,
-      mode: mode as Parameters<typeof callTutor>[0]['mode'],
-      history,
-      userMessage: parsed.action === 'message' ? parsed.message : undefined,
-    })
+    const generator = streamStructuredTutorReply(
+      {
+        ...tutorContext,
+        mode: mode as Parameters<typeof callTutor>[0]['mode'],
+        history,
+        userMessage: parsed.action === 'message' ? parsed.message : undefined,
+      },
+      {
+        explanationLanguageName: tutorContext.explanationLanguage,
+        repairModelId: resolveModelChain('defaultTutor')[0],
+      },
+    )
 
     /*
      * Pull the first chunk before committing to a 200. Everything that can go

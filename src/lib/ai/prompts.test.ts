@@ -44,13 +44,9 @@ describe('buildSystemPrompt — correction behaviour', () => {
     expect(B1).toMatch(/never reply to a flawed message with conversation and a question only/i)
   })
 
-  it('ends with a pre-send checklist covering correction, explanation language, openers, Markdown, and length', () => {
-    expect(B1).toMatch(/CHECK BEFORE YOU SEND/)
-    expect(B1).toMatch(/must already contain the corrected sentence written out/i)
-    expect(B1).toMatch(/is your explanation sentence actually written in the explanation language/i)
-    expect(B1).toMatch(/engage the topic rather than compliment the learner/i)
-    expect(B1).toMatch(/any Markdown characters\? Remove them\./i)
-    expect(B1.trimEnd().endsWith('Cut it.')).toBe(true)
+  it('does not end with a pre-send prose checklist — the explanation-language check is now machine-validated, not self-checked (19.6.1)', () => {
+    expect(B1).not.toMatch(/CHECK BEFORE YOU SEND/)
+    expect(B1.trimEnd().endsWith('every field is simply in that one language.')).toBe(true)
   })
 
   it('shows one worked example of reply shape, illustrating the explanation-language switch, without licensing its wording', () => {
@@ -68,7 +64,7 @@ describe('buildSystemPrompt — correction behaviour', () => {
       'Georgian',
     )
     expect(prompt).toMatch(
-      /Write this sentence in Georgian, not Spanish — a learner who only knows Georgian must be able to read it\./,
+      /Written in Georgian, not Spanish — a learner who only knows Georgian must be able to read it\./,
     )
   })
 
@@ -87,12 +83,17 @@ describe('buildSystemPrompt — correction behaviour', () => {
     expect(B1).toMatch(/do not stack several corrections/i)
   })
 
-  it('separates conversation, correction, explanation, and practice', () => {
-    expect(B1).toMatch(/1\. CONVERSATION:/)
-    expect(B1).toMatch(/2\. CORRECTION:/)
-    expect(B1).toMatch(/3\. EXPLANATION:/)
-    expect(B1).toMatch(/4\. PRACTICE:/)
-    expect(B1).toMatch(/skip parts 2 and 3/i)
+  it('requires a structured JSON reply with conversation, correction, explanation, explanation_language, and practice fields (19.6.1)', () => {
+    expect(B1).toMatch(/RESPONSE FORMAT/)
+    expect(B1).toMatch(/ONLY a single JSON object/i)
+    expect(B1).toContain(
+      '{"conversation": string, "correction": string or null, "explanation": string or null, "explanation_language": string, "practice": string}',
+    )
+    expect(B1).toMatch(/"conversation":\s*react to what the learner actually means/i)
+    expect(B1).toMatch(/"correction":.*one corrected version of their own words/i)
+    expect(B1).toMatch(/"explanation":.*one brief sentence/i)
+    expect(B1).toMatch(/"practice":.*short prompt asking the learner to continue/i)
+    expect(B1).toMatch(/set "correction" and "explanation" to null/i)
   })
 
   it('asks the learner to reuse the corrected phrase', () => {
