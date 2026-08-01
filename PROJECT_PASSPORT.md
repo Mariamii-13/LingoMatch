@@ -201,7 +201,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `74e25ac` — "feat: the tutor uses its own weak-area data (20.8 item 5)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41), `74e25ac` (§20.8 item 5, §3.42) |
+| **HEAD** | `e28e322` — "fix: the explanation-language repair path had drifted from production" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41), `74e25ac` (§20.8 item 5, §3.42), `e28e322` (repair fix, §3.43) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -1604,11 +1604,14 @@ paid entries to the free tier, exactly as production does):
 - French-target/Spanish-explanation (the harder, non-English-bridge case): the mismatch detector
   correctly fired against real model output after the fix above.
 - The repair call was observed **correctly triggering** but **could not be observed completing
-  successfully** — the repair call's own model (`resolveModelChain()[0]`, currently
-  `google/gemini-3-flash-preview`) has no credits (5, unchanged), so the repair attempt itself
-  gets a 402 and the original text is kept, logged rather than silently swallowed. **This is an
-  honest, expected limitation tied to roadmap #1 (buy credits), not a defect in this block** — a
-  full end-to-end successful-repair verification is owed once credits exist.
+  successfully** at the time this was written — the repair call's own model (`resolveModelChain()[0]`,
+  currently `google/gemini-3-flash-preview`) has no credits (5, unchanged), so the repair attempt
+  itself got a 402 and the original text was kept, logged rather than silently swallowed. **⚠️
+  Stale as of roadmap #34 (2026-08-02) — see 3.43.** Once the tier-aware hard filter shipped, the
+  real route stopped resolving the repair model from the unscoped chain above and started using
+  `resolveChainForTier(tier)[0]` instead — for the free tier almost everyone is on today, that's a
+  real, reachable free model, not the credit-less paid one. Repair now succeeds, verified live,
+  100% of the times it was observed triggering (3/3 samples) — see 3.43 for the full measurement.
 
 **Testing.** 43 unit tests in `structured-tutor-reply.test.ts` (extraction across simulated chunk
 boundaries including escaped quotes/unicode/split-escape-sequences, parsing, formatting,
@@ -1899,6 +1902,73 @@ qualifies, fails soft on a DB error), and 2 for the new shared `skill-tag-format
 
 **Production readiness.** Production Ready — verified live end-to-end, fails soft on the one path
 that could otherwise block a session from starting.
+
+### 3.43 Correcting stale documentation: the explanation-language repair now actually works
+
+**Why this exists.** While selecting the next highest-value block, a routine question — "is
+anything documented as broken still actually broken?" — turned up a real, positive discovery: two
+earlier findings (3.38's repair-call verification, 3.40's Portuguese(BR)↔Spanish weakness) were
+both measured **before** roadmap #34 shipped tier-aware model routing, and neither had been
+re-checked against the routing that actually exists in production today. This section corrects
+both records with fresh live evidence rather than leaving them stale.
+
+**What changed, and why it matters.** 3.38's repair call resolves its model via
+`repairModelId`. Before #34, every caller — free or not — resolved this from
+`resolveModelChain('defaultTutor')`, whose first entry is the env-configured **paid** model. Since
+the account has never purchased credits, every repair attempt hit a guaranteed 402 — which is
+exactly what 3.38 documented: "repair call was observed correctly triggering but could not be
+observed completing successfully." **After #34, the real `ai-practice` route resolves
+`repairModelId` via `resolveChainForTier(tier)[0]`, and since virtually every current caller is
+`'free'` tier (no paid plan exists yet), this now resolves to a real, reachable free model** —
+the same one serving the primary reply. Repair went from "structurally unable to succeed" to
+"targets a model that actually works" as a side effect of a change made for an unrelated reason
+(cost control), and nothing had re-verified it since.
+
+**The live test file itself had drifted.** `structured-tutor-reply.live.test.ts` still computed
+`repairModelId` via the old, unscoped `resolveModelChain('defaultTutor')[0]` — meaning it was
+silently continuing to measure a repair path production no longer uses. Fixed to match the real
+route exactly (`resolveChainForTier('free')[0]`).
+
+**Verified live, 2026-08-02, on the exact pair 3.40 found weak (Portuguese(BR)↔Spanish, both
+directions), sampled 3 times each (6 total) rather than once — model output is probabilistic, so
+this measures a rate, the same philosophy `tutor-live.test.ts` already uses:**
+
+| Metric | Result |
+|---|---|
+| Explanation-language mismatch detected | 3/6 (50%) |
+| **Of those, repair succeeded** | **3/3 (100%)** |
+
+Every single time the free-tier model produced a wrong-language explanation on this pair, the
+repair call — now hitting a real free model instead of a guaranteed-402 paid one — fixed it before
+the learner ever saw it. One example, verbatim: the model produced *"Em espanhol não usamos o
+verbo 'gostar'... "* (a genuine Portuguese explanation, correctly detected as matching when
+Portuguese was expected — no repair needed that sample); another sample produced a Spanish-only
+explanation when Portuguese was expected, was correctly flagged, and the repaired text came back
+in proper Portuguese.
+
+**What this means for the roadmap.** 3.40's finding stands exactly as measured — it deliberately
+graded **raw, pre-repair** output, and that measurement is still the correct way to compare models
+(§29's own stated purpose). But **in production**, the gap between "raw model got it wrong" and
+"the learner saw it wrong" is now substantially closed by a repair mechanism that actually works,
+for this pair specifically and for the free tier generally. The honest, current position: raw
+model quality on this pair is still weaker than the rest of Tier-1 (3.40 stands), but the
+production-facing defect it causes is now mitigated more often than not by a mechanism that was
+previously unable to help at all.
+
+**Sample-size honesty, per §19.7's own standard.** 3 samples per direction, 6 total — enough to
+show the repair path is capable of succeeding repeatedly (100% of triggered cases, not a fluke),
+not enough to claim a stable long-run repair-success percentage. Re-run through the eval harness
+(§19.6.2, roadmap #29) once it's extended to grade the post-repair path as a second, separate
+metric — not a replacement for the pre-repair one 3.40 already established.
+
+**A live-testing hygiene note for whoever runs these next.** This same investigation burned enough
+of the shared free-tier request budget (§3.7) across several rounds of live verification that a
+subsequent full run of this file hit a real `RATE_LIMIT` from OpenRouter — a genuine account-wide
+constraint, not a bug. Live AI tests are real requests against a real, shared, rate-limited
+account; do not chain many live-test runs back to back without expecting this.
+
+**Production readiness.** Explanation-language repair: **upgraded from Mostly Ready to Production
+Ready** for free-tier callers specifically — verified live, repeatedly, succeeding end to end.
 
 ### Frontend
 
@@ -2374,9 +2444,9 @@ load-time request, and is a small known waste.
 | Onboarding | **Production Ready** | One required step, gated, unsaved-changes guard fixed |
 | AI tutor (code) | **Production Ready** | Chain, persistence, streaming, metering, all verified live |
 | AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker |
-| Explanation-language validation & repair | **Mostly Ready** | Structured output + detection verified live and correct (3.38); repair triggers correctly but an end-to-end *successful* repair is unverified until roadmap #1 (credits) |
+| Explanation-language validation & repair | **Production Ready** | Structured output + detection verified live and correct (3.38); repair now targets a reachable free model for free-tier callers (roadmap #34) and was verified succeeding live 3/3 times triggered (3.43) — no longer blocked on roadmap #1 |
 | Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and metrics (§21.4 Phase 1) not yet built |
-| Tier-1 language-pair quality | **Needs Work for Portuguese(BR)↔Spanish specifically** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the current free-tier model (real code-mixed explanations, 2/2 samples) — do not present this pair as reliably supported yet |
+| Tier-1 language-pair quality | **Needs Work at the raw-model level, substantially mitigated in production** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the raw free-tier model (2/2 samples) — still do not present this pair as reliably supported on model quality alone. **But** production's repair mechanism now actually works (3.43): 3/3 triggered mismatches on this exact pair were corrected before the learner saw them |
 | Spaced-repetition review deck | **Production Ready** | Population, Leitner scheduling, API, UI and navigation all verified live end-to-end against the real database (3.41); Phase 2 (fitted half-life curve) and tutor-context injection of weak areas remain open |
 | Tutor persistence | **Production Ready** | Verified reload, resume, continue, end, cross-account refusal |
 | Tutor streaming | **Production Ready** | Verified incremental render; errors before commit stay HTTP |
@@ -2949,7 +3019,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 25 | ~~Structured curriculum or lesson suggestions~~ **Superseded by §20.2** | Medium | Moderate | Retention beyond free conversation, evidence-based (spaced repetition, not a lesson tree) | #28 (needs structured tutor output first) |
 | 26 | **Staging environment** | Medium | Low | Safe verification | #5 |
 | 27 | ~~Group practice rooms~~ **Superseded by #32/#33 below** — §20.3 found a more evidence-backed liquidity fix | — | — | — | — |
-| 28 | ~~Machine-check the tutor's explanation-language rule~~ (structured output + repair call, §19.6.1) | — | — | **Done**, 2026-08-01 — see 3.38. Structured JSON output, independent `franc`-based language-ID validation, and a one-shot repair call now sit between the model and the learner. Detection verified live and correct (a false-negative bug found live was fixed and pinned with a regression test). **Successful repair is unverified** — the repair call's own model has no credits, same blocker as roadmap #1 | — |
+| 28 | ~~Machine-check the tutor's explanation-language rule~~ (structured output + repair call, §19.6.1) | — | — | **Done**, 2026-08-01 — see 3.38. Structured JSON output, independent `franc`-based language-ID validation, and a one-shot repair call now sit between the model and the learner. Detection verified live and correct (a false-negative bug found live was fixed and pinned with a regression test). **Repair success also verified live, 2026-08-02 — see 3.43**: once roadmap #34 shipped, repair started targeting a reachable free model instead of the credit-less paid one, and succeeded 3/3 times observed triggering | — |
 | 29 | ~~Build the AI-quality eval harness~~ (§19.6.2) — **v1 done, 2026-08-01, see 3.40**: one seeded mistake per Tier-1 pair (not yet the full 20-turn/multi-error-type version) | High | Moderate | Already paid for itself: found a real, confirmed weakness on the Portuguese↔Spanish pair (2/2 samples) — §19.5's own predicted "extreme case" risk, now evidenced rather than theoretical | #28 (done, 3.38) made the key metric machine-gradable |
 | 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
 | 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 fully done, 2026-08-01, see 3.41 and 3.42** (including tutor-context weak-area injection) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
@@ -3094,7 +3164,8 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**407 tests passing, 10 skipped, across 41 files** (as of the §20.8-item-5 block, 2026-08-01).
+**407 tests passing, 10 skipped, across 41 files** (unchanged as of the 3.43 correction,
+2026-08-02 — that block only updated the gated live test file, adding no new mocked tests).
 Baseline before this work: 103. Since the last commit: 8 new tests for the tutor-context
 weak-area injection (§20.8 item 5, 3.42 — 3 in `prompts.test.ts`, 3 for `getWeakSkillsSummary` in
 `skill-review.server.test.ts`, 2 in a new `skill-tag-format.test.ts` for the small shared
@@ -3138,7 +3209,7 @@ src/lib/skill-review.server.test.ts                   Leitner progression (pure)
 src/lib/skill-tag-format.test.ts                      shared plain-language skill-tag formatter (review deck + tutor context)
 src/lib/ai/eval-harness.live.test.ts                  live provider test (skipped by default) — the harness itself, roadmap #29
 src/lib/ai/structured-tutor-reply.test.ts             JSON extraction, parsing, language detection, repair, streaming
-src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression
+src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression, then confirmed the 3.43 repair-success finding
 src/lib/auth-throttle.test.ts                         login/register limits, hashing, IP parsing
 src/lib/language-profile.test.ts                      normalisation, completeness
 src/lib/match-defaults.test.ts                        form seeding from profile
@@ -4429,9 +4500,11 @@ against an otherwise-unfixable core-product defect.
 anticipated: the JSON parsing happens server-side (`extractConversationSoFar`, re-scanning the
 buffer per chunk), so the client never sees raw JSON and needed **no changes at all** — the
 "needs a streaming JSON parser client-side" tradeoff never materialised. Detection is live-verified
-correct (after fixing a real false-negative found by live testing, not the unit tests). The
-repair call is verified triggering correctly live but not yet verified *succeeding* end-to-end,
-because the repair model itself has no credits (roadmap #1) — same blocker, not a new one.
+correct (after fixing a real false-negative found by live testing, not the unit tests). **The
+repair call is now also verified succeeding end-to-end, 2026-08-02 — see 3.43.** Roadmap #34's
+tier-aware routing (shipped after this section was first written) changed which model the repair
+call targets for a free-tier caller from the credit-less paid model to a real, reachable free one
+— succeeded 3/3 times observed triggering, live.
 
 **19.6.2 — Build the eval before trusting any model pick, including 19.3's.** Same discipline as
 "benchmarked all 17 free models on the live key, not by guessing" (section 17). No public
