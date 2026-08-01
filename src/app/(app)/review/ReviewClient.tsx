@@ -4,6 +4,7 @@ import * as React from "react"
 import { CheckCircle2, RotateCcw, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { formatSkillTag } from "@/lib/skill-tag-format"
 
 export type ReviewItem = {
   id: string
@@ -11,12 +12,6 @@ export type ReviewItem = {
   targetLanguageCode: string
   exampleCorrection: string
   dueAt: string
-}
-
-/** "preterite-vs-present" -> "Preterite vs present" — a plain-language label, never shown as raw model metadata. */
-function formatSkillTag(tag: string): string {
-  const spaced = tag.replace(/-/g, " ")
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
 
 export function ReviewClient({ initialItems }: { initialItems: ReviewItem[] }) {

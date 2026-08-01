@@ -2,6 +2,7 @@ import 'server-only'
 import { connectDB } from '@/lib/db'
 import SkillReview from '@/lib/models/SkillReview'
 import { reportServerError } from '@/lib/observability/report.server'
+import { formatSkillTag } from '@/lib/skill-tag-format'
 
 /**
  * Leitner-style fixed review intervals (roadmap #31, PROJECT_PASSPORT.md
@@ -108,6 +109,52 @@ export async function countDueReviews(userId: string): Promise<number> {
   } catch (err) {
     reportServerError('skill-review.countDueReviews', err, { context: { userId } })
     return 0
+  }
+}
+
+/**
+ * §20.8 item 5 — the piece that makes the tutor feel like "a real teacher,
+ * not a chatbot": a short, factual, plain-language summary of skills this
+ * learner has been reviewed on and is still struggling with, for injection
+ * into the tutor's own system prompt at the start of a session (never
+ * mid-session — see 19.2 on prompt length driving drift, and this data
+ * doesn't change turn-to-turn).
+ *
+ * "Struggling" is defined narrowly and honestly from what this schedule
+ * actually tracks: `reviewCount >= 1` (reviewed and reset/tested at least
+ * once, not just corrected once in passing) and still on a short interval
+ * (<=3 days) — i.e. the learner has been given a chance to retain this and
+ * the schedule hasn't yet trusted them with it. A brand-new correction with
+ * no review history is not "struggling", it's just seen once; nothing is
+ * reported until there's a real signal, so this never fabricates a weakness.
+ */
+export async function getWeakSkillsSummary(
+  userId: string,
+  targetLanguageCode: string,
+  limit = 3,
+): Promise<string[]> {
+  // Fails soft to an empty list: this is on the critical path of starting a
+  // tutor session (awaited before the reply is generated), so a failure here
+  // must degrade to "no weak-areas line" rather than blocking the session —
+  // the same reasoning as `countDueReviews`'s badge count.
+  try {
+    await connectDB()
+    const docs = await SkillReview.find({
+      userId,
+      targetLanguageCode,
+      reviewCount: { $gte: 1 },
+      intervalDays: { $lte: 3 },
+    })
+      .sort({ reviewCount: -1, updatedAt: -1 })
+      .limit(limit)
+      .lean<{ skillTag: string }[]>()
+
+    return docs.map((doc) => formatSkillTag(doc.skillTag))
+  } catch (err) {
+    reportServerError('skill-review.getWeakSkillsSummary', err, {
+      context: { targetLanguageCode },
+    })
+    return []
   }
 }
 

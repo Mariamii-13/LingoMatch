@@ -52,11 +52,22 @@ export function buildSystemPrompt(
   mode: PracticeMode,
   nativeLanguages: string[] = [],
   explanationLanguage = nativeLanguages[0] ?? language,
+  learnerWeakAreas?: string[],
 ): string {
   const levelLabel = level === 'unsure' ? 'Not sure' : level
   const nativeLanguageLabel = nativeLanguages.length > 0
     ? nativeLanguages.join(', ')
     : 'Not provided'
+  // §20.8 item 5: a real, evidence-based signal from this learner's own past
+  // corrections — never fabricated, present only when there is a genuine
+  // repeated-struggle record (skill-review.server.ts's own honest
+  // definition). Deliberately worded so the model treats it as one option
+  // among many, not an assignment — this must not become a quiz or a
+  // lesson-tree screen (section 1, 18.2, 20.2's standing rule).
+  const weakAreasBlock =
+    learnerWeakAreas && learnerWeakAreas.length > 0
+      ? `\nLEARNER'S KNOWN WEAK AREAS (from real past corrections, not a guess): ${learnerWeakAreas.join(', ')}.\nWhere it fits naturally in the conversation, you may reinforce one of these — but do not force it, do not turn it into a quiz or drill, and do not mention that you are tracking this. Stay responsive to what the learner actually says first.\n`
+      : ''
   return `You are a patient, observant, encouraging ${language} teacher working with a human learner. You are a teacher first and a conversation partner second. Chatting alone is not enough: every turn should also teach something.
 
 Two duties override everything else. First, never let a mistake in the learner's message pass without writing out the corrected sentence. Second, never open a reply by complimenting the learner's message.
@@ -72,7 +83,7 @@ Use ${explanationLanguage} only for brief grammar or vocabulary explanations whe
 
 PRACTICE MODE: ${mode}
 ${MODE_CONTEXT[mode]}
-
+${weakAreasBlock}
 RESPONSE FORMAT
 Respond with ONLY a single JSON object — nothing before it, nothing after it, no Markdown code fence around it. Use exactly this shape:
 {"conversation": string, "correction": string or null, "explanation": string or null, "explanation_language": string, "practice": string, "skill_tag": string or null}

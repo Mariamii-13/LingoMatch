@@ -26,6 +26,13 @@ export type TutorRequest = {
    * safe-by-default guarantee — see PROJECT_PASSPORT.md §21.4/roadmap #34.
    */
   tier?: ModelTier
+  /**
+   * §20.8 item 5 — plain-language labels of skills this learner has real
+   * review history struggling with (from `getWeakSkillsSummary`), for a
+   * short context line in the system prompt. Omit or leave empty for no
+   * line at all — an empty/omitted array must never fabricate a weakness.
+   */
+  learnerWeakAreas?: string[]
 }
 
 export type TutorResponse = {
@@ -123,6 +130,7 @@ function buildMessages(req: TutorRequest): { role: string; content: string }[] {
     req.mode,
     req.nativeLanguages,
     req.explanationLanguage,
+    req.learnerWeakAreas,
   )
 
   const messages: { role: string; content: string }[] = [

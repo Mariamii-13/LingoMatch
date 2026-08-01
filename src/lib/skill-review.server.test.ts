@@ -48,9 +48,8 @@ vi.mock('@/lib/observability/report.server', () => ({
   reportServerError: (...args: unknown[]) => reportServerError(...args),
 }))
 
-const { recordCorrection, getDueReviews, countDueReviews, recordReviewOutcome } = await import(
-  './skill-review.server'
-)
+const { recordCorrection, getDueReviews, countDueReviews, recordReviewOutcome, getWeakSkillsSummary } =
+  await import('./skill-review.server')
 
 describe('recordCorrection', () => {
   beforeEach(() => {
@@ -162,6 +161,53 @@ describe('countDueReviews', () => {
     countDocuments.mockRejectedValue(new Error('db down'))
     expect(await countDueReviews('user-1')).toBe(0)
     expect(reportServerError).toHaveBeenCalled()
+  })
+})
+
+describe('getWeakSkillsSummary', () => {
+  beforeEach(() => {
+    connectDB.mockReset().mockResolvedValue(undefined)
+    find.mockReset()
+    reportServerError.mockReset()
+  })
+
+  it('queries only reviewed-at-least-once, still-short-interval records, formatted for display', async () => {
+    const lean = vi
+      .fn()
+      .mockResolvedValue([{ skillTag: 'preterite-vs-present' }, { skillTag: 'ser-vs-estar' }])
+    const limit = vi.fn().mockReturnValue({ lean })
+    const sort = vi.fn().mockReturnValue({ limit })
+    find.mockReturnValue({ sort })
+
+    const result = await getWeakSkillsSummary('user-1', 'es')
+
+    expect(find).toHaveBeenCalledWith({
+      userId: 'user-1',
+      targetLanguageCode: 'es',
+      reviewCount: { $gte: 1 },
+      intervalDays: { $lte: 3 },
+    })
+    expect(result).toEqual(['Preterite vs present', 'Ser vs estar'])
+  })
+
+  it('returns an empty list, never a fabricated weakness, when nothing qualifies', async () => {
+    const lean = vi.fn().mockResolvedValue([])
+    find.mockReturnValue({ sort: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ lean }) }) })
+
+    expect(await getWeakSkillsSummary('user-1', 'es')).toEqual([])
+  })
+
+  it('fails soft to an empty list rather than blocking a session start', async () => {
+    find.mockImplementation(() => {
+      throw new Error('db down')
+    })
+
+    await expect(getWeakSkillsSummary('user-1', 'es')).resolves.toEqual([])
+    expect(reportServerError).toHaveBeenCalledWith(
+      'skill-review.getWeakSkillsSummary',
+      expect.any(Error),
+      expect.objectContaining({ context: { targetLanguageCode: 'es' } }),
+    )
   })
 })
 

@@ -212,6 +212,32 @@ describe('buildSystemPrompt — CEFR calibration', () => {
   })
 })
 
+describe('buildSystemPrompt — learner weak-areas context (§20.8 item 5)', () => {
+  it('adds no weak-areas line at all when the array is omitted', () => {
+    expect(B1).not.toMatch(/WEAK AREAS/)
+  })
+
+  it('adds no weak-areas line when the array is empty — never fabricates a weakness', () => {
+    const prompt = buildSystemPrompt('English', 'B1', 'Free Conversation', ['Spanish'], 'Spanish', [])
+    expect(prompt).not.toMatch(/WEAK AREAS/)
+  })
+
+  it('includes the real weak areas, worded as an option rather than an assignment', () => {
+    const prompt = buildSystemPrompt(
+      'Spanish',
+      'B1',
+      'Free Conversation',
+      ['English'],
+      'English',
+      ['Preterite vs present', 'Ser vs estar'],
+    )
+    expect(prompt).toMatch(/LEARNER'S KNOWN WEAK AREAS/)
+    expect(prompt).toContain('Preterite vs present, Ser vs estar')
+    expect(prompt).toMatch(/do not force it, do not turn it into a quiz or drill/i)
+    expect(prompt).toMatch(/do not mention that you are tracking this/i)
+  })
+})
+
 describe('buildSystemPrompt — coverage across inputs', () => {
   it('produces a prompt for every language, level, and mode', () => {
     for (const language of ['English', 'Spanish', 'Japanese', 'Georgian']) {

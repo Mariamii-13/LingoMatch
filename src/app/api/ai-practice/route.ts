@@ -7,7 +7,7 @@ import { resolveChainForTier, type ModelTier } from '@/lib/ai/model-registry'
 import { getUserLanguageProfile } from '@/lib/language-profile.server'
 import { buildTutorContext } from '@/lib/ai/tutor-context'
 import { checkTutorBudget } from '@/lib/ai/tutor-budget'
-import { recordCorrection } from '@/lib/skill-review.server'
+import { recordCorrection, getWeakSkillsSummary } from '@/lib/skill-review.server'
 import { internalErrorResponse, reportServerError } from '@/lib/observability/report.server'
 import {
   appendAssistantMessage,
@@ -144,6 +144,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // §20.8 item 5: only at the start of a session, not on every turn — this
+    // is context for how the tutor opens and steers, not a per-message cost,
+    // and re-fetching it every turn would only add prompt tokens for no
+    // benefit (19.2: prompt length itself is part of what drives drift).
+    const learnerWeakAreas =
+      parsed.action === 'start'
+        ? await getWeakSkillsSummary(userId, targetLanguageCode)
+        : undefined
+
     const generator = streamStructuredTutorReply(
       {
         ...tutorContext,
@@ -151,6 +160,7 @@ export async function POST(req: NextRequest) {
         history,
         userMessage: parsed.action === 'message' ? parsed.message : undefined,
         tier,
+        learnerWeakAreas,
       },
       {
         explanationLanguageName: tutorContext.explanationLanguage,
