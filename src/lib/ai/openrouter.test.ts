@@ -13,6 +13,11 @@ vi.mock('./model-metrics', () => ({
   logModelMetric: (...args: unknown[]) => logModelMetric(...args),
 }))
 
+const recordTutorCost = vi.fn()
+vi.mock('./tutor-budget', () => ({
+  recordTutorCost: (...args: unknown[]) => recordTutorCost(...args),
+}))
+
 const { callTutor, OpenRouterError, streamTutor } = await import('./openrouter')
 
 const MOCK_VALID_RESPONSE = {
@@ -60,6 +65,7 @@ beforeEach(() => {
   isCircuitOpen.mockReset().mockResolvedValue(false)
   recordModelFailure.mockReset().mockResolvedValue(undefined)
   logModelMetric.mockReset()
+  recordTutorCost.mockReset().mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -74,6 +80,18 @@ describe('callTutor', () => {
     mockFetch(MOCK_VALID_RESPONSE)
     const result = await callTutor(BASE_REQ)
     expect(result.reply).toBe('Hello! How can I help you practise today?')
+  })
+
+  it('records real cost against the shared budget when the gateway reports it (roadmap #30)', async () => {
+    mockFetch({ ...MOCK_VALID_RESPONSE, usage: { cost: 0.0026 } })
+    await callTutor(BASE_REQ)
+    expect(recordTutorCost).toHaveBeenCalledWith(0.0026)
+  })
+
+  it('never records cost when the gateway does not report it', async () => {
+    mockFetch(MOCK_VALID_RESPONSE)
+    await callTutor(BASE_REQ)
+    expect(recordTutorCost).not.toHaveBeenCalled()
   })
 
   it('throws MISSING_CONFIG when API key absent', async () => {
@@ -321,6 +339,23 @@ describe('streamTutor', () => {
       sseResponse([delta('Hola'), delta(', '), delta('¿qué tal?'), 'data: [DONE]\n\n']),
     )
     await expect(collect(streamTutor(BASE_REQ))).resolves.toEqual(['Hola', ', ', '¿qué tal?'])
+  })
+
+  it('records real cost against the shared budget when a late frame reports it (roadmap #30)', async () => {
+    const usageFrame = `data: ${JSON.stringify({ choices: [{ delta: {} }], usage: { cost: 0.0026 } })}\n\n`
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      sseResponse([delta('Hola'), usageFrame, 'data: [DONE]\n\n']),
+    )
+    await collect(streamTutor(BASE_REQ))
+    expect(recordTutorCost).toHaveBeenCalledWith(0.0026)
+  })
+
+  it('never records cost when no frame reports it', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      sseResponse([delta('Hola'), 'data: [DONE]\n\n']),
+    )
+    await collect(streamTutor(BASE_REQ))
+    expect(recordTutorCost).not.toHaveBeenCalled()
   })
 
   it('reassembles frames split across network chunks', async () => {

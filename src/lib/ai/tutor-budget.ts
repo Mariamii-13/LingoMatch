@@ -1,5 +1,5 @@
 import 'server-only'
-import { checkRateLimit } from '@/lib/rateLimit'
+import { checkRateLimit, incrementUsage, peekUsage } from '@/lib/rateLimit'
 
 /**
  * Request limits for the AI tutor.
@@ -28,10 +28,28 @@ export const DAY_SECS = 86_400
  */
 export const DEFAULT_GLOBAL_DAILY_BUDGET = 45
 
+/**
+ * Roadmap #30 (§19.6.3): request count stops being the right unit for
+ * spend control once a paid model is live — a long session costs far more
+ * than a fresh one at the same request count. This is a real dollar
+ * ceiling on top of (not instead of) the request-count budget above, using
+ * the actual `usage.cost` OpenRouter reports per call (see `recordTutorCost`
+ * and openrouter.ts). $3/day is a deliberately generous circuit breaker, not
+ * a tuned limit: §20.5 measured real paid-chain cost at ≈$0.0026/message, so
+ * even the full 45-request daily budget on the paid model would only reach
+ * ≈$0.12/day — this exists to catch something going structurally wrong
+ * (e.g. a routing bug sending free-tier traffic through the paid chain),
+ * not to be the primary cost control.
+ */
+export const DEFAULT_GLOBAL_DAILY_COST_BUDGET_USD = 3
+
+const COST_MICRO_USD_PER_USD = 1_000_000
+
 export type TutorBudgetCode =
   | 'BURST_LIMIT_REACHED'
   | 'DAILY_LIMIT_REACHED'
   | 'DAILY_BUDGET_REACHED'
+  | 'DAILY_COST_BUDGET_REACHED'
 
 export type TutorBudgetResult =
   | { allowed: true }
@@ -43,6 +61,32 @@ export function resolveGlobalDailyBudget(): number {
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_GLOBAL_DAILY_BUDGET
   return parsed
+}
+
+export function resolveGlobalDailyCostBudgetUsd(): number {
+  const raw = process.env.AI_DAILY_COST_BUDGET_USD
+  if (!raw) return DEFAULT_GLOBAL_DAILY_COST_BUDGET_USD
+  const parsed = Number.parseFloat(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_GLOBAL_DAILY_COST_BUDGET_USD
+  return parsed
+}
+
+/**
+ * Records a completed call's real cost against the shared daily total.
+ * Stored as integer micro-USD (cost × 1,000,000) — `RateLimitModel.count`
+ * is incremented with Mongo's `$inc`, which is exact for integers but would
+ * silently accumulate floating-point drift over thousands of calls if the
+ * raw dollar float were stored instead.
+ *
+ * Called only with a real, observed cost (openrouter.ts already omits
+ * `costUsd` rather than guessing when the gateway doesn't report it — see
+ * `ModelMetric`), so this must never be called speculatively or with an
+ * estimate.
+ */
+export async function recordTutorCost(costUsd: number): Promise<void> {
+  const microUsd = Math.round(costUsd * COST_MICRO_USD_PER_USD)
+  if (microUsd <= 0) return
+  await incrementUsage('ai-tutor-global-cost', 'all-users', DAY_SECS, microUsd)
 }
 
 /**
@@ -87,6 +131,22 @@ export async function checkTutorBudget(userId: string): Promise<TutorBudgetResul
       code: 'DAILY_BUDGET_REACHED',
       message:
         'The AI tutor has reached its shared daily limit for the preview. Please try again tomorrow.',
+      retryable: false,
+    }
+  }
+
+  // Last, and a peek rather than a check-and-increment: cost is only ever
+  // recorded after a real call completes (recordTutorCost), so there is
+  // nothing here for a rejected request to inflate — unlike the request
+  // counters above, this check cannot itself be gamed by retrying.
+  const spentMicroUsd = await peekUsage('ai-tutor-global-cost', 'all-users', DAY_SECS)
+  const budgetMicroUsd = resolveGlobalDailyCostBudgetUsd() * COST_MICRO_USD_PER_USD
+  if (spentMicroUsd >= budgetMicroUsd) {
+    return {
+      allowed: false,
+      code: 'DAILY_COST_BUDGET_REACHED',
+      message:
+        'The AI tutor has reached its shared daily spending limit for the preview. Please try again tomorrow.',
       retryable: false,
     }
   }

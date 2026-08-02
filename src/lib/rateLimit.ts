@@ -53,3 +53,70 @@ export async function checkRateLimit(
     return { allowed: true, remaining: 1 }
   }
 }
+
+/**
+ * Records an amount against a fixed window without checking or returning any
+ * limit — the counting half of a check-before/record-after pattern for
+ * values that aren't known until after the guarded work completes (e.g. the
+ * real dollar cost of an AI call, only available once the response has
+ * arrived). Reuses `checkRateLimit`'s exact key/window scheme so a `peekUsage`
+ * call for the same action/subject/window reads what this wrote.
+ *
+ * Fails soft and silently: a lost cost sample must never break an AI reply
+ * that has already been generated and billed to the account regardless.
+ */
+export async function incrementUsage(
+  action: string,
+  subject: string,
+  windowSecs: number,
+  amount: number,
+): Promise<void> {
+  const now = Date.now()
+  const windowMs = windowSecs * 1000
+  const windowId = Math.floor(now / windowMs) * windowMs
+  const key = `${action}:${subject}:${windowId}`
+  const expiresAt = new Date(windowId + windowMs * 2)
+
+  try {
+    await connectDB()
+    await RateLimitModel.findOneAndUpdate(
+      { key },
+      { $inc: { count: amount }, $setOnInsert: { expiresAt } },
+      { upsert: true },
+    )
+  } catch {
+    // Same duplicate-key race as checkRateLimit can happen here; a second
+    // plain increment attempt is enough, and if that also fails the sample
+    // is simply lost rather than surfaced to the caller.
+    try {
+      await RateLimitModel.findOneAndUpdate({ key }, { $inc: { count: amount } })
+    } catch {
+      // Fail soft.
+    }
+  }
+}
+
+/**
+ * Reads a fixed window's current count without incrementing it — the
+ * check half of the check-before/record-after pattern `incrementUsage`
+ * writes for. Fails open (returns 0) on any error, same philosophy as
+ * `checkRateLimit`: a read failure must never block a real request.
+ */
+export async function peekUsage(
+  action: string,
+  subject: string,
+  windowSecs: number,
+): Promise<number> {
+  const now = Date.now()
+  const windowMs = windowSecs * 1000
+  const windowId = Math.floor(now / windowMs) * windowMs
+  const key = `${action}:${subject}:${windowId}`
+
+  try {
+    await connectDB()
+    const doc = await RateLimitModel.findOne({ key }).lean<{ count?: number } | null>()
+    return doc?.count ?? 0
+  } catch {
+    return 0
+  }
+}

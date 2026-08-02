@@ -4,6 +4,7 @@ import { resolveChainForTier, type ModelTier } from './model-registry'
 import { buildSystemPrompt } from './prompts'
 import { isCircuitOpen, recordModelFailure } from './circuit-breaker'
 import { logModelMetric } from './model-metrics'
+import { recordTutorCost } from './tutor-budget'
 import type { PracticeMode, SupportedLanguage, TutorLevel } from '@/config/ai-practice'
 
 export type HistoryMessage = {
@@ -339,6 +340,13 @@ export async function* streamTutor(
     outcome: 'success',
     costUsd,
   })
+  // Roadmap #30 (§19.6.3): meter real spend, not just request count. Cost
+  // is unknown until here — the reply has already reached the learner, so
+  // this is bookkeeping for the *next* request's budget check, never a
+  // reason to fail this one. Awaited (not fire-and-forget): a serverless
+  // function can be frozen the moment its response finishes, which would
+  // silently drop an un-awaited write.
+  if (costUsd !== undefined) await recordTutorCost(costUsd)
 }
 
 export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
@@ -434,14 +442,17 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
     }
 
     const usageCost = (data as { usage?: { cost?: unknown } } | null)?.usage?.cost
+    const costUsd = typeof usageCost === 'number' ? usageCost : undefined
     logModelMetric({
       modelId,
       gateway: 'openrouter',
       tier: req.tier,
       latencyMs: Date.now() - attemptStartedAt,
       outcome: 'success',
-      costUsd: typeof usageCost === 'number' ? usageCost : undefined,
+      costUsd,
     })
+    // Roadmap #30 (§19.6.3) — see the matching comment in streamTutor.
+    if (costUsd !== undefined) await recordTutorCost(costUsd)
 
     return { reply }
   }

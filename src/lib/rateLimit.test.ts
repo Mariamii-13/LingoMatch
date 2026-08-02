@@ -2,18 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const connectDB = vi.fn()
 const findOneAndUpdate = vi.fn()
+const findOne = vi.fn()
 
 vi.mock('./db', () => ({ connectDB: () => connectDB() }))
 vi.mock('./models/RateLimit', () => ({
-  default: { findOneAndUpdate: (...args: unknown[]) => findOneAndUpdate(...args) },
+  default: {
+    findOneAndUpdate: (...args: unknown[]) => findOneAndUpdate(...args),
+    findOne: (...args: unknown[]) => findOne(...args),
+  },
 }))
 
-const { checkRateLimit } = await import('./rateLimit')
+const { checkRateLimit, incrementUsage, peekUsage } = await import('./rateLimit')
 
 describe('checkRateLimit', () => {
   beforeEach(() => {
     connectDB.mockReset().mockResolvedValue(undefined)
     findOneAndUpdate.mockReset()
+    findOne.mockReset()
   })
 
   it('allows a request inside the window and reports what is left', async () => {
@@ -63,5 +68,63 @@ describe('checkRateLimit', () => {
       remaining: 1,
     })
     expect(findOneAndUpdate).not.toHaveBeenCalled()
+  })
+})
+
+describe('incrementUsage', () => {
+  beforeEach(() => {
+    connectDB.mockReset().mockResolvedValue(undefined)
+    findOneAndUpdate.mockReset().mockResolvedValue({ count: 1 })
+  })
+
+  it('increments by the given amount, not a fixed 1', async () => {
+    await incrementUsage('ai-tutor-global-cost', 'all-users', 86_400, 2600)
+    expect(findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ key: expect.stringContaining('ai-tutor-global-cost:all-users:') }),
+      expect.objectContaining({ $inc: { count: 2600 } }),
+      expect.objectContaining({ upsert: true }),
+    )
+  })
+
+  it('retries a duplicate-key race as a plain increment', async () => {
+    findOneAndUpdate
+      .mockRejectedValueOnce(Object.assign(new Error('duplicate'), { code: 11000 }))
+      .mockResolvedValueOnce({ count: 3 })
+    await expect(incrementUsage('action', 'subject', 60, 5)).resolves.toBeUndefined()
+    expect(findOneAndUpdate).toHaveBeenCalledTimes(2)
+  })
+
+  it('fails soft when every write fails, rather than throwing', async () => {
+    findOneAndUpdate.mockRejectedValue(new Error('write concern failed'))
+    await expect(incrementUsage('action', 'subject', 60, 5)).resolves.toBeUndefined()
+  })
+
+  it('fails soft when the database cannot be reached', async () => {
+    connectDB.mockRejectedValue(new Error('querySrv ECONNREFUSED'))
+    await expect(incrementUsage('action', 'subject', 60, 5)).resolves.toBeUndefined()
+  })
+})
+
+describe('peekUsage', () => {
+  beforeEach(() => {
+    connectDB.mockReset().mockResolvedValue(undefined)
+    findOne.mockReset()
+    findOneAndUpdate.mockReset()
+  })
+
+  it('returns the current count without writing anything', async () => {
+    findOne.mockReturnValue({ lean: () => Promise.resolve({ count: 42 }) })
+    await expect(peekUsage('ai-tutor-global-cost', 'all-users', 86_400)).resolves.toBe(42)
+    expect(findOneAndUpdate).not.toHaveBeenCalled()
+  })
+
+  it('returns 0 when no window document exists yet', async () => {
+    findOne.mockReturnValue({ lean: () => Promise.resolve(null) })
+    await expect(peekUsage('action', 'subject', 60)).resolves.toBe(0)
+  })
+
+  it('fails open to 0 when the database cannot be reached', async () => {
+    connectDB.mockRejectedValue(new Error('querySrv ECONNREFUSED'))
+    await expect(peekUsage('action', 'subject', 60)).resolves.toBe(0)
   })
 })
