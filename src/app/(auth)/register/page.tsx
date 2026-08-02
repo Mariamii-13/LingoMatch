@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 
 import { Button } from "@/components/ui/button"
@@ -11,8 +11,21 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { GoogleIcon } from "@/components/shared/google-icon"
 
+// `useSearchParams()` opts this page into client-side rendering up to the
+// nearest Suspense boundary (roadmap #33, §20.3's `?ref=` param) — the
+// default export below supplies that boundary so the rest of the form still
+// has something to paint immediately rather than blocking on it.
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="rounded-xl border bg-card p-6 shadow-sm" />}>
+      <RegisterForm />
+    </Suspense>
+  )
+}
+
+function RegisterForm() {
   const router = useRouter()
+  const ref = useSearchParams().get("ref") ?? ""
   const [displayName, setDisplayName] = useState("")
   const [email, setEmail] = useState("")
   const [username, setUsername] = useState("")
@@ -40,7 +53,13 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName, email, username, password }),
+        body: JSON.stringify({
+          displayName,
+          email,
+          username,
+          password,
+          ...(ref ? { ref } : {}),
+        }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -74,6 +93,11 @@ export default function RegisterPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Set up your profile and choose how you want to practise.
         </p>
+        {ref && (
+          <p className="mt-3 rounded-lg bg-primary/10 px-3 py-2 text-sm text-primary">
+            Invited by @{ref} — you&apos;ll be connected as friends once you sign up.
+          </p>
+        )}
       </div>
 
       <Button

@@ -17,6 +17,15 @@ export const RegisterSchema = z.object({
     .string({ error: (i) => i.input === undefined ? 'Password is required' : 'Password must be a string' })
     .min(8, { error: 'Password must be at least 8 characters' })
     .max(100, { error: 'Password must be at most 100 characters' }),
+  // Roadmap #33: the inviter's username, carried from a shared invite link.
+  // Optional and unauthenticated-input, so it is validated shape-only here —
+  // applyReferral() looks it up and silently no-ops if it doesn't resolve to
+  // a real account, rather than trusting it further at this boundary.
+  ref: z
+    .string()
+    .max(20)
+    .regex(/^[a-zA-Z0-9_]+$/)
+    .optional(),
 })
 
 export const LoginSchema = z.object({

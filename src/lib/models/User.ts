@@ -135,6 +135,10 @@ const UserSchema = new Schema(
       type: [{ type: Schema.Types.ObjectId, ref: 'User' }],
       default: [],
     },
+    // Roadmap #33 (§20.3): who referred this account, if anyone. Set once at
+    // registration and never changed — attribution, not a live relationship
+    // (the actual connection this creates lives in `friends`, above).
+    invitedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 )

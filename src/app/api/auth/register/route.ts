@@ -6,6 +6,7 @@ import { RegisterSchema } from '@/lib/validations/auth'
 import { allowRegistration } from '@/lib/auth-throttle'
 import { getClientIp } from '@/lib/request-identity'
 import { internalErrorResponse } from '@/lib/observability/report.server'
+import { applyReferral } from '@/lib/referral.server'
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    const { displayName, email, username, password } = parsed.data
+    const { displayName, email, username, password, ref } = parsed.data
 
     await connectDB()
 
@@ -49,8 +50,16 @@ export async function POST(req: NextRequest) {
       passwordHash,
     })
 
+    // Roadmap #33 (§20.3): connects the new account with whoever invited
+    // them, immediately — never blocks or fails registration itself.
+    const referral = await applyReferral(user._id.toString(), ref)
+
     return NextResponse.json(
-      { message: 'Account created successfully', userId: user._id.toString() },
+      {
+        message: 'Account created successfully',
+        userId: user._id.toString(),
+        referredBy: referral.applied ? referral.inviterUsername : null,
+      },
       { status: 201 }
     )
   } catch (error) {
