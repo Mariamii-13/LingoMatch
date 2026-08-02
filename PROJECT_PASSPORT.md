@@ -2164,6 +2164,72 @@ metrics to score with" — a handful of live-verification requests is not that e
 layer (circuit breaker, metric logging) — the worst case of a defect here is a missing log line or
 a model tried once more than ideal, never a broken tutor reply.
 
+### 3.46 Declared-availability matching windows (roadmap #32, §20.3)
+
+**Purpose.** §20.3's liquidity fix: stop chat matching from requiring both partners online at the
+same instant. A user can now declare "I'm free right now / within the hour / later today / anytime
+in the next day" instead of only queueing live, and reciprocal matching happens whenever *either*
+side's request is written — no cron job, no push notifications, no new client polling.
+
+**Data model.** A new, separate collection, `MatchAvailability` (`src/lib/models/MatchAvailability.ts`):
+`userId`, `type` (`chat` only — see scope below), `targetLanguage`, `nativeLanguage`, `interests`,
+`countryPreference`, `status` (`open`|`matched`|`cancelled`), `conversationId`, `seen` (default
+`false`), `createdAt`, and `expiresAt` with a `{expires: 0}` TTL index (expires at the literal Date
+stored, so each row can carry a different window length). Deliberately **not** a change to
+`MatchRequest`'s existing fixed 900s TTL on `createdAt` — changing an existing TTL index's
+`expireAfterSeconds` in place needs a manual `collMod` against the live database, which is a
+production migration this feature has no reason to require. A fresh collection's TTL index has
+nothing to conflict with.
+
+**Matching.** `src/app/api/match/chat/route.ts`'s `tryMatch` (live `MatchRequest` queue, unchanged)
+now falls through to a new `tryAvailabilityMatch` when no live partner exists, checking `MatchAvailability`
+for a reciprocal, unexpired, non-blocked `open` row — country-preference-exact pass first, then any,
+mirroring the existing two-pass structure. Consuming a standing row here means **every** chat queuer,
+not just people who themselves declared a window, benefits from the wider pool. If a caller submits
+`availabilityMinutes > 0` and neither pass finds anyone, their own request becomes a standing
+`MatchAvailability` row instead of the ephemeral `MatchRequest` — `availabilityMinutes === 0` is
+byte-for-byte today's existing instant-only behaviour, unchanged.
+
+**Discovery for the offline party.** No push notifications exist in this codebase (3.13, deleted as
+unreferenced fake-data scaffolding) and building Web Push/email infra was explicitly out of scope
+for this block (owner directive, see below). Instead, `src/lib/pending-matches.server.ts` follows
+the same pattern the friend-request badge already uses (3.10): server-computed per render, not
+pushed. `getPendingMatches(userId)` reads unseen `matched` `MatchAvailability` rows, marks them
+`seen` in the same call, and the dashboard renders them via `PendingMatchCard`
+(`src/components/dashboard/pending-match-card.tsx`) — one-shot, same semantics as `MatchFoundModal`
+for the live path.
+
+**Scope.** Chat only. Video needs both participants literally online to start the call itself, so a
+standing-availability row would only ever produce a match nobody could act on immediately — no
+value without also building the scheduling/reminder machinery this block deliberately did not
+build.
+
+**Verified live, 2026-08-02, against the real database, not mocks:** two real accounts
+(`qaftue001`, `qaphase001`) via `next start` (dev-mode HMR interactivity is unreliable in this
+sandbox per 17 — the documented `next start` workaround was used again and worked first try) in two
+isolated browser contexts (separate cookie jars). `qaftue001` declared French↔English, "Anytime in
+the next day" — no live partner, "You're on the list" shown, standing row created. `qaphase001`
+then queued English↔French, "Right now" — **matched instantly** against `qaftue001`'s standing row
+(72% compatibility, real `Conversation` created). `qaftue001`'s dashboard, reloaded, showed "QA
+Phase One wants to practise with you" via the pending-match card; a second reload showed nothing
+(seen, one-shot, as designed).
+
+**Full suite.** 443 passed, 11 skipped, 46 files — clean `npm run lint`, clean `npx tsc --noEmit`,
+clean `npm run build`.
+
+**Production readiness.** Production Ready.
+
+**A CEO decision recorded here, not designed further:** the owner, asked to weigh in on scope,
+raised a longer-term question rather than answering it directly — *"I expect live chat to
+eventually have its own dedicated real-time infrastructure, just as video has its own specialized
+infrastructure... decide whether the current implementation should continue using the existing
+architecture or whether the passport should record a future migration path."* Decision: **keep
+2s-polling for this block; do not build dedicated real-time chat infra now.** There is no evidence
+requirement for it yet — no production traffic, no measured latency complaint, no measured polling
+cost — and 18.6 ("evidence over originality, minimal scope over broad coverage") argues directly
+against building ahead of that evidence. Recorded as a **long-term architectural direction only**
+in 18.7, not scheduled work.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3218,7 +3284,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 29 | ~~Build the AI-quality eval harness~~ (§19.6.2) — **v1 done, 2026-08-01, see 3.40**: one seeded mistake per Tier-1 pair (not yet the full 20-turn/multi-error-type version) | High | Moderate | Already paid for itself: found a real, confirmed weakness on the Portuguese↔Spanish pair (2/2 samples) — §19.5's own predicted "extreme case" risk, now evidenced rather than theoretical | #28 (done, 3.38) made the key metric machine-gradable |
 | 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
 | 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 fully done, 2026-08-01, see 3.41 and 3.42** (including tutor-context weak-area injection) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
-| 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
+| 32 | ~~Declared-availability matching windows~~ (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | **Done, 2026-08-02 — see 3.46.** Chat only (video needs both sides live for the call itself); a new `MatchAvailability` collection, cross-matched at write-time against both the live queue and other standing rows, surfaced to the offline party via a dashboard card. Verified live against the real database with two real accounts | — |
 | 33 | ~~Invite-a-partner referral flow~~ (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | **Done, 2026-08-02 — see 3.44.** Solves acquisition and liquidity simultaneously; verified live end-to-end, including two real bugs found and fixed along the way | Google-signup referral capture is a known, documented gap — credentials registration only for now |
 | 34 | ~~Model registry + tier-eligibility hard filter~~ ~~+ circuit breaker~~ (§21.4 Phase 1) | High | Moderate | **Done, 2026-08-02 — see 3.39 (registry/filter) and 3.45 (circuit breaker).** Registry + hard filter shipped 2026-08-01, verified live. Circuit breaker built on `rateLimit.ts`'s existing counter — a model failing 5x in a 5-minute window is skipped without spending a network attempt | — |
 | 35 | ~~Production routing metrics~~ (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | **Done, 2026-08-02 — see 3.45.** Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) is now real; verified live against OpenRouter | — |
@@ -4360,6 +4426,34 @@ specifically to feature scope and language coverage:
 **Never revert:** do not read "provider independence" (18.1/21) or "the AI teacher should
 personalize" (18.2/20.8) as licence to build something novel for its own sake — every
 implementation of those principles must still clear this section's evidence bar.
+
+### 18.7 Long-term direction: dedicated real-time chat infrastructure (not scheduled)
+
+**Status: direction only, recorded 2026-08-02, not implementation.** Raised by the owner while
+scoping roadmap #32 (declared-availability matching windows, 3.46): *"I expect live chat to
+eventually have its own dedicated real-time infrastructure, just as video has its own specialized
+infrastructure. However, I do not want to introduce unnecessary complexity before it is
+justified."* The owner explicitly delegated the build-now-vs-defer call to this assistant as a CEO
+decision, with the constraint that if deferred, it be recorded as direction only, "unless [it] can
+justify building it now with evidence."
+
+**Decision: defer.** No evidence justifies it yet. Text chat currently runs on 2-second client
+polling (3.9, 3.11) against a pre-beta user base with no measured latency complaint, no measured
+polling cost, and no production traffic to size either against. Video already has dedicated
+infrastructure (LiveKit) because a video call cannot function on polling at all — that constraint
+does not apply to text. Building WebSocket/real-time chat infrastructure now would be scope ahead
+of demand, which 18.6 already establishes as the wrong default for this product.
+
+**What would justify revisiting this:** real usage data showing polling-driven cost or latency
+becoming a real constraint (§20.5's cost-ceiling discipline, applied to infrastructure instead of
+model spend), a message-volume level where 2s polling meaningfully degrades UX, or a concrete
+feature (typing indicators, read receipts, presence) that polling cannot reasonably support. Until
+one of those is real and measured, this stays a documented direction, not a roadmap item.
+
+**Never revert:** do not build dedicated real-time chat infrastructure (WebSockets, a pub/sub
+layer, Vercel Functions WebSocket upgrades, or a third-party realtime service) speculatively.
+Revisit only against the evidence bar above, the same discipline 18.6 already applies everywhere
+else in this document.
 
 ---
 
