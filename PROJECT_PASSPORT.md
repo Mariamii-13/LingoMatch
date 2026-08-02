@@ -44,6 +44,16 @@ teacher with memory, not a stateless chatbot — recorded in the new **section 2
 the deepened **18.2/20.8** respectively, with a full contradiction sweep across the rest of the
 document to keep everything consistent with them.
 
+A fifth pass, 2026-08-02, closed out §21.4 Phase 1 (roadmap #34's remaining piece and #35 in
+full): a per-model **circuit breaker** and **`lm-model-metric` production routing metrics**, both
+built entirely on infrastructure this project already has (the existing MongoDB fixed-window
+counter behind `rateLimit.ts`) rather than a new dependency, matching 18.6's "cheapest version
+that satisfies the requirement" test. This is the prerequisite §21.4 Phase 2 (roadmap #36,
+score-based dynamic routing) needs and did not have before — there was no evidence to route on.
+See 3.45. Verified live against the real database and OpenRouter, not just mocked: two real tutor
+turns through the presentation-check test account, including one that triggered a real correction
+and exercised the new explanation-language metric-enrichment path end to end.
+
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
 > **Section 18 is binding product direction** set by the owner — it constrains architecture and
@@ -201,7 +211,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `11a8ea6` — "feat: invite-a-partner referral flow (roadmap #33)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41), `74e25ac` (§20.8 item 5, §3.42), `e28e322` (repair fix, §3.43), `11a8ea6` (roadmap #33, §3.44) |
+| **HEAD** | `1893cfd` — "feat: per-model circuit breaker + production routing metrics (roadmap #34/#35)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41), `74e25ac` (§20.8 item 5, §3.42), `e28e322` (repair fix, §3.43), `11a8ea6` (roadmap #33, §3.44), `f0a6897` (docs), `1893cfd` (roadmap #34/#35, §3.45) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -2049,6 +2059,111 @@ code, fails soft on a DB error) plus the new gated live test above.
 **Production readiness.** Production Ready — verified live, repeatedly, including the two bugs
 found and fixed along the way.
 
+### 3.45 Circuit breaker + production routing metrics (roadmap #34 remainder, #35 — §21.4 Phase 1)
+
+**Purpose.** Closes out §21.4 Phase 1, the deterministic-routing groundwork §21 committed to
+before any scored or learned routing (Phase 2/3) is allowed to be built. Two pieces, picked
+together because they share one integration point (the chain-walking loops in `openrouter.ts`)
+and one piece of reused infrastructure:
+
+1. **Circuit breaker** (roadmap #34's remaining piece — the registry + tier hard filter half
+   shipped 2026-08-01, 3.39). A model that has failed `FAILURE_THRESHOLD` (5) times within
+   `FAILURE_WINDOW_SECS` (300) has its circuit considered open for the rest of that window; the
+   chain-walking loops skip it without spending a network attempt (and the ~25s timeout budget)
+   on a model already known to be down that window.
+2. **`lm-model-metric` production routing metrics** — the prerequisite §21.4 itself names for any
+   evidence-driven (rather than snapshot-benchmarked) Phase 2 routing decision: `modelId`,
+   `gateway`, `tier`, `latencyMs`, `ttftMs` (streaming only), `outcome`
+   (`success`|`advanced`|`repaired`|`failed`), `costUsd` (when the gateway reports it — see the
+   real limitation found below), `explanationLanguageCorrect` (§19.6.1's check, once an
+   explanation exists to validate).
+
+**Implementation, deliberately reusing what already exists (18.6):**
+- `src/lib/ai/circuit-breaker.ts` — `isCircuitOpen`/`recordModelFailure`, built directly on the
+  same `RateLimitModel` (`src/lib/models/RateLimit.ts`) `rateLimit.ts` already proved out (3.21):
+  same atomic `findOneAndUpdate`+`$inc`, same TTL cleanup, same fail-open-on-DB-error posture —
+  under a separate `ai-circuit:` key namespace, not through `checkRateLimit` itself, because a
+  breaker needs a read that doesn't itself count as an attempt (`isCircuitOpen`) alongside a write
+  that does (`recordModelFailure`), two operations `checkRateLimit`'s single always-increments
+  call doesn't separate. No new dependency, no new collection.
+- `src/lib/ai/model-metrics.ts` — `logModelMetric()`, one `console.log` line prefixed
+  `lm-model-metric`, reusing 3.34's existing structured-log pattern (stdout/stderr, no
+  observability vendor, `grep`-able in Vercel runtime logs) rather than a new dependency, exactly
+  the reasoning 11.27 already settled for error reporting.
+- `openrouter.ts`'s `openStream`/`callTutor` loops: check `isCircuitOpen` before every attempt;
+  `recordModelFailure` + a `lm-model-metric` line (`outcome: 'advanced'`) on every availability
+  failure (§21.3's `isModelUnavailable` class only — a non-recoverable client error logs `'failed'`
+  and does not touch the breaker, since that's a request-shape problem, not a model-availability
+  one); one `'success'` line for the attempt that actually serves the reply, with real
+  `latencyMs`/`ttftMs`/`costUsd` where available. Logged **after** the try/finally around stream
+  consumption, not inside it — a reader error mid-stream must not be reported as a successful
+  attempt.
+- **Correlating the explanation-language check without touching the delicate streaming/parsing
+  logic in `structured-tutor-reply.ts`:** `streamTutor` gained one optional parameter,
+  `onModelResolved?: (modelId: string) => void`, fired once as soon as a model has accepted the
+  request — the same non-invasive callback shape as the existing `onParsed` hook one layer up, not
+  a change to the generator's yield/return contract. `streamStructuredTutorReply` captures the
+  resolved model id via a closure variable and, once it knows whether an explanation existed, was
+  mismatched, and was (or wasn't) successfully repaired, logs a second, correctness-focused
+  `lm-model-metric` line correlated by that same `modelId` — `outcome: 'repaired'` on a successful
+  repair, `'success'` otherwise, `explanationLanguageCorrect` set from the real check, never
+  fabricated when there's no explanation to validate (field simply omitted).
+- `usage: { include: true }` added to every OpenRouter request body (both streaming and
+  non-streaming) so real `usage.cost` is captured when the gateway provides it.
+
+**A real, externally-confirmed gateway limitation, not guessed at.** OpenRouter's own streaming
+API does not reliably include `usage.cost` in the final SSE chunk even with `usage.include: true`
+requested — a documented, currently-open limitation on OpenRouter's side (confirmed via their own
+docs and multiple third-party bug reports, not assumed). `costUsd` is therefore populated from
+real data for the non-streaming `callTutor` path (currently unused in production — see below) and
+captured *opportunistically* for the streaming path this app actually uses, staying `undefined`
+rather than fabricated when the gateway doesn't send it. This is the honest, evidence-bounded
+scope §18.6 asks for — building a workaround for a gateway-side gap that may close on its own
+would be exactly the "innovation without measurable value" 18.6 warns against.
+
+**A pre-existing fact confirmed, not introduced, by this block.** `callTutor` (the non-streaming
+chain-walker) is fully implemented, tested, and now instrumented identically to `streamTutor`, but
+is not actually called anywhere in production — every real request path uses
+`streamStructuredTutorReply` → `streamTutor`. Left in place unchanged: it is exercised by the
+existing test suite and is the natural implementation for any future non-streaming caller (e.g.
+the eval harness), and removing working, tested code outside this block's scope would be scope
+creep, not cleanup.
+
+**Testing.** 20 new tests: `circuit-breaker.test.ts` (8 — open/closed at and below threshold,
+fail-open on a DB error, a read never itself counting as a failure, duplicate-key races),
+`model-metrics.test.ts` (3 — the log line is prefixed and grep-able, every field round-trips
+through JSON, optional fields are omitted rather than fabricated when unset), plus 9 new cases
+across `openrouter.test.ts` (circuit-breaker skip/record wiring, `lm-model-metric` lines for
+success/advanced/failed/streaming-with-ttft outcomes, `onModelResolved` firing) and
+`structured-tutor-reply.test.ts` (the explanation-language correctness metric, correlated by
+model id, for the matched/repaired/repair-failed/no-explanation cases).
+
+**Verified live, 2026-08-02, against the real database and OpenRouter, not mocks:** signed in as
+the `presentation.check01` test account (created in 3.9 for exactly this kind of check) against
+the already-running dev server via a real NextAuth credentials round trip (CSRF token → session
+cookie), then drove two real tutor turns through `/api/ai-practice`: a session start (full
+streamed reply, real OpenRouter round trip through the now-instrumented chain) and a
+deliberately-wrong-grammar message (`"Yo va a la tienda ayer"`) that produced a real correction
+and explanation — exercising the full new path end to end, including the
+`onModelResolved`/explanation-language metric-enrichment code added specifically for this block.
+Both requests returned 200 with complete, coherent replies; no exception surfaced anywhere in the
+new code, which would have shown up as a broken stream or a 500 given these calls are inline, not
+fire-and-forget.
+
+**Full suite.** 435 passed, 11 skipped, 45 files (up from 412/11/43) — clean `npm run lint`, clean
+`npx tsc --noEmit`, clean `npm run build` (route manifest unchanged, `ƒ /api/ai-practice` present
+as before).
+
+**Roadmap.** #34 now fully done (registry + hard filter, 3.39; circuit breaker, this block). #35
+done. §21.4 Phase 1 is complete — #36 (Phase 2, second gateway + score-based routing) is now
+actually unblocked rather than aspirational, though still gated on real metrics accumulating in
+production first (§21.5: "do not build Phase 2's scored routing before Phase 1 has produced real
+metrics to score with" — a handful of live-verification requests is not that evidence).
+
+**Production readiness.** Production Ready. Purely additive and fails open by design at every
+layer (circuit breaker, metric logging) — the worst case of a defect here is a missing log line or
+a model tried once more than ideal, never a broken tutor reply.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3105,9 +3220,9 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 fully done, 2026-08-01, see 3.41 and 3.42** (including tutor-context weak-area injection) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
 | 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
 | 33 | ~~Invite-a-partner referral flow~~ (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | **Done, 2026-08-02 — see 3.44.** Solves acquisition and liquidity simultaneously; verified live end-to-end, including two real bugs found and fixed along the way | Google-signup referral capture is a known, documented gap — credentials registration only for now |
-| 34 | ~~Model registry + tier-eligibility hard filter~~ + circuit breaker (§21.4 Phase 1) | High | Moderate | **Partially done, 2026-08-01** — see 3.39. Registry + hard filter shipped and verified live (a free-tier request now skips the credit-less paid model entirely, both faster and cost-safe). **Circuit breaker not built** — remains open | Reuses `rateLimit.ts`'s existing counting infra (for the still-open circuit-breaker piece) |
-| 35 | **Production routing metrics** (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) | Reuses 3.34's structured-log pattern |
-| 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35, and a confirmed concrete reason per 19.6.4 |
+| 34 | ~~Model registry + tier-eligibility hard filter~~ ~~+ circuit breaker~~ (§21.4 Phase 1) | High | Moderate | **Done, 2026-08-02 — see 3.39 (registry/filter) and 3.45 (circuit breaker).** Registry + hard filter shipped 2026-08-01, verified live. Circuit breaker built on `rateLimit.ts`'s existing counter — a model failing 5x in a 5-minute window is skipped without spending a network attempt | — |
+| 35 | ~~Production routing metrics~~ (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | **Done, 2026-08-02 — see 3.45.** Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) is now real; verified live against OpenRouter | — |
+| 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35 (both done) — still gated on real metrics actually accumulating in production, and a confirmed concrete reason per 19.6.4 |
 
 ---
 
@@ -3268,8 +3383,12 @@ runs in a fresh process; confirmed by restarting the dev server and re-testing.*
 
 ### Coverage
 
-**412 tests passing, 11 skipped, across 43 files** (as of the roadmap #33 block, 2026-08-02).
-5 new tests for the invite-a-partner referral flow (roadmap #33, 3.44 —
+**435 tests passing, 11 skipped, across 45 files** (as of the roadmap #34/#35 block, 2026-08-02).
+23 new tests for the circuit breaker and production routing metrics (§21.4 Phase 1, 3.45 —
+`circuit-breaker.test.ts`, 8; `model-metrics.test.ts`, 3; 9 new cases in `openrouter.test.ts` for
+the circuit-breaker/metric wiring; new cases in `structured-tutor-reply.test.ts` for the
+correlated explanation-language metric). Before that (2026-08-02, roadmap #33, 3.44): 412 tests,
+11 skipped, 43 files. 5 new tests for the invite-a-partner referral flow (3.44 —
 `referral.server.test.ts`, mocked Mongoose, same pattern as `moderation.server.test.ts`), plus a
 new gated live-database file, `referral.server.live.test.ts`, that caught the stale-schema
 environment gotcha described in section 13. Before that (2026-08-02, the 3.43 correction): 407
@@ -3312,6 +3431,8 @@ src/lib/ai/tutor-budget.test.ts                       three tiers + check orderi
 src/lib/ai/tutor-context.test.ts                      profile → tutor context
 src/lib/ai/tutor-live.test.ts                         live provider test (skipped by default), incl. live tier-filter check
 src/lib/ai/model-registry.test.ts                     registry construction, tier eligibility, ordering, dedup
+src/lib/ai/circuit-breaker.test.ts                    open/closed at threshold, fail-open, read-never-writes, duplicate-key races
+src/lib/ai/model-metrics.test.ts                      lm-model-metric line shape, JSON round-trip, optional-field omission
 src/lib/ai/eval-harness.test.ts                       eval-harness grading logic (pure, no API calls)
 src/lib/skill-review.server.test.ts                   Leitner progression (pure) + mocked-Mongoose review functions, incl. getWeakSkillsSummary
 src/lib/skill-tag-format.test.ts                      shared plain-language skill-tag formatter (review deck + tutor context)
@@ -5360,19 +5481,24 @@ next layer of sophistication with real data, exactly the same shape as §19.4's 
 - ✅ **Done, 2026-08-01 (3.39):** Make §20.5's tier-eligibility a registry field and a hard
   filter, replacing the "must be added before/alongside roadmap #1" ad-hoc requirement flagged in
   §19.3/§20.5 with a real mechanism — verified live.
-- **Not yet done. Circuit breaker, built on infrastructure this project already has**, not a new dependency:
-  the existing MongoDB fixed-window counter (`src/lib/rateLimit.ts`, 3.21) already does exactly
-  the counting a circuit breaker needs (atomic `findOneAndUpdate`+`$inc`, TTL cleanup, fails
-  open) — track failures-per-model-per-window the same way, open the circuit (mark
-  `status: 'circuit-open'` for a cooldown) when a model's failure rate crosses a threshold within
-  a window. This is 18.6 in miniature: the proven mechanism (rate limiter) reused for the proven
-  pattern (circuit breaker), not a new library.
-- **Not yet done. Metrics logging**, reusing 3.34's existing structured-log pattern rather than a new
-  observability vendor (11.27's reasoning applies identically here): one `lm-model-metric` line
-  per attempt — `modelId, gateway, tier, latencyMs, ttftMs, outcome
-  (success|advanced|repaired|failed), costUsd (from usage.cost when the gateway reports it),
-  explanationLanguageCorrect (once 19.6.1 exists)`. This is what makes Phase 2 possible later —
-  without it, "improve over time using real production evidence" has no evidence to use.
+- ✅ **Done, 2026-08-02 (3.45):** Circuit breaker, built on infrastructure this project already
+  has, not a new dependency: `src/lib/ai/circuit-breaker.ts` reuses the same `RateLimitModel`
+  `rateLimit.ts` (3.21) already proved out — atomic `findOneAndUpdate`+`$inc`, TTL cleanup, fails
+  open — under a separate `ai-circuit:` key namespace. A model failing 5 times inside a 5-minute
+  window is skipped for the rest of that window; the circuit self-closes when the window rolls
+  over. This is 18.6 in miniature: the proven mechanism (rate limiter) reused for the proven
+  pattern (circuit breaker), not a new library. Verified live and by 8 unit tests.
+- ✅ **Done, 2026-08-02 (3.45):** Metrics logging, reusing 3.34's existing structured-log pattern
+  rather than a new observability vendor (11.27's reasoning applies identically here):
+  `src/lib/ai/model-metrics.ts`'s `logModelMetric()` writes one `lm-model-metric` line —
+  `modelId, gateway, tier, latencyMs, ttftMs, outcome
+  (success|advanced|repaired|failed), costUsd (from usage.cost when the gateway reports it — a
+  real OpenRouter streaming-side limitation was confirmed, not guessed, so this is `undefined`
+  rather than fabricated on most streamed replies today), explanationLanguageCorrect` — one
+  operational line per attempt from `openrouter.ts`, one correctness-focused line correlated by
+  `modelId` from `structured-tutor-reply.ts` once the explanation-language check has run. This is
+  what makes Phase 2 possible — production metrics now exist; whether *enough* of them exist yet
+  to score on is a separate, later question (§21.5, unchanged).
 
 **Phase 2 — once Phase 1 has produced real metrics, and/or a second gateway is wired per 19.6.4's
 existing gate (roadmap #36):**
@@ -5414,6 +5540,6 @@ value" test to this specific subsystem.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 34 | ~~Build the model registry + tier-eligibility hard filter~~ + circuit breaker (§21.4 Phase 1) | High | Moderate | **Registry + hard filter done, 2026-08-01 — see 3.39.** Formalises §20.5's cost-ceiling guarantee as a real mechanism instead of an env-var convention; verified live. **Circuit breaker still open** — no owner action, just not yet built | Reuses `src/lib/rateLimit.ts`'s existing counting infra for the circuit breaker — no new dependency |
-| 35 | **Add production routing metrics** (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | The prerequisite for any evidence-driven (rather than snapshot-benchmarked) routing decision — nothing in Phase 2 is possible without this | Reuses 3.34's existing structured-log pattern |
-| 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing using #35's real metrics** (§21.4 Phase 2) | Medium | High | The literal fulfilment of "intelligently choose... based on real production evidence" | #34, #35, and a confirmed concrete reason per 19.6.4's unchanged restraint |
+| 34 | ~~Build the model registry + tier-eligibility hard filter~~ ~~+ circuit breaker~~ (§21.4 Phase 1) | High | Moderate | **Done, 2026-08-02.** Registry + hard filter done 2026-08-01 (3.39) — formalises §20.5's cost-ceiling guarantee as a real mechanism instead of an env-var convention; verified live. Circuit breaker done 2026-08-02 (3.45), built on `src/lib/rateLimit.ts`'s existing counting infra — no new dependency | — |
+| 35 | ~~Add production routing metrics~~ (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | **Done, 2026-08-02 — see 3.45.** The prerequisite for any evidence-driven (rather than snapshot-benchmarked) routing decision — Phase 2 is now technically possible, still gated on real metrics actually accumulating | — |
+| 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing using #35's real metrics** (§21.4 Phase 2) | Medium | High | The literal fulfilment of "intelligently choose... based on real production evidence" | #34, #35 (both done) — a confirmed concrete reason per 19.6.4's unchanged restraint, and real accumulated metrics, still required |
