@@ -201,7 +201,7 @@ lint suppressions used to hide real problems.
 |---|---|
 | **Remote** | `https://github.com/Mariamii-13/LingoMatch.git` |
 | **Branch** | `main` (also the default/PR base branch) |
-| **HEAD** | `e28e322` — "fix: the explanation-language repair path had drifted from production" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41), `74e25ac` (§20.8 item 5, §3.42), `e28e322` (repair fix, §3.43) |
+| **HEAD** | `11a8ea6` — "feat: invite-a-partner referral flow (roadmap #33)" — plus this docs commit on top. Since `df823d0`: `68c564b` (§19 AI/voice strategy), `7c04171` (free-tier model swap, §20.6), `30c22a5` (roadmap #28, §3.38), `0d3a141` (roadmap #34, §3.39), `232da26` (roadmap #29, §3.40), `50889a2` (roadmap #31, §3.41), `74e25ac` (§20.8 item 5, §3.42), `e28e322` (repair fix, §3.43), `11a8ea6` (roadmap #33, §3.44) |
 | **Working tree** | Clean at time of writing |
 | **Local vs remote** | In sync, no divergence. The server-rendering work was developed on `perf/server-render-friends-settings-theme` and fast-forwarded into `main`; every block since (error-observability, CSP, blocking/moderation, and every block this session) was committed directly on `main` and pushed, so there is no branch left to merge. |
 | **Git user** | `mariamii13` |
@@ -1970,6 +1970,85 @@ account; do not chain many live-test runs back to back without expecting this.
 **Production readiness.** Explanation-language repair: **upgraded from Mostly Ready to Production
 Ready** for free-tier callers specifically — verified live, repeatedly, succeeding end to end.
 
+### 3.44 Invite-a-partner referral flow (roadmap #33)
+
+**Purpose.** §20.3's liquidity/growth mechanic: "LingoMatch's reciprocal matching model already
+encodes 'A wants what B has' — inviting one's own real exchange partner is a natural extension of
+that mechanic... standard, proven liquidity lever." Chosen over #32 (declared-availability
+matching windows) as the next block specifically for technical risk: #32 would modify the live
+matching-queue engine, the single most fragile, bug-prone subsystem in this project's own history
+(3.9's reciprocal-matching casing bug); this is purely additive and reuses infrastructure
+(friends, registration) that is already solid, not sensitive.
+
+**Design, deliberately minimal (18.6): one link, no referral-program mechanics.** No incentive or
+reward layer, no referral-code generation system, no tracking dashboard — those would be new,
+unproven complexity with no evidence behind them yet. What's proven and what this ships is just
+the connection itself: an invite guarantees the two people can reach each other immediately,
+solving the liquidity problem for that pair without waiting on the matching queue at all.
+
+**Implementation.**
+1. `User` gained one field, `invitedBy` (attribution only — the actual connection this creates
+   lives in the existing `friends` array, not a new relationship type).
+2. `src/lib/referral.server.ts` — `applyReferral(newUserId, refUsername)`: looks up the inviter by
+   username, and if found, **immediately** adds both accounts to each other's `friends` array —
+   reusing the exact `$addToSet` pattern `/api/friends/[id]/accept` already uses. No request/accept
+   round trip: the whole point of an invite link is that these two people already agreed to
+   connect in real life by the link existing, unlike a cold friend request between strangers.
+   Fails soft — an invalid, stale, or self-referential ref code must never fail registration
+   itself; reported via `reportServerError`, not thrown.
+3. `RegisterSchema` gained an optional `ref` field (shape-validated only; `applyReferral` is what
+   actually resolves it, and silently no-ops if it doesn't resolve to a real account).
+4. `(auth)/register` reads `?ref=` via `useSearchParams()` (wrapped in a `Suspense` boundary — the
+   idiomatic way to keep this one dynamic value from forcing the whole otherwise-static page into
+   full client-side rendering) and shows a small "Invited by @username" hint.
+5. `(app)/friends` gained an `InviteCard`: a copyable link,
+   `https://<host>/register?ref=<your-username>`. **Deliberately computed server-side** from the
+   real request's `Host` header (reusing 3.37's own `VERCEL === "1"` "is this genuinely HTTPS"
+   check) rather than `window.location.origin` client-side — no hydration mismatch, and no effect
+   needed just to display a static string.
+6. **Scoped to credentials registration only.** Google-signup referral capture is a known,
+   documented gap — carrying a `ref` code through the OAuth redirect round-trip would need a
+   cookie read inside `auth.ts`'s `signIn` callback, real additional complexity in an already
+   sensitive file, for what is likely a minority of invite-link clicks. Next increment if it
+   turns out to matter.
+
+**Two real bugs found by live testing, not the unit tests — both fixed before commit:**
+1. **A MongoDB update-document mixing bug.** The first version called
+   `User.findByIdAndUpdate(newUserId, { invitedBy: inviterId, $addToSet: { friends: inviterId } })`
+   — mixing a plain field path with an atomic operator in one update object. The `$addToSet` half
+   worked; `invitedBy` was silently dropped, with no thrown error for the fail-soft `catch` to
+   catch. All 5 mocked unit tests passed throughout, because they assert on what the code *calls*
+   Mongoose with, not on what MongoDB actually *does* with a given call shape. Fixed by wrapping
+   both under explicit operators: `{ $set: { invitedBy: inviterId }, $addToSet: {...} }`.
+2. **A stale-compiled-schema trap, specific to a long-running dev process.** After fixing (1),
+   *live HTTP registrations against the already-running dev server still failed* to persist
+   `invitedBy` — twice. The cause: `mongoose.models.User || mongoose.model('User', UserSchema)`
+   (every model file in this project) reuses whichever schema was first compiled into that
+   process; adding a field to the schema file does not retroactively reach an already-compiled
+   model without a process restart, and Mongoose's default strict mode silently drops writes to
+   paths the (stale) schema doesn't recognise — no error, no warning. Isolated by writing a new
+   gated live test (`referral.server.live.test.ts`) that runs in a **fresh** vitest worker process
+   against the real database: it passed immediately, proving the code was correct and the dev
+   server's in-memory model was stale. Confirmed by restarting that dev server and re-running the
+   exact same HTTP registration, which then worked. **A new class of "looks like a bug but isn't
+   quite — it's an environment artifact" finding for section 17's collection.**
+
+**Verified live, 2026-08-02, end to end against the real database and a real running server, not
+mocks:** registered three real accounts via the actual `/api/auth/register` endpoint with a real
+QA account (`qaftue001`) as the inviter — confirmed `invitedBy` set correctly, both `friends`
+arrays mutually updated, and a bad/unknown `ref` code registering cleanly with `referredBy: null`
+and no side effects. Logged in as the inviter and confirmed the Friends page server-renders the
+correct invite link for that exact account. All test accounts and the inviter's `friends` array
+were cleaned up afterward so the QA fixture (`qaftue001` friends with `qaphase001` only) is
+unchanged for future verification runs, matching this project's established practice for QA data.
+
+**Testing.** 5 unit tests in `referral.server.test.ts` (mocked Mongoose, same pattern as
+`moderation.server.test.ts`: applies correctly, no-ops on an unknown/missing/self-referential
+code, fails soft on a DB error) plus the new gated live test above.
+
+**Production readiness.** Production Ready — verified live, repeatedly, including the two bugs
+found and fixed along the way.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -2448,6 +2527,7 @@ load-time request, and is a small known waste.
 | Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and metrics (§21.4 Phase 1) not yet built |
 | Tier-1 language-pair quality | **Needs Work at the raw-model level, substantially mitigated in production** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the raw free-tier model (2/2 samples) — still do not present this pair as reliably supported on model quality alone. **But** production's repair mechanism now actually works (3.43): 3/3 triggered mismatches on this exact pair were corrected before the learner saw them |
 | Spaced-repetition review deck | **Production Ready** | Population, Leitner scheduling, API, UI and navigation all verified live end-to-end against the real database (3.41); Phase 2 (fitted half-life curve) and tutor-context injection of weak areas remain open |
+| Invite-a-partner referral flow | **Production Ready** | Verified live end-to-end against the real database and a real running server (3.44); two real bugs found and fixed along the way. Google-signup referral capture is a documented gap, credentials-only for now |
 | Tutor persistence | **Production Ready** | Verified reload, resume, continue, end, cross-account refusal |
 | Tutor streaming | **Production Ready** | Verified incremental render; errors before commit stay HTTP |
 | Cost metering | **Production Ready** | Three tiers, ordering tested, live 429 verified |
@@ -3024,7 +3104,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
 | 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 fully done, 2026-08-01, see 3.41 and 3.42** (including tutor-context weak-area injection) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
 | 32 | **Declared-availability matching windows** (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | Directly answers the liquidity risk (§10) that 18.5's voice-first direction makes worse; additive to the existing `MatchRequest` model, not a replacement for instant queueing | None — reuses existing matching engine |
-| 33 | **Invite-a-partner referral flow** (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | Solves acquisition and liquidity simultaneously; standard two-sided-marketplace playbook | None |
+| 33 | ~~Invite-a-partner referral flow~~ (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | **Done, 2026-08-02 — see 3.44.** Solves acquisition and liquidity simultaneously; verified live end-to-end, including two real bugs found and fixed along the way | Google-signup referral capture is a known, documented gap — credentials registration only for now |
 | 34 | ~~Model registry + tier-eligibility hard filter~~ + circuit breaker (§21.4 Phase 1) | High | Moderate | **Partially done, 2026-08-01** — see 3.39. Registry + hard filter shipped and verified live (a free-tier request now skips the credit-less paid model entirely, both faster and cost-safe). **Circuit breaker not built** — remains open | Reuses `rateLimit.ts`'s existing counting infra (for the still-open circuit-breaker piece) |
 | 35 | **Production routing metrics** (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) | Reuses 3.34's structured-log pattern |
 | 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35, and a confirmed concrete reason per 19.6.4 |
@@ -3089,6 +3169,17 @@ recurring in new code — "drive the real product" applies exactly as much to a 
 validator as to a bug in a prompt. A correctness component's own test suite can be internally
 consistent and still wrong if every test shares an assumption the real world doesn't.*
 
+**A mixed MongoDB update object silently dropped a field, and every mocked test passed anyway
+(roadmap #33, 3.44).** `User.findByIdAndUpdate(id, { invitedBy: x, $addToSet: { friends: y } })`
+mixes a plain field path with an atomic operator in one update document — the `$addToSet` half
+applied, `invitedBy` was silently dropped, and nothing threw for the fail-soft `catch` to catch.
+Five mocked unit tests passed throughout, because they assert on what the code *calls* Mongoose
+with, not on what MongoDB actually *does* with a given call shape — the exact same category of
+gap the language-detector bug above already demonstrated, now in a completely different subsystem.
+*Lesson: a mocked test can only be as good as the assumption baked into the mock. Fixed by
+wrapping every key under an explicit operator (`$set`/`$addToSet`), never mixing a bare field
+with one.*
+
 ### Unexpected architecture problems
 
 **No database connection timeouts.** One request took **13.2 minutes** in application code after
@@ -3107,6 +3198,19 @@ paginated views. *Lesson: treat lint errors as findings to understand, not noise
 `reset`; `middleware.ts` is now `proxy.ts`; folders prefixed `_` are non-routable. `AGENTS.md`
 says to read `node_modules/next/dist/docs/` before writing code, and following that instruction
 prevented at least two wrong implementations. *Lesson: read the installed docs, not memory.*
+
+**A long-running dev server can silently run a stale Mongoose schema (roadmap #33, 3.44).** Every
+model file in this project uses `mongoose.models.User || mongoose.model('User', UserSchema)` —
+correct, standard, and necessary to survive hot-reload without a "Cannot overwrite model" crash.
+But it also means a **field added to the schema does not reach an already-running process**: the
+first-compiled model stays cached for that process's lifetime, and Mongoose's default strict mode
+then silently drops writes to the field it doesn't recognise — no error, no warning, nothing to
+catch. Adding `invitedBy` to `User` and updating the code that writes it was completely correct,
+and still failed against the dev server that had been running since before the schema change,
+twice, before this was diagnosed. *Lesson, a variant of the one already on file about a `next dev`
+process outliving its shell (17): a running Node process is not just serving stale environment
+variables — it can be serving a stale compiled schema too. Isolated by writing a live test that
+runs in a fresh process; confirmed by restarting the dev server and re-testing.*
 
 ### Important refactors
 
@@ -3164,9 +3268,13 @@ prevented at least two wrong implementations. *Lesson: read the installed docs, 
 
 ### Coverage
 
-**407 tests passing, 10 skipped, across 41 files** (unchanged as of the 3.43 correction,
-2026-08-02 — that block only updated the gated live test file, adding no new mocked tests).
-Baseline before this work: 103. Since the last commit: 8 new tests for the tutor-context
+**412 tests passing, 11 skipped, across 43 files** (as of the roadmap #33 block, 2026-08-02).
+5 new tests for the invite-a-partner referral flow (roadmap #33, 3.44 —
+`referral.server.test.ts`, mocked Mongoose, same pattern as `moderation.server.test.ts`), plus a
+new gated live-database file, `referral.server.live.test.ts`, that caught the stale-schema
+environment gotcha described in section 13. Before that (2026-08-02, the 3.43 correction): 407
+tests, 10 skipped, 41 files — that block only updated the gated live test file, adding no new
+mocked tests. Baseline before this work: 103. Since the last commit: 8 new tests for the tutor-context
 weak-area injection (§20.8 item 5, 3.42 — 3 in `prompts.test.ts`, 3 for `getWeakSkillsSummary` in
 `skill-review.server.test.ts`, 2 in a new `skill-tag-format.test.ts` for the small shared
 formatter extracted from `ReviewClient.tsx`). No route-level test — verified live against a real
@@ -3207,6 +3315,8 @@ src/lib/ai/model-registry.test.ts                     registry construction, tie
 src/lib/ai/eval-harness.test.ts                       eval-harness grading logic (pure, no API calls)
 src/lib/skill-review.server.test.ts                   Leitner progression (pure) + mocked-Mongoose review functions, incl. getWeakSkillsSummary
 src/lib/skill-tag-format.test.ts                      shared plain-language skill-tag formatter (review deck + tutor context)
+src/lib/referral.server.test.ts                       invite-a-partner referral flow, mocked Mongoose
+src/lib/referral.server.live.test.ts                  live database test (skipped by default) — found the stale-schema gotcha (13)
 src/lib/ai/eval-harness.live.test.ts                  live provider test (skipped by default) — the harness itself, roadmap #29
 src/lib/ai/structured-tutor-reply.test.ts             JSON extraction, parsing, language detection, repair, streaming
 src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skipped by default) — found the 3.38 regression, then confirmed the 3.43 repair-success finding
