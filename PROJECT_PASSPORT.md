@@ -750,8 +750,8 @@ is still client-fetched behind a full-page spinner.
 
 **Purpose.** Text conversation between matched users or friends.
 
-**Frontend.** `(app)/messages` (list) and `(app)/messages/[conversationId]` (thread, 774 lines
-— the largest file in the repo). `MessengerShell` provides the two-pane layout.
+**Frontend.** `(app)/messages` (list) and `(app)/messages/[conversationId]` (thread). Split down
+from 774 to 358 lines (roadmap #16, 3.48) — `MessengerShell` provides the two-pane layout.
 
 **Realtime.** LiveKit data channels. `src/lib/messages/realtime.ts` publishes a
 `conversation.message` event to each participant's personal room (`lm-user-<userId>`) via
@@ -2286,6 +2286,34 @@ clean `tsc`, clean build.
 on any read failure, `incrementUsage` swallows write failures) — the worst case of a defect here
 is an uncounted dollar, never a broken tutor reply.
 
+### 3.48 Split the messages page (roadmap #16)
+
+**Starting point.** A prior block had already pulled the thread's network/realtime logic (initial
+load, live delivery, polling fallback, pagination, send/leave/feedback/add-friend actions) into
+`use-conversation-thread.ts` — that file's own header comment already cites roadmap #16 and
+`774` lines, but the roadmap table was never updated, and `page.tsx` was still 664 lines: three
+full modal components (`ReportModal`, `FeedbackModal`, `PostChatModal`) were still defined inline
+alongside the page's own JSX.
+
+**What this block did.** Moved those three modals out, unchanged, to `src/components/messages/`
+(`ReportModal.tsx`, `FeedbackModal.tsx`, `PostChatModal.tsx`) — the same directory
+`RealtimeMessagesProvider` and `MessengerShell` already live in. `page.tsx` now imports them
+instead of defining them, dropping from 664 to **358 lines**. No behaviour changed: same props,
+same JSX, same closures — a relocation, not a rewrite, matching the roadmap item's own instruction
+("move the polling/realtime logic, do not rewrite it") applied here to the modals instead, since
+the logic itself was already moved.
+
+**Verified live, 2026-08-03, against the real database, not mocks:** `next start`, real account
+(`qaftue001`), a real multi-message conversation. Thread rendered correctly, the relocated
+`ReportModal` opened and closed cleanly reading the same `Partner` props, and a real message sent
+through `useConversationThread`'s unchanged `sendMessage` path appeared instantly in both the
+thread and the conversation list preview.
+
+**Full suite.** 464 passed, 11 skipped — clean lint, clean `tsc`, clean build (route manifest
+unchanged, `ƒ /messages/[conversationId]` present as before).
+
+**Production readiness.** Production Ready.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3320,7 +3348,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 13 | **Instrument product analytics** (sign-up funnel, first-practice conversion, retention, tutor vs partner mix) | High | Moderate | The only way to learn whether anyone wants this | #2. **Attempted this block**: discovered via `vercel integration discover analytics` (PostHog, Statsig, GrowthBook), but `vercel integration add posthog --yes --no-claim` was **blocked by the Claude Code auto-mode classifier** as a production/billing-affecting action. Provisioning a marketplace integration needs the owner present to approve it — see 17 |
 | 14 | **Build the real admin analytics page** on those events | Medium | Moderate | Replaces the honest placeholder | #13 |
 | 15 | **Delete superseded Cloudinary avatars** | Medium | Low | Stops a storage-cost leak | Careful — deletes user files |
-| 16 | **Split the 774-line messages page** | Medium | Moderate | Maintainability. **Move the polling/realtime logic, do not rewrite it** | None |
+| 16 | ~~Split the 774-line messages page~~ | Medium | Moderate | **Done, 2026-08-03 — see 3.48.** Network/realtime logic was already relocated to a hook in an earlier block; this one moved the three remaining inline modal components out too, 664 → 358 lines. Verified live | — |
 | 17 | ~~User blocking, plus a moderation audit trail~~ | — | — | **Done** — see 3.36. Re-prioritised upward and implemented in the same block that recorded the voice-first direction (18.5), because live voice raises the cost of shipping without it | — |
 | 18 | ~~Push notification when a match is found~~ | — | — | **Done** in `030a211` — see 3.9. Browser `Notification` API, no server/third-party dependency. Live two-account click-through still owed (blocked this session by dev-server interactivity, see 17) | — |
 | 19 | **Backwards pagination through message history** | Low | Moderate | Users can only see the newest 100 | None |
