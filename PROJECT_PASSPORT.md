@@ -584,18 +584,20 @@ to another language mid-conversation.
 billed **to the account, not per user**. One user or one stuck retry loop could exhaust the
 shared quota in minutes and take the tutor down for everybody.
 
-**Implementation.** `src/lib/ai/tutor-budget.ts`, three tiers:
+**Implementation.** `src/lib/ai/tutor-budget.ts`, four tiers:
 
 | Tier | Key | Limit | Window |
 |---|---|---|---|
 | Burst | per user | 15 | 60s |
 | Personal daily | per user | 80 | 24h |
-| **Shared daily budget** | `all-users` | 45 (default) | 24h |
+| Shared daily budget (requests) | `all-users` | 45 (default) | 24h |
+| **Shared daily budget (real cost, roadmap #30)** | `all-users` | $3 (default) | 24h |
 
 **Check ordering is load-bearing and pinned by tests.** Every check increments its own counter,
 so the shared budget is consulted **last**, only after the caller clears their personal limits.
 Checking it earlier would let rejected spam inflate the global counter, letting one abusive
-client deny everyone — exactly what the budget prevents.
+client deny everyone — exactly what the budget prevents. The cost tier (3.47) is checked last of
+all, after the request-count budget.
 
 **Why 45.** OpenRouter's free tier allows **50 model requests per day for the whole account**
 (`X-RateLimit-Limit: 50`, `limit_source: openrouter_free_tier_daily`). Staying just under it
@@ -2230,6 +2232,60 @@ cost — and 18.6 ("evidence over originality, minimal scope over broad coverage
 against building ahead of that evidence. Recorded as a **long-term architectural direction only**
 in 18.7, not scheduled work.
 
+### 3.47 Cost-counting tutor budget (roadmap #30, §19.6.3)
+
+**Purpose.** §19.6.3's own diagnosis: request count stops being the right unit for spend control
+the moment a paid model is actually live — a long session costs far more than a fresh one at the
+same request count. This adds a real-dollar ceiling on top of (not instead of) the existing
+request-count budgets (3.7).
+
+**Metering already existed; only the gate was missing.** Roadmap #35 already made `openrouter.ts`
+request `usage: {include: true}` and log real `costUsd` per call via `lm-model-metric` — that part
+needed no new work. What was missing was turning that observed cost into something a budget check
+could actually consult before the next request, since a `console.log` line isn't queryable.
+
+**Implementation.** Two new primitives in `src/lib/rateLimit.ts`, reusing `checkRateLimit`'s exact
+key/window scheme (so they read/write the same window a `checkRateLimit` call would):
+`incrementUsage(action, subject, windowSecs, amount)` (record-only, arbitrary amount, fails soft)
+and `peekUsage(action, subject, windowSecs)` (read-only, fails open to 0). `tutor-budget.ts`'s
+`recordTutorCost(costUsd)` converts dollars to integer micro-USD before incrementing — `$inc` is
+exact for integers but would accumulate float drift over thousands of calls with a raw dollar
+float. `openrouter.ts` calls it, **awaited**, right after each real cost is captured — in both
+`callTutor` and `streamTutor` (a serverless function can be frozen the instant its response
+finishes, so this is not fire-and-forget). `checkTutorBudget` gained a fourth, final check: a
+`peekUsage` (not a check-and-increment) against `AI_DAILY_COST_BUDGET_USD` (default $3/day).
+A peek is correct here, not a race risk the way the request counters would be if reordered: cost
+is only ever recorded after a real successful call, so a rejected request can never inflate it —
+unlike the request-count tiers, this dimension cannot be gamed by retrying.
+
+**Why $3/day, and why it's a circuit breaker, not the primary cost control.** §20.5 measured real
+paid-chain cost at ≈$0.0026/message; even the full existing 45-request daily budget running
+entirely on the paid model would only reach ≈$0.12/day. $3/day is deliberately generous — this
+exists to catch something going structurally wrong (e.g. a routing bug sending free-tier traffic
+through the paid chain), not to be the everyday limiter. The actual free-vs-paid cost containment
+is §20.5's plan-aware routing design, a separate, larger, not-yet-built item.
+
+**Known gap, not fixed here.** The repair call in `structured-tutor-reply.ts` (§19.6.1, roadmap
+#28) makes its own direct OpenRouter request outside `callTutor`/`streamTutor` and does not request
+`usage: {include: true}`, so its (small, capped at 200 tokens) cost is not captured by this budget.
+Left alone deliberately — 16's "what not to rewrite" list protects that function, and the repair
+call's cost is bounded and rare enough that the gap is worth naming, not worth the risk of touching
+a function that already has documented, tested tradeoffs.
+
+**Verified.** 24 new/changed tests across `rateLimit.test.ts`, `tutor-budget.test.ts` and
+`openrouter.test.ts` — ordering, the four-tier gate, micro-USD rounding, fail-open/fail-soft
+behaviour, and that `recordTutorCost` fires with the real observed cost (and only then) in both
+`callTutor` and `streamTutor`. Live-verified against the real database and a real account
+(`qaftue001`, `next start`): a full AI-practice turn completed normally with the new `peekUsage`
+call in the hot path — since no paid-model credits exist yet (roadmap #1), this call's cost was
+$0/unreported, so `recordTutorCost` correctly did not fire; the code path this block adds is
+dormant until #1 ships, exactly as intended. Full suite (464 passed, 11 skipped), clean lint,
+clean `tsc`, clean build.
+
+**Production readiness.** Production Ready. Fails open at every new layer (`peekUsage` returns 0
+on any read failure, `incrementUsage` swallows write failures) — the worst case of a defect here
+is an uncounted dollar, never a broken tutor reply.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -2400,7 +2456,8 @@ Zustand would be pure overhead.
 | `OPENROUTER_API_KEY` | AI tutor | Yes for tutor |
 | `AI_MODEL_DEFAULT` | Preferred model, comma-separated allowed | No (falls back to free chain) |
 | `AI_MODEL_FALLBACKS` | Extra fallbacks before built-ins | No |
-| `AI_DAILY_REQUEST_BUDGET` | Shared daily tutor budget | No (default 45) |
+| `AI_DAILY_REQUEST_BUDGET` | Shared daily tutor budget (requests) | No (default 45) |
+| `AI_DAILY_COST_BUDGET_USD` | Shared daily tutor budget (real cost, roadmap #30) | No (default $3) |
 | `CLOUDINARY_CLOUD_NAME` | Avatar storage | Yes for uploads |
 | `CLOUDINARY_API_KEY` | Avatar storage | Yes for uploads |
 | `CLOUDINARY_API_SECRET` | Avatar storage | Yes for uploads |
@@ -3282,7 +3339,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 27 | ~~Group practice rooms~~ **Superseded by #32/#33 below** — §20.3 found a more evidence-backed liquidity fix | — | — | — | — |
 | 28 | ~~Machine-check the tutor's explanation-language rule~~ (structured output + repair call, §19.6.1) | — | — | **Done**, 2026-08-01 — see 3.38. Structured JSON output, independent `franc`-based language-ID validation, and a one-shot repair call now sit between the model and the learner. Detection verified live and correct (a false-negative bug found live was fixed and pinned with a regression test). **Repair success also verified live, 2026-08-02 — see 3.43**: once roadmap #34 shipped, repair started targeting a reachable free model instead of the credit-less paid one, and succeeded 3/3 times observed triggering | — |
 | 29 | ~~Build the AI-quality eval harness~~ (§19.6.2) — **v1 done, 2026-08-01, see 3.40**: one seeded mistake per Tier-1 pair (not yet the full 20-turn/multi-error-type version) | High | Moderate | Already paid for itself: found a real, confirmed weakness on the Portuguese↔Spanish pair (2/2 samples) — §19.5's own predicted "extreme case" risk, now evidenced rather than theoretical | #28 (done, 3.38) made the key metric machine-gradable |
-| 30 | **Extend `tutor-budget.ts` from request-counting to cost-counting** (§19.6.3) | Medium | Moderate | Correct cost control once a paid model is actually live; prerequisite for raising `AI_DAILY_REQUEST_BUDGET` further | #1 (buying credits) makes this urgent, not optional |
+| 30 | ~~Extend `tutor-budget.ts` from request-counting to cost-counting~~ (§19.6.3) | Medium | Moderate | **Done, 2026-08-02/03 — see 3.7 and 3.47.** A fourth budget tier gates on real accumulated `$` cost (default $3/day), checked last, fed by the `costUsd` roadmap #35 already captures. Dormant until #1 ships real paid-chain traffic to meter — verified live that the new code path doesn't disturb the existing free-tier hot path | #1 (buying credits) makes this urgent, not optional |
 | 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 fully done, 2026-08-01, see 3.41 and 3.42** (including tutor-context weak-area injection) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
 | 32 | ~~Declared-availability matching windows~~ (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | **Done, 2026-08-02 — see 3.46.** Chat only (video needs both sides live for the call itself); a new `MatchAvailability` collection, cross-matched at write-time against both the live queue and other standing rows, surfaced to the offline party via a dashboard card. Verified live against the real database with two real accounts | — |
 | 33 | ~~Invite-a-partner referral flow~~ (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | **Done, 2026-08-02 — see 3.44.** Solves acquisition and liquidity simultaneously; verified live end-to-end, including two real bugs found and fixed along the way | Google-signup referral capture is a known, documented gap — credentials registration only for now |
