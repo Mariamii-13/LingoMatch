@@ -1,6 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { callTutor, OpenRouterError, streamTutor } from './openrouter'
 import { FREE_TUTOR_MODELS } from './models'
+
+const isCircuitOpen = vi.fn()
+const recordModelFailure = vi.fn()
+vi.mock('./circuit-breaker', () => ({
+  isCircuitOpen: (...args: unknown[]) => isCircuitOpen(...args),
+  recordModelFailure: (...args: unknown[]) => recordModelFailure(...args),
+}))
+
+const logModelMetric = vi.fn()
+vi.mock('./model-metrics', () => ({
+  logModelMetric: (...args: unknown[]) => logModelMetric(...args),
+}))
+
+const { callTutor, OpenRouterError, streamTutor } = await import('./openrouter')
 
 const MOCK_VALID_RESPONSE = {
   choices: [{ message: { content: 'Hello! How can I help you practise today?' } }],
@@ -44,6 +57,9 @@ beforeEach(() => {
   process.env.OPENROUTER_API_KEY = 'test-key'
   process.env.AI_MODEL_DEFAULT = 'google/gemini-2.5-flash'
   vi.spyOn(console, 'error').mockImplementation(() => {})
+  isCircuitOpen.mockReset().mockResolvedValue(false)
+  recordModelFailure.mockReset().mockResolvedValue(undefined)
+  logModelMetric.mockReset()
 })
 
 afterEach(() => {
@@ -405,5 +421,103 @@ describe('TutorRequest.tier hard filter', () => {
     )
     expect(modelsCalled).not.toContain('google/gemini-2.5-flash')
     expect(modelsCalled).toEqual([...FREE_TUTOR_MODELS])
+  })
+})
+
+// Roadmap #34 (§21.4 Phase 1, remaining piece): a model whose circuit is
+// already open must be skipped without spending a network attempt on it.
+describe('circuit breaker integration', () => {
+  it('skips a model whose circuit is open and tries the next one', async () => {
+    isCircuitOpen.mockImplementation(async (modelId: string) => modelId === 'google/gemini-2.5-flash')
+    const spy = mockFetch(MOCK_VALID_RESPONSE)
+
+    const result = await callTutor(BASE_REQ)
+
+    expect(result.reply).toBe('Hello! How can I help you practise today?')
+    const body = JSON.parse((spy.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.model).toBe(FREE_TUTOR_MODELS[0])
+  })
+
+  it('records a failure against the circuit breaker on an availability failure', async () => {
+    const spy = vi
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 402 } }, 402))
+      .mockResolvedValueOnce(jsonResponse(MOCK_VALID_RESPONSE, 200))
+
+    await callTutor(BASE_REQ)
+
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(recordModelFailure).toHaveBeenCalledWith('google/gemini-2.5-flash')
+  })
+
+  it('does not record a circuit-breaker failure for a non-recoverable client error', async () => {
+    mockFetchAlways({ error: 'bad request' }, 400)
+    await expect(callTutor(BASE_REQ)).rejects.toThrow()
+    expect(recordModelFailure).not.toHaveBeenCalled()
+  })
+})
+
+// Roadmap #35 (§21.4 Phase 1): the prerequisite for evidence-driven routing.
+describe('lm-model-metric logging', () => {
+  it('logs a success metric with latency for a successful callTutor attempt', async () => {
+    mockFetch(MOCK_VALID_RESPONSE)
+    await callTutor({ ...BASE_REQ, tier: 'paid' })
+
+    expect(logModelMetric).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: 'google/gemini-2.5-flash',
+        gateway: 'openrouter',
+        tier: 'paid',
+        outcome: 'success',
+        latencyMs: expect.any(Number),
+      }),
+    )
+  })
+
+  it('logs an advanced metric for a model that failed but let the chain continue', async () => {
+    vi.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ error: { code: 402 } }, 402))
+      .mockResolvedValueOnce(jsonResponse(MOCK_VALID_RESPONSE, 200))
+
+    await callTutor(BASE_REQ)
+
+    expect(logModelMetric).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'google/gemini-2.5-flash', outcome: 'advanced' }),
+    )
+  })
+
+  it('logs a failed metric for a non-recoverable error and does not log success', async () => {
+    mockFetchAlways({ error: 'bad request' }, 400)
+    await expect(callTutor(BASE_REQ)).rejects.toThrow()
+
+    expect(logModelMetric).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'google/gemini-2.5-flash', outcome: 'failed' }),
+    )
+    expect(logModelMetric).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: 'success' }))
+  })
+
+  it('logs a success metric with ttftMs for a streamed reply', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      sseResponse([delta('Hola'), 'data: [DONE]\n\n']),
+    )
+    await collect(streamTutor(BASE_REQ))
+
+    expect(logModelMetric).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: 'google/gemini-2.5-flash',
+        outcome: 'success',
+        latencyMs: expect.any(Number),
+        ttftMs: expect.any(Number),
+      }),
+    )
+  })
+
+  it('invokes onModelResolved once the winning model is known, before streaming completes', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      sseResponse([delta('Hola'), 'data: [DONE]\n\n']),
+    )
+    const onModelResolved = vi.fn()
+    await collect(streamTutor(BASE_REQ, onModelResolved))
+    expect(onModelResolved).toHaveBeenCalledWith('google/gemini-2.5-flash')
   })
 })

@@ -2,6 +2,8 @@ import 'server-only'
 import { resolveModelChain } from './models'
 import { resolveChainForTier, type ModelTier } from './model-registry'
 import { buildSystemPrompt } from './prompts'
+import { isCircuitOpen, recordModelFailure } from './circuit-breaker'
+import { logModelMetric } from './model-metrics'
 import type { PracticeMode, SupportedLanguage, TutorLevel } from '@/config/ai-practice'
 
 export type HistoryMessage = {
@@ -143,13 +145,24 @@ function buildMessages(req: TutorRequest): { role: string; content: string }[] {
   return messages
 }
 
+type OpenStreamResult = {
+  body: ReadableStream<Uint8Array>
+  modelId: string
+  requestStartedAt: number
+}
+
 /**
  * Opens a streaming completion, walking the model chain by the same rules as
  * callTutor. Returns only once a model has accepted the request, so every
  * availability failure still surfaces as a thrown error before any bytes have
  * been committed to the caller's response.
+ *
+ * Also the roadmap #34/#35 (§21.4 Phase 1) integration point: a per-model
+ * circuit breaker is checked before every attempt and fed on every
+ * availability failure, and one `lm-model-metric` line is logged per
+ * attempt that actually reaches the network.
  */
-async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>> {
+async function openStream(req: TutorRequest): Promise<OpenStreamResult> {
   const apiKey = requireApiKey()
   const chain = requireChain(req.tier)
   const messages = buildMessages(req)
@@ -157,6 +170,12 @@ async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>
   let lastError: OpenRouterError | null = null
 
   for (const modelId of chain) {
+    if (await isCircuitOpen(modelId)) {
+      console.error(`[AI] model ${modelId} skipped: circuit open`)
+      continue
+    }
+
+    const attemptStartedAt = Date.now()
     const controller = new AbortController()
     // Bounds time to the response headers; cleared once the body starts, since
     // a long reply is not a stalled one.
@@ -175,6 +194,7 @@ async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>
           messages,
           max_tokens: MAX_OUTPUT_TOKENS,
           stream: true,
+          usage: { include: true },
         }),
         signal: controller.signal,
       })
@@ -191,6 +211,14 @@ async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>
         'PROVIDER_ERROR',
       )
       logAttemptFailure(modelId, 0, err instanceof Error ? err.message : String(err))
+      await recordModelFailure(modelId)
+      logModelMetric({
+        modelId,
+        gateway: 'openrouter',
+        tier: req.tier,
+        latencyMs: Date.now() - attemptStartedAt,
+        outcome: 'advanced',
+      })
       continue
     }
 
@@ -205,7 +233,13 @@ async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>
         classifyStatus(response.status),
         response.status,
       )
-      if (!isModelUnavailable(response.status)) throw error
+      const latencyMs = Date.now() - attemptStartedAt
+      if (!isModelUnavailable(response.status)) {
+        logModelMetric({ modelId, gateway: 'openrouter', tier: req.tier, latencyMs, outcome: 'failed' })
+        throw error
+      }
+      await recordModelFailure(modelId)
+      logModelMetric({ modelId, gateway: 'openrouter', tier: req.tier, latencyMs, outcome: 'advanced' })
       lastError = error
       continue
     }
@@ -213,10 +247,18 @@ async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>
     if (!response.body) {
       lastError = new OpenRouterError('AI provider returned no stream', 'MALFORMED_RESPONSE')
       logAttemptFailure(modelId, response.status, 'empty body')
+      await recordModelFailure(modelId)
+      logModelMetric({
+        modelId,
+        gateway: 'openrouter',
+        tier: req.tier,
+        latencyMs: Date.now() - attemptStartedAt,
+        outcome: 'advanced',
+      })
       continue
     }
 
-    return response.body
+    return { body: response.body, modelId, requestStartedAt: attemptStartedAt }
   }
 
   throw lastError ?? new OpenRouterError('No AI model was able to answer', 'PROVIDER_ERROR')
@@ -227,12 +269,26 @@ async function openStream(req: TutorRequest): Promise<ReadableStream<Uint8Array>
  *
  * A full reply takes 6-13 seconds, which is a long time to watch a spinner
  * during a conversation, so the words appear as they arrive.
+ *
+ * `onModelResolved`, if given, fires once — synchronously as soon as a model
+ * has accepted the request — with the model id that will actually serve this
+ * reply. Roadmap #35's only hook into this module: a caller further up the
+ * stack (structured-tutor-reply.ts, for the explanation-language check) can
+ * correlate its own quality metric to the model that produced it without
+ * this function's return/yield contract changing.
  */
-export async function* streamTutor(req: TutorRequest): AsyncGenerator<string> {
-  const body = await openStream(req)
+export async function* streamTutor(
+  req: TutorRequest,
+  onModelResolved?: (modelId: string) => void,
+): AsyncGenerator<string> {
+  const { body, modelId, requestStartedAt } = await openStream(req)
+  onModelResolved?.(modelId)
+
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let firstDeltaAt: number | null = null
+  let costUsd: number | undefined
 
   try {
     while (true) {
@@ -254,7 +310,15 @@ export async function* streamTutor(req: TutorRequest): AsyncGenerator<string> {
         try {
           const parsed = JSON.parse(payload)
           const delta = parsed?.choices?.[0]?.delta?.content
-          if (typeof delta === 'string' && delta.length > 0) yield delta
+          if (typeof delta === 'string' && delta.length > 0) {
+            if (firstDeltaAt === null) firstDeltaAt = Date.now()
+            yield delta
+          }
+          // OpenRouter does not reliably include this on streamed responses
+          // (a documented gateway limitation, not something this project can
+          // fix) — captured opportunistically, never fabricated when absent.
+          const cost = parsed?.usage?.cost
+          if (typeof cost === 'number') costUsd = cost
         } catch {
           // Keep-alive comments and non-JSON frames are expected; skip them.
         }
@@ -263,6 +327,18 @@ export async function* streamTutor(req: TutorRequest): AsyncGenerator<string> {
   } finally {
     reader.releaseLock()
   }
+
+  // Reached only when the loop above completed without throwing — a reader
+  // error must not be reported as a successful attempt.
+  logModelMetric({
+    modelId,
+    gateway: 'openrouter',
+    tier: req.tier,
+    latencyMs: Date.now() - requestStartedAt,
+    ttftMs: firstDeltaAt !== null ? firstDeltaAt - requestStartedAt : undefined,
+    outcome: 'success',
+    costUsd,
+  })
 }
 
 export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
@@ -273,6 +349,12 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
   let lastError: OpenRouterError | null = null
 
   for (const modelId of chain) {
+    if (await isCircuitOpen(modelId)) {
+      console.error(`[AI] model ${modelId} skipped: circuit open`)
+      continue
+    }
+
+    const attemptStartedAt = Date.now()
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
@@ -288,6 +370,7 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
           model: modelId,
           messages,
           max_tokens: MAX_OUTPUT_TOKENS,
+          usage: { include: true },
         }),
         signal: controller.signal,
       })
@@ -304,6 +387,14 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
         'PROVIDER_ERROR',
       )
       logAttemptFailure(modelId, 0, err instanceof Error ? err.message : String(err))
+      await recordModelFailure(modelId)
+      logModelMetric({
+        modelId,
+        gateway: 'openrouter',
+        tier: req.tier,
+        latencyMs: Date.now() - attemptStartedAt,
+        outcome: 'advanced',
+      })
       continue
     }
 
@@ -319,7 +410,13 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
         response.status,
       )
 
-      if (!isModelUnavailable(response.status)) throw error
+      const latencyMs = Date.now() - attemptStartedAt
+      if (!isModelUnavailable(response.status)) {
+        logModelMetric({ modelId, gateway: 'openrouter', tier: req.tier, latencyMs, outcome: 'failed' })
+        throw error
+      }
+      await recordModelFailure(modelId)
+      logModelMetric({ modelId, gateway: 'openrouter', tier: req.tier, latencyMs, outcome: 'advanced' })
       lastError = error
       continue
     }
@@ -335,6 +432,16 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
     if (!reply) {
       throw new OpenRouterError('AI provider returned an empty response', 'MALFORMED_RESPONSE')
     }
+
+    const usageCost = (data as { usage?: { cost?: unknown } } | null)?.usage?.cost
+    logModelMetric({
+      modelId,
+      gateway: 'openrouter',
+      tier: req.tier,
+      latencyMs: Date.now() - attemptStartedAt,
+      outcome: 'success',
+      costUsd: typeof usageCost === 'number' ? usageCost : undefined,
+    })
 
     return { reply }
   }

@@ -17,6 +17,9 @@ vi.mock('./openrouter', async (importOriginal) => {
 })
 import { streamTutor } from './openrouter'
 
+vi.mock('./model-metrics', () => ({ logModelMetric: vi.fn() }))
+import { logModelMetric } from './model-metrics'
+
 const BASE_REQ = {
   targetLanguage: 'Spanish',
   nativeLanguages: ['English'],
@@ -334,6 +337,7 @@ describe('streamStructuredTutorReply', () => {
   beforeEach(() => {
     process.env.OPENROUTER_API_KEY = 'test-key'
     vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.mocked(logModelMetric).mockReset()
   })
 
   afterEach(() => {
@@ -495,5 +499,113 @@ describe('streamStructuredTutorReply', () => {
       }),
     )
     expect(spy).not.toHaveBeenCalled()
+  })
+
+  // Roadmap #35 (§21.4 Phase 1): the field the operational metric line
+  // (logged inside streamTutor) can't fill in on its own, correlated by the
+  // model id `onModelResolved` reports.
+  it('logs a correctness metric correlated to the resolved model id when the explanation language matches', async () => {
+    const json = JSON.stringify({
+      conversation: 'Hola',
+      correction: null,
+      explanation: 'You need the preterite because the action is finished.',
+      explanation_language: 'English',
+      practice: 'Try it.',
+    })
+    vi.mocked(streamTutor).mockImplementation((_req, onModelResolved) => {
+      onModelResolved?.('some/model')
+      return gen([json])
+    })
+
+    await collect(streamStructuredTutorReply(BASE_REQ, { explanationLanguageName: 'English' }))
+
+    expect(logModelMetric).toHaveBeenCalledWith({
+      modelId: 'some/model',
+      gateway: 'openrouter',
+      tier: undefined,
+      outcome: 'success',
+      explanationLanguageCorrect: true,
+    })
+  })
+
+  it('logs outcome "repaired" and explanationLanguageCorrect: true after a successful repair', async () => {
+    const json = JSON.stringify({
+      conversation: 'Hola',
+      correction: null,
+      explanation: 'Aquí necesitas el pretérito porque la acción ya terminó completamente.',
+      explanation_language: 'Spanish',
+      practice: 'Try it.',
+    })
+    vi.mocked(streamTutor).mockImplementation((_req, onModelResolved) => {
+      onModelResolved?.('some/model')
+      return gen([json])
+    })
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'You need the preterite because the action is finished.' } }],
+        }),
+        { status: 200 },
+      ),
+    )
+
+    await collect(
+      streamStructuredTutorReply(BASE_REQ, {
+        explanationLanguageName: 'English',
+        repairModelId: 'some/repair-model',
+      }),
+    )
+
+    expect(logModelMetric).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: 'some/model',
+        outcome: 'repaired',
+        explanationLanguageCorrect: true,
+      }),
+    )
+  })
+
+  it('logs explanationLanguageCorrect: false when a triggered repair does not succeed', async () => {
+    const json = JSON.stringify({
+      conversation: 'Hola',
+      correction: null,
+      explanation: 'Aquí necesitas el pretérito porque la acción ya terminó completamente.',
+      explanation_language: 'Spanish',
+      practice: 'Try it.',
+    })
+    vi.mocked(streamTutor).mockImplementation((_req, onModelResolved) => {
+      onModelResolved?.('some/model')
+      return gen([json])
+    })
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce(new Response('', { status: 500 }))
+
+    await collect(
+      streamStructuredTutorReply(BASE_REQ, {
+        explanationLanguageName: 'English',
+        repairModelId: 'some/repair-model',
+      }),
+    )
+
+    expect(logModelMetric).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: 'some/model',
+        outcome: 'success',
+        explanationLanguageCorrect: false,
+      }),
+    )
+  })
+
+  it('does not log an explanation-language metric when there is no explanation to check', async () => {
+    const json = JSON.stringify({ conversation: 'Hola', correction: null, explanation: null, explanation_language: null, practice: null })
+    vi.mocked(streamTutor).mockImplementation((_req, onModelResolved) => {
+      onModelResolved?.('some/model')
+      return gen([json])
+    })
+
+    await collect(streamStructuredTutorReply(BASE_REQ, { explanationLanguageName: 'English' }))
+
+    expect(logModelMetric).toHaveBeenCalledWith(
+      expect.objectContaining({ explanationLanguageCorrect: undefined }),
+    )
   })
 })

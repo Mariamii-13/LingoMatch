@@ -1,6 +1,7 @@
 import 'server-only'
 import { franc } from 'franc'
 import { streamTutor, type TutorRequest } from './openrouter'
+import { logModelMetric } from './model-metrics'
 
 /**
  * Roadmap #28 (passport §19.6.1, feature 3.38): the explanation-language
@@ -287,7 +288,10 @@ export async function* streamStructuredTutorReply(
   req: TutorRequest,
   opts: StructuredStreamOptions,
 ): AsyncGenerator<string> {
-  const gen = streamTutor(req)
+  let resolvedModelId: string | undefined
+  const gen = streamTutor(req, (modelId) => {
+    resolvedModelId = modelId
+  })
   let buffer = ''
   let emitted = 0
   let structured = true
@@ -325,21 +329,47 @@ export async function* streamStructuredTutorReply(
   }
 
   let explanation = parsed.explanation
-  if (explanation && explanationLanguageMismatch(explanation, opts.explanationLanguageName)) {
-    const repaired = await repairTranslation(
-      explanation,
-      opts.explanationLanguageName,
-      opts.repairModelId,
-    )
-    // Logged either way: a triggered-but-failed repair (e.g. the repair
-    // model itself has no credits) must be visible, the same reasoning
-    // that made the original 402 in 3.5 worth logging in the first place.
-    console.error(
-      repaired
-        ? `[AI] explanation-language repair succeeded (target: ${opts.explanationLanguageName})`
-        : `[AI] explanation-language mismatch detected but repair did not succeed (target: ${opts.explanationLanguageName}, model: ${opts.repairModelId ?? 'none'})`,
-    )
-    if (repaired) explanation = repaired
+  let explanationLanguageCorrect: boolean | undefined
+  let repaired = false
+  if (explanation) {
+    const mismatch = explanationLanguageMismatch(explanation, opts.explanationLanguageName)
+    if (mismatch) {
+      const repairedText = await repairTranslation(
+        explanation,
+        opts.explanationLanguageName,
+        opts.repairModelId,
+      )
+      // Logged either way: a triggered-but-failed repair (e.g. the repair
+      // model itself has no credits) must be visible, the same reasoning
+      // that made the original 402 in 3.5 worth logging in the first place.
+      console.error(
+        repairedText
+          ? `[AI] explanation-language repair succeeded (target: ${opts.explanationLanguageName})`
+          : `[AI] explanation-language mismatch detected but repair did not succeed (target: ${opts.explanationLanguageName}, model: ${opts.repairModelId ?? 'none'})`,
+      )
+      if (repairedText) {
+        explanation = repairedText
+        repaired = true
+      }
+      explanationLanguageCorrect = Boolean(repairedText)
+    } else {
+      explanationLanguageCorrect = true
+    }
+  }
+
+  // Roadmap #35 (§21.4 Phase 1): a second, correctness-focused
+  // `lm-model-metric` line correlated by `modelId` with the operational one
+  // `streamTutor` already logged for this same attempt — this is the field
+  // that line can't fill in, since language validation only happens here,
+  // after the model's output is fully parsed.
+  if (resolvedModelId) {
+    logModelMetric({
+      modelId: resolvedModelId,
+      gateway: 'openrouter',
+      tier: req.tier,
+      outcome: repaired ? 'repaired' : 'success',
+      explanationLanguageCorrect,
+    })
   }
 
   const final: StructuredTutorReply = { ...parsed, explanation }
