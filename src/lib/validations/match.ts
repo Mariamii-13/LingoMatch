@@ -6,6 +6,15 @@ const MAX_INTEREST_LENGTH = 40
 const MAX_COUNTRY_LENGTH = 60
 
 /**
+ * Roadmap #32: how far ahead a user is willing to be matched, not just
+ * right now. 0 keeps today's exact behaviour (instant queue only). The
+ * other values are minutes and become a standing `MatchAvailability` row
+ * when no live partner is found immediately.
+ */
+export const AVAILABILITY_MINUTES = [0, 60, 360, 1440] as const
+export type AvailabilityMinutes = (typeof AVAILABILITY_MINUTES)[number]
+
+/**
  * Language codes are normalised here rather than trusted from the client.
  *
  * Matching pairs two queued requests by comparing one user's target language
@@ -35,6 +44,13 @@ export const matchRequestSchema = z
       .optional()
       .default([]),
     countryPreference: z.string().trim().max(MAX_COUNTRY_LENGTH).optional().default(''),
+    availabilityMinutes: z
+      .number()
+      .refine((v): v is AvailabilityMinutes => (AVAILABILITY_MINUTES as readonly number[]).includes(v), {
+        message: 'Unsupported availability window',
+      })
+      .optional()
+      .default(0),
   })
   .refine((data) => data.targetLanguage !== data.nativeLanguage, {
     message: 'Choose a target language different from your native language',

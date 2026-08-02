@@ -106,4 +106,29 @@ describe('matchRequestSchema', () => {
       false,
     )
   })
+
+  describe('availabilityMinutes (roadmap #32)', () => {
+    it('defaults to 0 (instant-only, today\'s behaviour) when omitted', () => {
+      const result = parse({ targetLanguage: 'es', nativeLanguage: 'en' })
+      if (result.success) expect(result.data.availabilityMinutes).toBe(0)
+    })
+
+    it('accepts each declared window', () => {
+      for (const minutes of [0, 60, 360, 1440]) {
+        const result = parse({ targetLanguage: 'es', nativeLanguage: 'en', availabilityMinutes: minutes })
+        expect(result.success).toBe(true)
+        if (result.success) expect(result.data.availabilityMinutes).toBe(minutes)
+      }
+    })
+
+    it('rejects an arbitrary minute value not in the declared set', () => {
+      const result = parse({ targetLanguage: 'es', nativeLanguage: 'en', availabilityMinutes: 45 })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects a negative window', () => {
+      const result = parse({ targetLanguage: 'es', nativeLanguage: 'en', availabilityMinutes: -60 })
+      expect(result.success).toBe(false)
+    })
+  })
 })

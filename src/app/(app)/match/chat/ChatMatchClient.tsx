@@ -19,8 +19,14 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
   const [nativeLanguage, setNativeLanguage] = React.useState(defaults.nativeLanguage)
   const [interests, setInterests] = React.useState<string[]>([])
   const [countryPreference, setCountryPreference] = React.useState("")
+  const [availabilityMinutes, setAvailabilityMinutes] = React.useState(0)
   const [matchResult, setMatchResult] = React.useState<MatchResult | null>(null)
   const [requestId, setRequestId] = React.useState<string | null>(null)
+  // Set once a windowed (availabilityMinutes > 0) request finds no live
+  // partner immediately. Distinct from `phase`: there is nothing to poll for
+  // — the match, if any, surfaces later via the dashboard's pending-match
+  // card — so this just shows a static confirmation instead of a spinner.
+  const [queuedForLater, setQueuedForLater] = React.useState(false)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
 
   const stopPolling = () => {
@@ -38,12 +44,13 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
 
   const handleFind = async () => {
     requestMatchNotificationPermission()
+    setQueuedForLater(false)
     setPhase("searching")
     try {
       const res = await fetch("/api/match/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetLanguage, nativeLanguage, interests, countryPreference }),
+        body: JSON.stringify({ targetLanguage, nativeLanguage, interests, countryPreference, availabilityMinutes }),
       })
       if (!res.ok) {
         // The server explains exactly what is wrong (unsupported language,
@@ -59,6 +66,14 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
       if (data.matched) {
         setMatchResult(data)
         setPhase("found")
+        return
+      }
+
+      if (data.availability) {
+        // Windowed request, no live partner right now: nothing to poll for,
+        // this is discovered later via the dashboard's pending-match card.
+        setPhase("idle")
+        setQueuedForLater(true)
         return
       }
 
@@ -107,6 +122,16 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
         <p className="mt-1 text-muted-foreground">Find a text conversation partner</p>
       </div>
 
+      {queuedForLater && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
+          <p className="font-medium text-emerald-700 dark:text-emerald-400">You&apos;re on the list</p>
+          <p className="mt-1 text-muted-foreground">
+            No live partner right now — we&apos;ll match you as soon as one turns up, and show it
+            here or on your dashboard. No need to keep this tab open.
+          </p>
+        </div>
+      )}
+
       <div className="rounded-2xl border bg-card p-6">
         <MatchConfigForm
           targetLanguage={targetLanguage}
@@ -117,6 +142,8 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
           onNativeLanguage={setNativeLanguage}
           onInterests={setInterests}
           onCountryPreference={setCountryPreference}
+          availabilityMinutes={availabilityMinutes}
+          onAvailabilityMinutes={setAvailabilityMinutes}
         />
 
         <div className="mt-6 border-t pt-5">
@@ -126,7 +153,8 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
             disabled={!targetLanguage || !nativeLanguage}
             onClick={handleFind}
           >
-            <MessageSquare className="size-5" /> Find Chat Partner
+            <MessageSquare className="size-5" />{" "}
+            {availabilityMinutes === 0 ? "Find Chat Partner" : "Join with this availability"}
           </Button>
         </div>
       </div>

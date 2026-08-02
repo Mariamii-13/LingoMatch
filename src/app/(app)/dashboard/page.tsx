@@ -16,9 +16,11 @@ import { auth } from "@/auth"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ProfileCompletionCard } from "@/components/profile-completion-card"
+import { PendingMatchCard } from "@/components/dashboard/pending-match-card"
 import { getLanguage } from "@/constants/languages"
 import { getUserProfileData, toPlainProfile } from "@/lib/user-profile.server"
 import { getProgressSummary } from "@/lib/progress.server"
+import { getPendingMatches } from "@/lib/pending-matches.server"
 import type { UserProfileData } from "@/lib/onboarding-progress"
 
 const secondaryLinks = [
@@ -51,9 +53,10 @@ export default async function DashboardPage() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  const [rawProfile, summary] = await Promise.all([
+  const [rawProfile, summary, pendingMatches] = await Promise.all([
     getUserProfileData(session.user.id),
     getProgressSummary(session.user.id),
+    getPendingMatches(session.user.id),
   ])
   const profileData = toPlainProfile(rawProfile) as UserProfileData | null
 
@@ -79,6 +82,8 @@ export default async function DashboardPage() {
           Choose the kind of language practice that feels right today.
         </p>
       </header>
+
+      <PendingMatchCard matches={pendingMatches} />
 
       {profileData && <ProfileCompletionCard user={profileData} />}
 

@@ -6,6 +6,15 @@ import { CountrySelector } from "@/components/country-selector"
 
 const INTERESTS = ["Anime", "Travel", "Gaming", "Music", "Food", "Books", "Movies", "Fitness"]
 
+// Roadmap #32: how far ahead the user is willing to be matched, not just
+// right now. Values are minutes; 0 means "right now" (today's instant queue).
+const AVAILABILITY_OPTIONS: { minutes: 0 | 60 | 360 | 1440; label: string }[] = [
+  { minutes: 0, label: "Right now" },
+  { minutes: 60, label: "Within the hour" },
+  { minutes: 360, label: "Later today" },
+  { minutes: 1440, label: "Anytime in the next day" },
+]
+
 interface MatchConfigFormProps {
   targetLanguage: string
   nativeLanguage: string
@@ -15,6 +24,9 @@ interface MatchConfigFormProps {
   onNativeLanguage: (lang: string) => void
   onInterests: (interests: string[]) => void
   onCountryPreference?: (country: string) => void
+  /** Omit to hide the availability selector entirely (e.g. video match, which needs both sides live). */
+  availabilityMinutes?: number
+  onAvailabilityMinutes?: (minutes: number) => void
 }
 
 export function MatchConfigForm({
@@ -26,6 +38,8 @@ export function MatchConfigForm({
   onNativeLanguage,
   onInterests,
   onCountryPreference = () => {},
+  availabilityMinutes,
+  onAvailabilityMinutes,
 }: MatchConfigFormProps) {
   const toggleInterest = (i: string) =>
     onInterests(interests.includes(i) ? interests.filter((x) => x !== i) : [...interests, i])
@@ -91,6 +105,37 @@ export function MatchConfigForm({
           ))}
         </div>
       </div>
+
+      {onAvailabilityMinutes && (
+        <div>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            When are you free?
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {AVAILABILITY_OPTIONS.map((opt) => (
+              <button
+                key={opt.minutes}
+                type="button"
+                onClick={() => onAvailabilityMinutes(opt.minutes)}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                  availabilityMinutes === opt.minutes
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:bg-accent"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {availabilityMinutes !== 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              No live partner right now? We&apos;ll keep looking and show your match here or on
+              your dashboard as soon as one turns up.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
