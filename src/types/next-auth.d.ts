@@ -8,6 +8,7 @@ declare module 'next-auth' {
       username?: string
       plan?: string
       role?: string
+      isBanned?: boolean
       onboardingCompleted?: boolean
       languageProfileComplete?: boolean
     } & DefaultSession['user']
@@ -28,9 +29,8 @@ declare module 'next-auth/jwt' {
     username?: string
     plan?: string
     role?: string
+    isBanned?: boolean
     onboardingCompleted?: boolean
     languageProfileComplete?: boolean
-    /** Epoch ms of the last time this token was refreshed from MongoDB. */
-    refreshedAt?: number
   }
 }

@@ -6,7 +6,6 @@ import { connectDB } from '@/lib/db'
 import User from '@/lib/models/User'
 import { allowLoginAttempt } from '@/lib/auth-throttle'
 import { getClientIp } from '@/lib/request-identity'
-import { shouldRefreshToken } from '@/lib/auth-token-refresh'
 import {
   buildLanguageProfileUpdate,
   isLanguageProfileComplete,
@@ -136,23 +135,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.username = dbUser.username
           token.plan = dbUser.plan
           token.role = dbUser.role
+          token.isBanned = dbUser.isBanned
           token.onboardingCompleted = dbUser.onboardingCompleted
           token.languageProfileComplete = await resolveLanguageProfileCompletion(
             dbUser._id.toString(),
             rawUser,
           )
           if (dbUser.displayName) token.name = dbUser.displayName
-          token.refreshedAt = Date.now()
         }
       } else if (token.id) {
-        // The jwt callback runs on every request under the JWT session
-        // strategy, so re-reading MongoDB here cost one query per page load
-        // just to keep role/plan/etc fresh (roadmap #20). Only refresh once
-        // the token is older than the interval; a stale-but-recent token is
-        // returned as-is. Accepted tradeoff: a ban or plan change can take up
-        // to that long to take effect on an already-issued session.
-        if (!shouldRefreshToken(token.refreshedAt, Date.now())) return token
-
+        /*
+         * Re-reads MongoDB on every single request under the JWT session
+         * strategy. This used to be throttled to a 5-minute interval
+         * (roadmap #20) to save one query per page load, trading away
+         * immediate ban propagation — a banned user's existing session could
+         * keep acting for up to 5 minutes. Worse, in the throttled version
+         * `isBanned` was fetched but never actually enforced anywhere, so a
+         * ban never took effect on an existing session at all until the JWT
+         * itself expired. Per an explicit product decision (PROJECT_PASSPORT.md
+         * roadmap #20): moderation correctness outranks saving a database
+         * read, so this now always re-checks and `proxy.ts` enforces
+         * `token.isBanned` on every request.
+         */
         await connectDB()
         const dbUser = await User.findById(token.id)
           .select('role plan isBanned onboardingCompleted displayName languageProfile nativeLanguages spokenLanguages learningLanguages')
@@ -160,13 +164,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (dbUser) {
           token.role = dbUser.role as string
           token.plan = dbUser.plan as string
+          token.isBanned = dbUser.isBanned as boolean
           token.onboardingCompleted = dbUser.onboardingCompleted as boolean
           token.languageProfileComplete = await resolveLanguageProfileCompletion(
             token.id as string,
             dbUser,
           )
           if (dbUser.displayName) token.name = dbUser.displayName as string
-          token.refreshedAt = Date.now()
         }
       }
       return token
@@ -177,6 +181,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         ;(session.user as { username?: string }).username = token.username as string
         ;(session.user as { plan?: string }).plan = token.plan as string
         ;(session.user as { role?: string }).role = token.role as string
+        ;(session.user as { isBanned?: boolean }).isBanned = token.isBanned as boolean
         ;(session.user as { onboardingCompleted?: boolean }).onboardingCompleted =
           token.onboardingCompleted as boolean
         ;(session.user as { languageProfileComplete?: boolean }).languageProfileComplete =
