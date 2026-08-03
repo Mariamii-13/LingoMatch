@@ -2405,6 +2405,46 @@ browser automation is available in this sandbox.
 
 **Production readiness.** Production Ready, with the live two-browser gap above noted honestly.
 
+### 3.51 Delete superseded Cloudinary avatars (roadmap #15) — audit, fix the leak source, clean up
+
+**Starting point.** `src/app/api/upload/avatar/route.ts` uploads a new avatar and overwrites
+`User.avatar`, but never deleted the Cloudinary asset it replaced — every avatar change since this
+feature shipped left an orphaned file behind. The owner confirmed there are no real production
+users yet (pre-launch data only), removing the usual caution around deleting real users' files —
+still audited before deleting anything, per that same instruction.
+
+**Audit.** A one-off script listed every asset actually in Cloudinary's `lingomatch/avatars/`
+folder (the Admin API, not the `Upload` log — the log could be stale or incomplete, Cloudinary
+itself is the source of truth), cross-referenced against every user's *current* `avatar` URL.
+Dry run found 3 assets total, 2 orphaned (both tiny 68-byte placeholder images from early test
+uploads, 2026-06-08). Deleted after review: `cloudinary.api.delete_resources` plus the matching
+`Upload` rows.
+
+**The actual fix, so the leak doesn't resume on the next upload.** Added
+`src/lib/avatar-cleanup.server.ts` (`deleteSupersededAvatars(userId, keepPublicId)`): finds every
+other `avatar`-type `Upload` row for that user, deletes each from Cloudinary and from the log,
+best-effort per asset (one already-gone or malformed `public_id` must not block cleanup of the
+rest — matches this file's own precedent in `blocking.server.ts`). Wired into the upload route as
+a fire-and-forget call right after the new `Upload` row is created, so a slow or failed cleanup
+never delays or fails the upload response the user is waiting on.
+
+**Verified live, 2026-08-03, against the real database and real Cloudinary account, not mocks:**
+using the standing `qaftue001` QA account, uploaded a real 1×1 PNG as an avatar via
+`POST /api/upload/avatar` (`next start`, real session), then uploaded a second one. Re-ran the
+audit script: 0 orphans — the first upload's Cloudinary asset and `Upload` row were both gone,
+confirming the fire-and-forget cleanup actually fired and completed correctly against the real
+API. Restored `qaftue001` to its original state afterward (avatar field unset, test asset
+deleted) so the QA fixture baseline is unchanged.
+
+**New test coverage.** `avatar-cleanup.server.test.ts` (5 cases) — this logic had no tests before:
+does nothing when there's nothing superseded, excludes the just-uploaded id from its own query,
+deletes every superseded asset and its log row, still deletes the log row when the Cloudinary
+asset is already gone, and continues past one failing asset to clean up the rest.
+
+**Full suite.** 475 passed (5 new), 11 skipped — clean lint, clean `tsc`, clean build.
+
+**Production readiness.** Production Ready.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3438,7 +3478,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 |---|---|---|---|---|---|
 | 13 | **Instrument product analytics** (sign-up funnel, first-practice conversion, retention, tutor vs partner mix) | High | Moderate | The only way to learn whether anyone wants this | #2. **Attempted this block**: discovered via `vercel integration discover analytics` (PostHog, Statsig, GrowthBook), but `vercel integration add posthog --yes --no-claim` was **blocked by the Claude Code auto-mode classifier** as a production/billing-affecting action. Provisioning a marketplace integration needs the owner present to approve it — see 17 |
 | 14 | **Build the real admin analytics page** on those events | Medium | Moderate | Replaces the honest placeholder | #13 |
-| 15 | **Delete superseded Cloudinary avatars** | Medium | Low | Stops a storage-cost leak | Careful — deletes user files |
+| 15 | ~~Delete superseded Cloudinary avatars~~ | Medium | Low | **Done, 2026-08-03 — see 3.51.** One-time audit cleanup, plus the actual leak source fixed so it doesn't recur | Owner confirmed pre-launch data (no real users yet), so the "deletes user files" caution applied to QA/dev accounts only |
 | 16 | ~~Split the 774-line messages page~~ | Medium | Moderate | **Done, 2026-08-03 — see 3.48.** Network/realtime logic was already relocated to a hook in an earlier block; this one moved the three remaining inline modal components out too, 664 → 358 lines. Verified live | — |
 | 17 | ~~User blocking, plus a moderation audit trail~~ | — | — | **Done** — see 3.36. Re-prioritised upward and implemented in the same block that recorded the voice-first direction (18.5), because live voice raises the cost of shipping without it | — |
 | 18 | ~~Push notification when a match is found~~ | — | — | **Done** in `030a211` — see 3.9. Browser `Notification` API, no server/third-party dependency. Live two-account click-through still owed (blocked this session by dev-server interactivity, see 17) | — |
