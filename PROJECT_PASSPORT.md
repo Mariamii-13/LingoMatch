@@ -2497,6 +2497,113 @@ skipped — clean lint, clean `tsc`, clean build.
 
 **Production readiness.** Production Ready.
 
+### 3.53 Live video with two real cameras (roadmap #4) — three real bugs found and fixed
+
+**Why this was picked.** Passport's own words: "the only wholly unverified feature." Everything
+else in the video-call stack had been exercised in isolation (accessibility audit on the controls,
+LiveKit token/room plumbing read by eye) but no session had ever driven two real, independently
+authenticated accounts through a real reciprocal match into a real LiveKit room with a real camera
+publishing to a real remote peer. Unblocked without the owner: LiveKit env vars were already
+configured, and the "two devices" dependency turned out solvable with two isolated browser
+contexts (`chrome-devtools-mcp`'s `isolatedContext`) plus this machine's one physical webcam.
+
+**Environment blocker cleared.** `chrome-devtools-mcp` failed with "browser already running for
+chrome-profile" — a leftover Chrome process from a prior session holding the automation profile
+lock. Confirmed via `Get-CimInstance Win32_Process` that every such process's command line pinned
+`--user-data-dir` to the dedicated automation cache directory (never the owner's real Chrome
+profile), so killing them was safe and unblocked `list_pages` immediately.
+
+**Setup.** The two standing QA accounts (`qaftue001`, `qaphase001`, section 17) are not a
+reciprocal language pair (both native English, learning Spanish), so no matching algorithm would
+ever pair them for a real call. Flipped `qaphase001` to native Spanish / learning English via the
+real `PUT /api/user/me/language-profile` endpoint (not a direct DB write) for the duration of this
+block, then reverted it back to its original native English / learning Spanish afterward — the
+same account is reused elsewhere in the document for its friend/message history, so it had to come
+back unchanged.
+
+**Bug 1 — the prejoin camera/mic choice was completely discarded.** `PreJoinScreen.onFindPartner`
+passed `(cameraEnabled, micEnabled)`, but `VideoMatchClient.startSearching` took zero parameters —
+the values were dropped on the floor. `VideoSession.tsx` then hardcoded `<LiveKitRoom audio video>`
+regardless. A user who explicitly chose "voice-only — partner can hear you but not see you" would,
+the instant the real call connected, have their browser re-prompted for camera and (if granted,
+including from a prior visit's cached permission) silently publish it anyway — the opposite of
+what the UI promised. Fixed by threading the choice through: `VideoMatchClient` now stores it in a
+ref, appends it to the `/session/video/[id]` URL as `?camera=&mic=`, the server page reads it via
+Next 16's async `searchParams` and passes `initialCamera`/`initialMic` props down to
+`VideoSession`, which sets `audio={initialMic} video={initialCamera}` instead of hardcoding both
+true. Defaults to on when absent so a direct/bare link keeps today's behaviour.
+
+**Bug 2 — the video match route's own `buildPartner` crashed the Match Found modal for every real
+match.** `src/app/api/match/video/route.ts` had its own inline partner-shaping function that
+forwarded `doc.nativeLanguages` (raw language-code strings) and `doc.learningLanguages`
+(`{code,level}` objects) straight through as `partner.native`/`partner.learning` — never mapping
+through `getLanguage()` into the `{code, name, flag, level}` shape the frontend actually expects.
+The chat match route already solved this correctly with a shared helper,
+`buildMatchPartner`/`MATCH_PARTNER_SELECT` in `src/lib/match-partner.server.ts`; video's route just
+never used it. Live-verified failure mode: the instant two real accounts reciprocally matched, the
+Match Found modal tried to render `<FlagImage flag={partner.native[0].flag}>` — `flag` was
+`undefined` on a raw string element — and `FlagImage`'s `[...flag]` threw `TypeError: e is not
+iterable`, caught by the app's error boundary (`lm-error` logged it correctly, itself confirming
+3.34's reporting pipeline works) but blocking the entire feature before either side could even see
+who they matched with. Fixed by deleting the duplicated inline function and importing the shared
+`buildMatchPartner`, matching chat's pattern exactly, including the `.select(MATCH_PARTNER_SELECT)`
+projection on all three `User.findById` lookups in the route.
+
+**Bug 3 — a remote camera-off never fell back to the partner avatar.** `VideoSession.tsx` decided
+whether to show a partner's video or their avatar placeholder purely from
+`remoteVideoTracks.length > 0`. LiveKit's `setCameraEnabled(false)` mutes the existing publication
+rather than unpublishing it, so `useTracks(..., { onlySubscribed: true })` keeps returning the same
+`TrackReference` — muted, but still "present." Live-verified: turning off the real camera on one
+side left the other side staring at a permanently frozen/black `<video>` element instead of falling
+back to the "Partner · Camera off" avatar card, indefinitely (confirmed via
+`video.readyState`/`srcObject.active` going to `0`/`null` while the DOM still rendered the dead
+element). Fixed by also excluding tracks where `t.publication?.isMuted` is true from
+`remoteVideoTracks`.
+
+**New test.** `match-partner.server.test.ts` (2 cases) pins the exact regression: given raw
+`nativeLanguages: ['en']` / `learningLanguages: [{code:'es',level:'unsure'}]` (the real Mongoose
+document shape), `buildMatchPartner` must return `{code,name,flag,level}` objects with a non-empty
+`flag` string — the precise value `FlagImage`'s `[...flag]` needs to not throw — plus the
+`spokenLanguages`-over-`nativeLanguages` precedence rule. No test added for bugs 1 and 3
+(client-side LiveKit/router wiring with no existing test harness or precedent in this codebase for
+mocking `@livekit/components-react`) — verified live instead, matching this project's established
+I/O-testing philosophy.
+
+**Verified live, end-to-end, against real infrastructure, 2026-08-03** (`next start`, two real
+accounts, two isolated browser contexts, this machine's one physical webcam — real LiveKit cloud
+rooms, real tokens, no mocks):
+- Reciprocal match via the real UI (setup form → prejoin → `POST/GET /api/match/video`) instant-matched
+  both directions; Match Found modal rendered correct partner name/language/flag data on **both**
+  sides with no crash (bug 2 fixed).
+- One side's real camera published and was received by the other: confirmed via
+  `video.readyState === 4`, `videoWidth/videoHeight === 1280×720`, `srcObject.active === true` on
+  the receiving side — an actual live frame from the real webcam, not a placeholder.
+- The voice-only side's camera stayed off inside the real session exactly as chosen in the prejoin
+  screen (bug 1 fixed) — confirmed by URL query (`?camera=0&mic=1`) and by the absence of any local
+  video track.
+- Toggling the real camera off mid-call correctly flipped the remote side back to the partner
+  avatar + "Camera off" (bug 3 fixed) — re-verified after the fix, on a fresh build, from scratch.
+- Chat data channel: a message sent from one browser arrived on the other in real time.
+- Participant list updated live (2 → 1) when one side left.
+- "Leave room" cleanly redirected both accounts to `/dashboard` with no dangling connection state.
+
+**Known real limitation of this verification, documented rather than hidden.** Two isolated
+browser contexts cannot both hold this machine's single physical camera at once — a
+`getUserMedia` call from the second context while the first holds the device hangs indefinitely.
+Real two-way "both sides show live video simultaneously" therefore could not be produced on one
+machine; one side ran real camera+mic, the other ran real mic with camera intentionally off
+(a fully product-supported mode, not a workaround) to still exercise the complete real signaling,
+publish/subscribe, and UI path end-to-end. The original roadmap dependency was "two devices" for
+exactly this reason — still true. Separately, one of the two isolated browser contexts never
+received a camera/microphone permission grant at all (`navigator.permissions.query` stayed at
+`"prompt"` indefinitely, with no exposed way to answer the native browser prompt from this
+automation surface) — an environment/tooling limitation, not a product defect.
+
+**Full suite.** 476 passed (2 new for `buildMatchPartner`), 11 skipped — clean lint, clean `tsc`,
+clean build.
+
+**Production readiness.** Production Ready.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3519,7 +3626,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are now already configured for a specific paid chain (§19.3: `google/gemini-3-flash-preview` → `anthropic/claude-haiku-4.5` → free tier), verified live-reachable and correctly priced; only the credit purchase itself remains | Critical | Trivial | Unblocks the core product and makes it ~10× faster | Owner spending money. **⚠️ See §20.5 before flipping this on for all traffic**: once a free tier exists, routing every request through the paid chain is an unbounded per-free-user cost. Model routing must become plan-aware (free → `FREE_TUTOR_MODELS`, trial/paid → the paid chain) first or alongside this purchase |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
-| 4 | **Test live video with two real cameras** | High | Low | The only wholly unverified feature | Two devices |
+| 4 | ~~Test live video with two real cameras~~ | High | Low | **Done, 2026-08-03 — see 3.53.** Found and fixed three real live-verified bugs: prejoin camera/mic choice was silently discarded by the real session, the video-match route's own broken partner-shaping crashed the Match Found modal for every real match, and a remote camera-off never fell back to the avatar placeholder | Two devices for true simultaneous two-way video — worked around with one real camera + one voice-only participant to still verify the full real path |
 
 ### Short term (before a public beta)
 
@@ -3727,8 +3834,13 @@ runs in a fresh process; confirmed by restarting the dev server and re-testing.*
 
 ### Coverage
 
-**435 tests passing, 11 skipped, across 45 files** (as of the roadmap #34/#35 block, 2026-08-02).
-23 new tests for the circuit breaker and production routing metrics (§21.4 Phase 1, 3.45 —
+**476 tests passing, 11 skipped, across 46 files** (as of the roadmap #4 block, 2026-08-03 — see
+3.53). 2 new tests in `match-partner.server.test.ts`, pinning the `buildMatchPartner` shape
+regression that crashed the video Match Found modal live. Before that (2026-08-03, roadmap #20,
+3.52): 474 tests, 11 skipped, 45 files (6 removed with the deleted refresh-throttle, 5 added for
+`ban-access.test.ts`). Before that (roadmap #34/#35 block, 2026-08-02): 435 tests passing, 11
+skipped, across 45 files. 23 new tests for the circuit breaker and production routing metrics
+(§21.4 Phase 1, 3.45 —
 `circuit-breaker.test.ts`, 8; `model-metrics.test.ts`, 3; 9 new cases in `openrouter.test.ts` for
 the circuit-breaker/metric wiring; new cases in `structured-tutor-reply.test.ts` for the
 correlated explanation-language metric). Before that (2026-08-02, roadmap #33, 3.44): 412 tests,
@@ -3788,6 +3900,7 @@ src/lib/ai/structured-tutor-reply.live.test.ts        live provider test (skippe
 src/lib/auth-throttle.test.ts                         login/register limits, hashing, IP parsing
 src/lib/language-profile.test.ts                      normalisation, completeness
 src/lib/match-defaults.test.ts                        form seeding from profile
+src/lib/match-partner.server.test.ts                  buildMatchPartner code→{name,flag,level} mapping (3.53 regression pin)
 src/lib/messages/access.test.ts                        participant checks
 src/lib/messages/history-window.test.ts               newest-page paging rule
 src/lib/messages/reconcile.test.ts                     dedupe + ordering
