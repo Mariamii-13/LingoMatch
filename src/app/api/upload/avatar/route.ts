@@ -5,6 +5,7 @@ import User from '@/lib/models/User'
 import Upload from '@/lib/models/Upload'
 import cloudinary from '@/lib/cloudinary'
 import { checkRateLimit } from '@/lib/rateLimit'
+import { deleteSupersededAvatars } from '@/lib/avatar-cleanup.server'
 
 const MAX_BYTES = 2 * 1024 * 1024 // 2MB
 
@@ -70,6 +71,10 @@ export async function POST(req: NextRequest) {
     type: 'avatar',
     size: result.bytes,
   })
+
+  // Fire-and-forget: the new avatar is already live, so a slow or failed
+  // cleanup of the old one must not delay or fail this response.
+  deleteSupersededAvatars(session.user.id, result.public_id).catch(() => {})
 
   return NextResponse.json({ url: result.secure_url })
 }
