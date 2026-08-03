@@ -2350,6 +2350,61 @@ this document identifies these accounts by username first.
 
 **Production readiness.** Production Ready — already was; now actually confirmed.
 
+### 3.50 Bundle analysis (roadmap #12) — a real ~490KB dependency deferred off the messages routes
+
+**What this block did.** Ran Next.js 16's native Turbopack bundle analyzer
+(`npx next experimental-analyze --output`, no install needed — this Next.js version replaces the
+webpack-only `@next/bundle-analyzer` workflow, see `node_modules/next/dist/docs/01-app/02-guides/package-bundling.md`).
+The interactive UI itself was unreachable in this sandbox (same `chrome-devtools-mcp` profile-lock
+limitation noted in section 17 — a leftover Chrome process holds the tool's profile directory, and
+killing arbitrary `chrome.exe` processes to clear it risks the owner's real browser session, so it
+was left alone rather than routed around), so the underlying chunk sizes were read directly:
+`.next/static/chunks/*.js`, sorted by file size, then grepped for library-identifying strings to
+attribute each large chunk.
+
+**The finding.** The single largest client chunk in the entire app (~496KB, `09gucjbx3sqml.js` —
+larger than every other chunk combined among the top ten) was the full `livekit-client` SDK
+(WebRTC negotiation, media track handling, adaptive streaming — all of it). Expected on
+`/session/video/[id]`, where real video happens. Unexpected: it was also being shipped
+synchronously on `/messages` and `/messages/[conversationId]`, which are text-only. Traced to
+`RealtimeMessagesProvider.tsx`, which imports `Room`/`RoomEvent` from `livekit-client` at module
+scope purely to use its data channel as a realtime pub/sub transport for message delivery — never
+a camera, a microphone, or a video track. `grep -rl` on `page_client-reference-manifest.js`
+confirmed the messages routes' manifests referenced that exact chunk hash.
+
+**The fix.** Changed the top-level `import { Room, RoomEvent } from "livekit-client"` to a
+type-only import (`import type { Room as RoomInstance } from "livekit-client"`, erased at compile
+time) plus a dynamic `await import("livekit-client")` inside the connection effect, right before
+constructing the room. Deliberately not a redesign of the realtime transport itself — replacing
+LiveKit here would reopen the WebSocket-infrastructure question section 18.7 already recorded as
+deferred with no evidence to justify it; this is purely a load-timing fix; every line downstream
+of the import is unchanged.
+
+**Verified.** Rebuilt clean (`rm -rf .next && npm run build`); `grep -c` on the rebuilt manifests
+confirmed chunk `09gucjbx3sqml.js` no longer appears in either messages route's
+`page_client-reference-manifest.js` (still present, correctly, in the video session route's). A
+real authenticated `fetch` of `/messages/[conversationId]` (`next start`, real session cookie via
+`/api/auth/callback/credentials`, the same standing `qaftue001` QA account) confirmed the chunk
+hash is genuinely absent from that page's initial HTML script list — 163 other scripts referenced,
+none of them the LiveKit chunk. This component had zero prior test coverage; added
+`RealtimeMessagesProvider.test.tsx` (6 cases, `vi.mock("livekit-client", ...)` — Vitest intercepts
+dynamic imports through the same module graph as static ones, so the mock exercises the real
+code path) covering room construction options, the token fetch and `connect()` call, dispatch on
+a matching topic, ignoring a mismatched topic, disconnected status on a failed token fetch, and
+`disconnect()` on unmount.
+
+**Known gap.** Full two-browser live click-through (confirming a real LiveKit realtime connection
+still delivers a message end-to-end, not just that the code is wired correctly) was blocked by the
+same environment limitation as above. The 10-second polling fallback already covers correctness of
+delivery even if the realtime path regressed, and this change touches only *when* the SDK loads,
+not the connection logic itself — but this is evidence-of-wiring, not the full live proof this
+project's own standard normally requires. Worth a real two-account click-through the next time
+browser automation is available in this sandbox.
+
+**Full suite.** 470 passed (6 new), 11 skipped — clean lint, clean `tsc`, clean build.
+
+**Production readiness.** Production Ready, with the live two-browser gap above noted honestly.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3375,7 +3430,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 9 | ~~Configure CSP and security headers~~ | — | — | **Done** — see 3.35 and 9.16. Verified against LiveKit, Cloudinary, Google avatars and flagcdn | — |
 | 10 | ~~Cache `/api/theme`~~ | — | — | **Done** in `c9cee82` — server-rendered from a cached read instead | — |
 | 11 | ~~Convert `/friends` and `/settings` to Server Components~~ | — | — | **Done** in `7ff87da` | — |
-| 12 | ~~Delete unused `recharts`~~; **run a bundle analysis** | Low | Low | Smaller bundle | `recharts` removed in `c9cee82`; the analysis has still never been run |
+| 12 | ~~Delete unused `recharts`~~; ~~run a bundle analysis~~ | Low | Low | **Done, 2026-08-03 — see 3.50.** Found and fixed a real ~490KB unnecessary dependency on the messages routes | `recharts` removed in `c9cee82` |
 
 ### Medium term (during beta, guided by real usage)
 
