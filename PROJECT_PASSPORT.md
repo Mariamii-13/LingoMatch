@@ -2314,6 +2314,42 @@ unchanged, `ƒ /messages/[conversationId]` present as before).
 
 **Production readiness.** Production Ready.
 
+### 3.49 Backwards pagination through message history (roadmap #19) — live verification of already-shipped code
+
+**Starting point.** Reading section 12 fresh (as the CEO-decision workflow requires) turned up a
+documentation bug, not a missing feature: `ee637c5` — the same commit credited for #16 in 3.48 —
+had already shipped the entire `before`-cursor code path (`route.ts`'s descending-then-reversed
+query, `hasMore`, `use-conversation-thread.ts`'s `loadOlderMessages` with scroll-position
+preservation, and the "Load older messages" button plus scroll-triggered auto-load in
+`page.tsx`), together with a synthetic unit-test file
+(`src/lib/messages/history-window.test.ts`, 11 cases). The roadmap table row for #19 was simply
+never updated, and — per this project's own repeated lesson (13, "drive the real product") — a
+synthetic-only test suite is not the same as live verification.
+
+**What this block did.** No code changed. Seeded the standing `qaftue001`/`qaphase001` QA
+conversation (section 17) from 3 messages to 130 via a one-shot script
+(`scripts/seed-pagination-history.mjs`, deleted after use) so a real `before` cursor walk would
+actually cross the 100-message page boundary, then drove the real endpoint with a real
+authenticated session (`/api/auth/csrf` → `/api/auth/callback/credentials` → cookie jar) rather
+than mocks.
+
+**Verified live, 2026-08-03, against the real database:**
+- No cursor: returned exactly the newest 100 messages, oldest-to-newest.
+- `before=<oldest of page 1>`: returned the remaining 30 (the 3 original QA messages plus 27
+  seeded ones), `hasMore: false`.
+- `before=<oldest of page 2>`: returned 0 messages, `hasMore: false`.
+- The two real pages partition all 130 messages with no gap and no duplicate at the cursor
+  boundary — the exact failure mode the ascending-sort bug (section 13) demonstrated matters here.
+
+Cleaned up afterward (`scripts/cleanup-seed-pagination-history.mjs`, also deleted after use): all
+127 seeded messages removed, conversation restored to its original 3.
+
+**New, minor lesson for this file (section 17):** the credentials `authorize()` callback
+(`src/auth.ts`) takes `email`, not `username` — worth noting because every other QA reference in
+this document identifies these accounts by username first.
+
+**Production readiness.** Production Ready — already was; now actually confirmed.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3351,7 +3387,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 16 | ~~Split the 774-line messages page~~ | Medium | Moderate | **Done, 2026-08-03 — see 3.48.** Network/realtime logic was already relocated to a hook in an earlier block; this one moved the three remaining inline modal components out too, 664 → 358 lines. Verified live | — |
 | 17 | ~~User blocking, plus a moderation audit trail~~ | — | — | **Done** — see 3.36. Re-prioritised upward and implemented in the same block that recorded the voice-first direction (18.5), because live voice raises the cost of shipping without it | — |
 | 18 | ~~Push notification when a match is found~~ | — | — | **Done** in `030a211` — see 3.9. Browser `Notification` API, no server/third-party dependency. Live two-account click-through still owed (blocked this session by dev-server interactivity, see 17) | — |
-| 19 | **Backwards pagination through message history** | Low | Moderate | Users can only see the newest 100 | None |
+| 19 | ~~Backwards pagination through message history~~ | Low | Moderate | **Done — shipped in `ee637c5` alongside #16, but never marked here nor live-verified. Verified live 2026-08-03, see 3.49.** | None |
 | 20 | **Reduce the `jwt` callback DB read** | Low | Moderate | One fewer read per page load | Accepts delayed ban propagation |
 | 21 | ~~Accessibility audit~~ — video controls, contrast, `aria-live` on the streaming transcript | — | — | **Done** in `ac9bec4` — see 3.23. `aria-live` on the tutor transcript and accessible switch semantics on the video toggles shipped; the dark-mode primary-button contrast finding (4.30:1, needs 4.5:1) was **not** fixed — it's a brand-colour change and needs the owner, same as 11's rule for the brand mark | — |
 
