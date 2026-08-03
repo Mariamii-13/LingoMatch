@@ -2445,6 +2445,58 @@ asset is already gone, and continues past one failing asset to clean up the rest
 
 **Production readiness.** Production Ready.
 
+### 3.52 Reject the `jwt` callback throttle: moderation correctness over one DB read (roadmap #20)
+
+**The decision, and why it's the owner's to make, not mine.** Roadmap #20 previously throttled
+the `jwt` callback's MongoDB refresh to a 5-minute interval (`auth-token-refresh.ts`), trading
+away immediate ban propagation for one fewer read per page load — an explicit, documented
+tradeoff at the time. Section 16 treats exactly this kind of security/performance tradeoff as the
+owner's call, not something to decide solo, so this sat flagged rather than picked. The owner's
+instruction, 2026-08-03: prioritise correctness — bans and other critical permission changes must
+take effect immediately, even at the cost of additional database reads. Moderation correctness
+outranks minimizing query count for this app specifically.
+
+**A worse bug than the tradeoff description implied.** Reading the throttled code to reverse it
+surfaced that `isBanned` was fetched from MongoDB in the refresh branch but never actually used
+for anything — no check, no rejection, nothing. This means a ban **never took effect on an
+already-issued session at all**, not "within 5 minutes" as the tradeoff comment claimed — only
+brand-new sign-ins (`authorize`/`signIn`) were ever ban-checked. A user banned mid-session kept
+full access until their JWT itself expired (NextAuth's default `session.maxAge`, weeks). This
+predates #20's interval; #20 only made an already-real gap look like a smaller, bounded one.
+
+**The fix.** Two parts:
+1. `src/auth.ts` — removed the interval gate (`shouldRefreshToken`/`TOKEN_REFRESH_INTERVAL_MS`,
+   both deleted along with their test) so the `jwt` callback's refresh branch re-reads MongoDB on
+   every single request again, restoring pre-#20 freshness. `token.isBanned` is now actually
+   populated (it never was, even before #20) and propagated through to `session.user.isBanned`.
+2. `src/proxy.ts` (runs on every request already) now reads `isBanned` off the session and blocks
+   every non-public route via a new pure, tested helper, `src/lib/ban-access.ts`
+   (`getBanRedirect`). Ordering matters here and caught a real bug before it shipped: the existing
+   rule "a logged-in user hitting `/login` bounces to `/dashboard`" had to be narrowed to
+   `!isBanned`, and the onboarding-redirect block had to be skipped entirely for banned users —
+   without both changes, a banned user with an incomplete language profile would bounce
+   `/dashboard` → `/login` → (onboarding redirect) → `/languages` → (ban redirect) → `/login` →
+   forever, an infinite redirect loop discovered by tracing the interaction by hand before running
+   anything, not by hitting it live.
+
+**Verified live, 2026-08-03, against the real database and a real running server (`next start`),
+not mocks:** signed in as the standing `qaphase001` QA account, confirmed `/dashboard` returned
+200. Banned the account directly in the database — exactly what an admin action does — using the
+*same, already-issued* session cookie throughout, no re-login. The very next request to
+`/dashboard` returned a 307 to `/login`; `/login` itself stayed reachable (no redirect loop).
+Unbanned the same account and confirmed `/dashboard` returned 200 again immediately, on the same
+cookie, proving the fix works symmetrically in both directions with no lingering staleness.
+
+**New test coverage.** `ban-access.test.ts` (5 cases) covers the redirect decision in isolation:
+not banned → never redirected; banned → redirected off both a normal route and an admin route;
+banned but already on a public path (`/login`) → not redirected, so the account isn't ejected
+from the one page it needs to reach; not banned on a public path → not redirected.
+
+**Full suite.** 474 passed (6 removed with the deleted throttle, 5 added for `ban-access`), 11
+skipped — clean lint, clean `tsc`, clean build.
+
+**Production readiness.** Production Ready.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -2899,14 +2951,24 @@ load-time request, and is a small known waste.
     the HTML. That removed both a request per page load and the flash of default amber before
     the custom colour landed.
 11. `recharts` uninstalled after confirming nothing imported it.
+12. Bundle analysis run (roadmap #12, 3.50) — `livekit-client` (~490KB, the app's single largest
+    chunk) was loading synchronously on the text-only messages routes for no reason; deferred to
+    a dynamic import.
 
 ### Remaining opportunities
 
 1. **Deduplicate the `SessionProvider` session calls.**
-2. **Reduce the `jwt` callback's database read** on every token refresh — currently the cost of
-   keeping `role`/`isBanned` fresh. A short in-token TTL could halve it.
-3. **Bundle analysis has never been run.**
-4. **Add compound indexes** guided by real query patterns once there is production traffic.
+2. **Add compound indexes** guided by real query patterns once there is production traffic.
+
+### Rejected optimisation: throttling the `jwt` callback's database read
+
+An earlier pass (roadmap #20) throttled this to a 5-minute interval to save one MongoDB read per
+page load, explicitly trading away immediate ban propagation. Reverted, 2026-08-03 — see 3.52.
+**Do not reintroduce a TTL/interval here without the owner's explicit sign-off**: this app's own
+moderation model depends on a ban taking effect on the very next request, not eventually, and the
+prior version of this optimization also revealed that `isBanned` was being fetched but never
+actually enforced anywhere downstream — a throttle interacting with a silent no-op is exactly the
+kind of compounding failure section 13 keeps finding.
 
 ---
 
@@ -3483,7 +3545,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 17 | ~~User blocking, plus a moderation audit trail~~ | — | — | **Done** — see 3.36. Re-prioritised upward and implemented in the same block that recorded the voice-first direction (18.5), because live voice raises the cost of shipping without it | — |
 | 18 | ~~Push notification when a match is found~~ | — | — | **Done** in `030a211` — see 3.9. Browser `Notification` API, no server/third-party dependency. Live two-account click-through still owed (blocked this session by dev-server interactivity, see 17) | — |
 | 19 | ~~Backwards pagination through message history~~ | Low | Moderate | **Done — shipped in `ee637c5` alongside #16, but never marked here nor live-verified. Verified live 2026-08-03, see 3.49.** | None |
-| 20 | **Reduce the `jwt` callback DB read** | Low | Moderate | One fewer read per page load | Accepts delayed ban propagation |
+| 20 | ~~Reduce the `jwt` callback DB read~~ | — | — | **Rejected, 2026-08-03 — see 3.52.** Owner decision: moderation correctness (immediate ban/role propagation) outranks saving one DB read. The interval throttle was removed instead of added | — |
 | 21 | ~~Accessibility audit~~ — video controls, contrast, `aria-live` on the streaming transcript | — | — | **Done** in `ac9bec4` — see 3.23. `aria-live` on the tutor transcript and accessible switch semantics on the video toggles shipped; the dark-mode primary-button contrast finding (4.30:1, needs 4.5:1) was **not** fixed — it's a brand-colour change and needs the owner, same as 11's rule for the brand mark | — |
 
 ### Long term (post-beta, demand-dependent)
