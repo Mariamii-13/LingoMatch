@@ -8,6 +8,7 @@ import { createRoom } from '@/lib/livekit'
 import { matchRequestSchema } from '@/lib/validations/match'
 import { checkRateLimit } from '@/lib/rateLimit'
 import { getBlockedUserIds } from '@/lib/blocking.server'
+import { buildMatchPartner as buildPartner, MATCH_PARTNER_SELECT } from '@/lib/match-partner.server'
 
 // Requests not polled within this window are considered ghost/disconnected
 const GHOST_THRESHOLD_MS = 12_000
@@ -35,23 +36,6 @@ async function createVideoConversation(userId: string, partnerId: string, langua
   await createRoom(roomName)
   await Conversation.findByIdAndUpdate(conv._id, { livekitRoomName: roomName })
   return conv
-}
-
-function buildPartner(doc: Record<string, unknown>) {
-  const name = (doc.displayName as string) ?? 'Partner'
-  const initials = name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-  return {
-    id: (doc._id as object).toString(),
-    name,
-    username: doc.username,
-    country: doc.country,
-    flag: '',
-    avatarInitials: initials,
-    avatarColor: 'from-violet-500 to-indigo-500',
-    native: doc.nativeLanguages,
-    learning: doc.learningLanguages,
-    interests: [],
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -103,7 +87,9 @@ export async function POST(req: NextRequest) {
   )
 
   if (existing) {
-    const partnerDoc = await User.findById(existing.userId).lean() as Record<string, unknown>
+    const partnerDoc = await User.findById(existing.userId)
+      .select(MATCH_PARTNER_SELECT)
+      .lean() as Record<string, unknown>
     const conv = await createVideoConversation(userId, existing.userId.toString(), targetLanguage)
     existing.conversationId = conv._id
     await existing.save()
@@ -154,7 +140,9 @@ export async function GET(req: NextRequest) {
 
     const participants = conv.participants as { toString(): string }[]
     const partnerId = participants.find((p) => p.toString() !== session.user!.id)
-    const partnerDoc = await User.findById(partnerId).lean() as Record<string, unknown>
+    const partnerDoc = await User.findById(partnerId)
+      .select(MATCH_PARTNER_SELECT)
+      .lean() as Record<string, unknown>
 
     return NextResponse.json({
       matched: true,
@@ -180,7 +168,9 @@ export async function GET(req: NextRequest) {
     )
 
     if (fallback) {
-      const partnerDoc = await User.findById(fallback.userId).lean() as Record<string, unknown>
+      const partnerDoc = await User.findById(fallback.userId)
+        .select(MATCH_PARTNER_SELECT)
+        .lean() as Record<string, unknown>
       const language = (request.targetLanguage as string)
       const conv = await createVideoConversation(session.user.id, fallback.userId.toString(), language)
 

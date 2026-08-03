@@ -22,6 +22,9 @@ export function VideoMatchClient({ defaults }: { defaults: MatchDefaults }) {
   const [matchResult, setMatchResult] = React.useState<MatchResult | null>(null)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
   const requestIdRef = React.useRef<string | null>(null)
+  // What the user actually chose on the prejoin screen — the live session must
+  // honour this, not silently request camera/mic again regardless of choice.
+  const devicePrefsRef = React.useRef({ camera: true, mic: true })
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
@@ -40,7 +43,8 @@ export function VideoMatchClient({ defaults }: { defaults: MatchDefaults }) {
     setPhase("prejoin")
   }
 
-  const startSearching = async () => {
+  const startSearching = async (cameraEnabled: boolean, micEnabled: boolean) => {
+    devicePrefsRef.current = { camera: cameraEnabled, mic: micEnabled }
     requestMatchNotificationPermission()
     setPhase("searching")
     const res = await fetch("/api/match/video", {
@@ -147,7 +151,12 @@ export function VideoMatchClient({ defaults }: { defaults: MatchDefaults }) {
       {matchResult && phase === "found" && (
         <MatchFoundModal
           result={matchResult}
-          onStartChat={() => router.push(`/session/video/${matchResult.conversationId}`)}
+          onStartChat={() => {
+            const { camera, mic } = devicePrefsRef.current
+            router.push(
+              `/session/video/${matchResult.conversationId}?camera=${camera ? "1" : "0"}&mic=${mic ? "1" : "0"}`,
+            )
+          }}
           onSkip={() => { setMatchResult(null); setPhase("idle") }}
         />
       )}

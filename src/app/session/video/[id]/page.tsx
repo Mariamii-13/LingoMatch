@@ -6,12 +6,22 @@ import User from "@/lib/models/User"
 import { generateToken } from "@/lib/livekit"
 import { VideoSession } from "@/components/session/VideoSession"
 
-export default async function VideoSessionPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function VideoSessionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ camera?: string; mic?: string }>
+}) {
   const session = await auth()
   if (!session?.user?.id) return notFound()
 
   await connectDB()
   const { id } = await params
+  const { camera, mic } = await searchParams
+  // Defaults to on so a direct link (no query string) keeps today's behaviour.
+  const initialCamera = camera !== "0"
+  const initialMic = mic !== "0"
 
   const conv = await Conversation.findById(id).lean() as Record<string, unknown> | null
   if (!conv || conv.type !== "video") return notFound()
@@ -52,6 +62,8 @@ export default async function VideoSessionPage({ params }: { params: Promise<{ i
       partner={partner as Parameters<typeof VideoSession>[0]["partner"]}
       token={token}
       serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_URL!}
+      initialCamera={initialCamera}
+      initialMic={initialMic}
     />
   )
 }

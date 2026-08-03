@@ -37,6 +37,8 @@ interface VideoSessionProps {
   partner: MatchResult["partner"]
   token: string
   serverUrl: string
+  initialCamera?: boolean
+  initialMic?: boolean
 }
 
 // ── Connection overlay ────────────────────────────────────────────────────────
@@ -278,7 +280,16 @@ function VideoSessionInner({
     })
   }
 
-  const remoteVideoTracks = remoteTracks.filter((t) => !(t.participant instanceof LocalParticipant))
+  /*
+   * A remote participant turning their camera off mutes the existing
+   * publication rather than unpublishing it — `useTracks` keeps returning the
+   * subscribed-but-muted TrackReference, so without this check the last frame
+   * (or a black frame) stays on screen forever instead of falling back to the
+   * partner avatar.
+   */
+  const remoteVideoTracks = remoteTracks.filter(
+    (t) => !(t.participant instanceof LocalParticipant) && !t.publication?.isMuted,
+  )
   const localVideoTrack = localTracks.find((t) => t.participant instanceof LocalParticipant)
 
   return (
@@ -355,7 +366,14 @@ function VideoSessionInner({
 
 // ── Root export ───────────────────────────────────────────────────────────────
 
-export function VideoSession({ conversationId, partner, token, serverUrl }: VideoSessionProps) {
+export function VideoSession({
+  conversationId,
+  partner,
+  token,
+  serverUrl,
+  initialCamera = true,
+  initialMic = true,
+}: VideoSessionProps) {
   const router = useRouter()
   const { data: authSession } = useSession()
   const myId = authSession?.user?.id ?? ""
@@ -370,8 +388,8 @@ export function VideoSession({ conversationId, partner, token, serverUrl }: Vide
       token={token}
       serverUrl={serverUrl}
       connect
-      audio
-      video
+      audio={initialMic}
+      video={initialCamera}
       onDisconnected={handleEnd}
     >
       <VideoSessionInner
