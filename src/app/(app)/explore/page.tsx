@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
-import { Check, Clock, Loader2, MessageSquare, Search, UserCheck, UserPlus, Users, Video } from "lucide-react"
+import { Check, Clock, Loader2, MessageSquare, Mic, Search, UserCheck, UserPlus, Users, Video } from "lucide-react"
 import { toast } from "sonner"
 
 import { avatarGradient } from "@/lib/utils"
@@ -288,7 +288,7 @@ export default function ExplorePage() {
         </p>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2">
+      <section className="grid gap-3 sm:grid-cols-3">
         <div className="flex items-center gap-4 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
             <MessageSquare className="size-5" />
@@ -315,6 +315,18 @@ export default function ExplorePage() {
             </p>
           </div>
           <Button variant="outline" nativeButton={false} render={<Link href="/match/video" />}>Choose</Button>
+        </div>
+        <div className="flex items-center gap-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white">
+            <Mic className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold">Voice Practice</h2>
+            <p className="text-sm text-muted-foreground">
+              Live audio conversation, no camera needed.
+            </p>
+          </div>
+          <Button variant="outline" nativeButton={false} render={<Link href="/match/voice" />}>Choose</Button>
         </div>
       </section>
 

@@ -53,3 +53,47 @@ describe("PreJoinScreen — camera and microphone switches", () => {
     expect(mic).toHaveAttribute("aria-checked", "false")
   })
 })
+
+/**
+ * voiceOnly is the entry point for roadmap item 4 of 20.4's sequencing
+ * (human-to-human voice matching, 18.5) — a dedicated audio-only prejoin
+ * with no camera section at all, always calling back with cameraEnabled=false.
+ */
+describe("PreJoinScreen — voiceOnly mode", () => {
+  it("renders no camera switch and no getUserMedia call", async () => {
+    await act(async () => {
+      render(<PreJoinScreen voiceOnly onFindPartner={() => {}} onCancel={() => {}} />)
+    })
+
+    expect(screen.queryByRole("switch", { name: "Camera" })).not.toBeInTheDocument()
+    expect(screen.getByRole("switch", { name: "Microphone" })).toHaveAttribute("aria-checked", "true")
+    expect(getUserMedia).not.toHaveBeenCalled()
+  })
+
+  it("calls onFindPartner with cameraEnabled=false regardless of mic state", async () => {
+    const onFindPartner = vi.fn()
+    const user = userEvent.setup()
+    await act(async () => {
+      render(<PreJoinScreen voiceOnly onFindPartner={onFindPartner} onCancel={() => {}} />)
+    })
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Find Partner" }))
+    })
+
+    expect(onFindPartner).toHaveBeenCalledWith(false, true)
+  })
+
+  it("disables Find Partner once the microphone is turned off", async () => {
+    const user = userEvent.setup()
+    await act(async () => {
+      render(<PreJoinScreen voiceOnly onFindPartner={() => {}} onCancel={() => {}} />)
+    })
+
+    await act(async () => {
+      await user.click(screen.getByRole("switch", { name: "Microphone" }))
+    })
+
+    expect(screen.getByRole("button", { name: "Find Partner" })).toBeDisabled()
+  })
+})

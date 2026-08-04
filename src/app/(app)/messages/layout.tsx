@@ -38,7 +38,7 @@ export default async function MessagesLayout({
 
       return {
         id: (conv._id as object).toString(),
-        type: conv.type as "chat" | "video",
+        type: conv.type as "chat" | "video" | "voice",
         partner: {
           id: partnerDoc ? (partnerDoc._id as object).toString() : "",
           name,

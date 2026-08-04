@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Inbox, MessageSquare, Search, Video, WifiOff } from "lucide-react"
+import { Inbox, MessageSquare, Mic, Search, Video, WifiOff } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -143,11 +143,17 @@ function MessengerShellContent({ conversations, children }: Props) {
                     <span
                       className={cn(
                         "absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full border-2 border-card",
-                        conv.type === "video" ? "bg-violet-500" : "bg-blue-500"
+                        conv.type === "video"
+                          ? "bg-violet-500"
+                          : conv.type === "voice"
+                            ? "bg-amber-500"
+                            : "bg-blue-500"
                       )}
                     >
                       {conv.type === "video" ? (
                         <Video className="size-2.5 text-white" />
+                      ) : conv.type === "voice" ? (
+                        <Mic className="size-2.5 text-white" />
                       ) : (
                         <MessageSquare className="size-2.5 text-white" />
                       )}

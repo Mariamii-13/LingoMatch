@@ -8,10 +8,12 @@ import { cn } from "@/lib/utils"
 interface PreJoinScreenProps {
   onFindPartner: (cameraEnabled: boolean, micEnabled: boolean) => void
   onCancel: () => void
+  // Voice-mode entry point: no camera section at all, mic is the only device.
+  voiceOnly?: boolean
 }
 
-export function PreJoinScreen({ onFindPartner, onCancel }: PreJoinScreenProps) {
-  const [cameraEnabled, setCameraEnabled] = React.useState(true)
+export function PreJoinScreen({ onFindPartner, onCancel, voiceOnly = false }: PreJoinScreenProps) {
+  const [cameraEnabled, setCameraEnabled] = React.useState(!voiceOnly)
   const [micEnabled, setMicEnabled] = React.useState(true)
   const [previewReady, setPreviewReady] = React.useState(false)
   const videoRef = React.useRef<HTMLVideoElement>(null)
@@ -75,7 +77,63 @@ export function PreJoinScreen({ onFindPartner, onCancel }: PreJoinScreenProps) {
     }
   }, [previewReady])
 
-  const bothOff = !cameraEnabled && !micEnabled
+  const bothOff = voiceOnly ? !micEnabled : !cameraEnabled && !micEnabled
+
+  if (voiceOnly) {
+    return (
+      <div className="mx-auto max-w-md space-y-6 py-4">
+        <div>
+          <h1 className="text-2xl font-bold">Set up your voice practice</h1>
+          <p className="mt-1 text-muted-foreground">Configure your microphone before matching — no camera needed</p>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div className={cn(
+            "flex items-center gap-2 rounded-xl border px-4 py-3 text-sm",
+            bothOff ? "border-red-500/30 bg-red-500/5 text-red-400" : "bg-muted/40 text-muted-foreground"
+          )}>
+            <span className={cn("size-2 rounded-full", bothOff ? "bg-red-500" : "bg-emerald-500")} />
+            {bothOff ? "Microphone must be on to find a partner" : "Mic ON · ready to match"}
+          </div>
+
+          <div className={cn("flex items-center justify-between rounded-xl border p-4", !micEnabled && "border-red-500/30 bg-red-500/5")}>
+            <div className="flex items-center gap-3">
+              {micEnabled
+                ? <Mic className="size-5 text-emerald-400" />
+                : <MicOff className="size-5 text-red-400" />
+              }
+              <div>
+                <p className="text-sm font-medium">Microphone</p>
+                <p className={cn("text-xs", micEnabled ? "text-emerald-400" : "text-red-400")}>
+                  {micEnabled ? "On" : "Off"}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={micEnabled}
+              aria-label="Microphone"
+              onClick={() => setMicEnabled((v) => !v)}
+              className={cn("relative h-6 w-11 rounded-full transition-colors", micEnabled ? "bg-emerald-500" : "bg-zinc-600")}
+            >
+              <span className={cn("absolute top-1 size-4 rounded-full bg-white transition-transform", micEnabled ? "translate-x-6" : "translate-x-1")} />
+            </button>
+          </div>
+
+          <Button
+            size="lg"
+            className="mt-2 h-12 bg-amber-600 text-base hover:bg-amber-700"
+            disabled={bothOff}
+            onClick={() => onFindPartner(false, micEnabled)}
+          >
+            Find Partner
+          </Button>
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 py-4">

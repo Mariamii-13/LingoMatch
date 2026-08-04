@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { MessageSquare, Video } from "lucide-react"
+import { MessageSquare, Mic, Video } from "lucide-react"
 
 export const metadata: Metadata = { title: "Find a match" }
 
@@ -12,7 +12,7 @@ export default function MatchPage() {
         <p className="mt-1 text-muted-foreground">Choose how you want to connect</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Link
           href="/match/chat"
           className="flex flex-col gap-4 rounded-2xl border bg-card p-6 transition-colors hover:border-blue-500/50 hover:bg-blue-500/5"
@@ -50,6 +50,28 @@ export default function MatchPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {["Video", "Voice", "In-call chat"].map((t) => (
+              <span key={t} className="rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs">
+                {t}
+              </span>
+            ))}
+          </div>
+        </Link>
+
+        <Link
+          href="/match/voice"
+          className="flex flex-col gap-4 rounded-2xl border bg-card p-6 transition-colors hover:border-amber-500/50 hover:bg-amber-500/5"
+        >
+          <div className="flex size-12 items-center justify-center rounded-xl bg-amber-500/15 text-amber-500">
+            <Mic className="size-6" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">Voice Match</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Live audio conversation, no camera. Faster to match, nothing to set up.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {["Audio only", "No camera", "In-call chat"].map((t) => (
               <span key={t} className="rounded-full border bg-muted/50 px-2.5 py-0.5 text-xs">
                 {t}
               </span>

@@ -39,6 +39,8 @@ interface VideoSessionProps {
   serverUrl: string
   initialCamera?: boolean
   initialMic?: boolean
+  // Voice-mode room: never publish or offer to publish a camera track.
+  audioOnly?: boolean
 }
 
 // ── Connection overlay ────────────────────────────────────────────────────────
@@ -129,6 +131,7 @@ function ControlsBar({
   micEnabled,
   chatOpen,
   participantsOpen,
+  audioOnly,
   onToggleCamera,
   onToggleMic,
   onToggleChat,
@@ -140,6 +143,7 @@ function ControlsBar({
   micEnabled: boolean
   chatOpen: boolean
   participantsOpen: boolean
+  audioOnly?: boolean
   onToggleCamera: () => void
   onToggleMic: () => void
   onToggleChat: () => void
@@ -149,19 +153,21 @@ function ControlsBar({
 }) {
   return (
     <div className="flex items-center justify-center gap-3 bg-zinc-900/80 px-4 py-3 backdrop-blur">
-      <button
-        onClick={onToggleCamera}
-        title={cameraEnabled ? "Turn off camera" : "Turn on camera"}
-        className={`flex size-11 items-center justify-center rounded-full transition ${
-          cameraEnabled ? "bg-white/10 hover:bg-white/20" : "bg-red-600 hover:bg-red-700"
-        }`}
-      >
-        {cameraEnabled ? (
-          <Camera className="size-5 text-white" />
-        ) : (
-          <CameraOff className="size-5 text-white" />
-        )}
-      </button>
+      {!audioOnly && (
+        <button
+          onClick={onToggleCamera}
+          title={cameraEnabled ? "Turn off camera" : "Turn on camera"}
+          className={`flex size-11 items-center justify-center rounded-full transition ${
+            cameraEnabled ? "bg-white/10 hover:bg-white/20" : "bg-red-600 hover:bg-red-700"
+          }`}
+        >
+          {cameraEnabled ? (
+            <Camera className="size-5 text-white" />
+          ) : (
+            <CameraOff className="size-5 text-white" />
+          )}
+        </button>
+      )}
 
       <button
         onClick={onToggleMic}
@@ -222,11 +228,13 @@ function VideoSessionInner({
   conversationId,
   partner,
   myId,
+  audioOnly,
   onEnd,
 }: {
   conversationId: string
   partner: MatchResult["partner"]
   myId: string
+  audioOnly?: boolean
   onEnd: () => void
 }) {
   const [chatOpen, setChatOpen] = React.useState(false)
@@ -318,7 +326,7 @@ function VideoSessionInner({
               </AvatarFallback>
             </Avatar>
             <p className="text-lg font-semibold">{partner.name} {partner.flag}</p>
-            <p className="text-sm text-white/50">Camera off</p>
+            {!audioOnly && <p className="text-sm text-white/50">Camera off</p>}
           </div>
         )}
 
@@ -353,6 +361,7 @@ function VideoSessionInner({
         micEnabled={micEnabled}
         chatOpen={chatOpen}
         participantsOpen={participantsOpen}
+        audioOnly={audioOnly}
         onToggleCamera={() => localParticipant.setCameraEnabled(!cameraEnabled)}
         onToggleMic={() => localParticipant.setMicrophoneEnabled(!micEnabled)}
         onToggleChat={() => setChatOpen((v) => !v)}
@@ -373,6 +382,7 @@ export function VideoSession({
   serverUrl,
   initialCamera = true,
   initialMic = true,
+  audioOnly = false,
 }: VideoSessionProps) {
   const router = useRouter()
   const { data: authSession } = useSession()
@@ -389,13 +399,14 @@ export function VideoSession({
       serverUrl={serverUrl}
       connect
       audio={initialMic}
-      video={initialCamera}
+      video={audioOnly ? false : initialCamera}
       onDisconnected={handleEnd}
     >
       <VideoSessionInner
         conversationId={conversationId}
         partner={partner}
         myId={myId}
+        audioOnly={audioOnly}
         onEnd={handleEnd}
       />
     </LiveKitRoom>

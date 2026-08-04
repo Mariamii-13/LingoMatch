@@ -7,7 +7,7 @@ const ConversationSchema = new Schema(
       required: true,
       validate: (v: unknown[]) => v.length === 2,
     },
-    type: { type: String, enum: ['chat', 'video'], required: true },
+    type: { type: String, enum: ['chat', 'video', 'voice'], required: true },
     language: { type: String, required: true },
     status: { type: String, enum: ['active', 'ended'], default: 'active' },
     livekitRoomName: { type: String, default: null },

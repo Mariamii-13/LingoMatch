@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
 
   const conv = await Conversation.findById(id)
-  if (!conv || conv.type !== 'video')
+  if (!conv || (conv.type !== 'video' && conv.type !== 'voice'))
     return NextResponse.json({ error: 'Video conversation not found' }, { status: 404 })
 
   const participantIds = conv.participants.map((p: { toString(): string }) => p.toString())

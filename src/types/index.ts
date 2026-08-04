@@ -37,7 +37,7 @@ export interface Friend extends User {
 export interface Session {
   id: string
   partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor">
-  type: "chat" | "video"
+  type: "chat" | "video" | "voice"
   mode: string
   language: string
   date: string
@@ -64,7 +64,7 @@ export interface Feedback {
 export interface ScheduledSession {
   id: string
   partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor">
-  type: "chat" | "video"
+  type: "chat" | "video" | "voice"
   mode: string
   language: string
   date: string
@@ -174,7 +174,7 @@ export interface Message {
 
 export interface Conversation {
   id: string
-  type: "chat" | "video"
+  type: "chat" | "video" | "voice"
   partner: Pick<User, "id" | "name" | "username" | "flag" | "avatarInitials" | "avatarColor" | "avatar">
   language: string
   status: "active" | "ended"

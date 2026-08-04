@@ -9,6 +9,7 @@ import {
   History,
   Inbox,
   MessageSquare,
+  Mic,
   Video,
 } from "lucide-react"
 
@@ -148,6 +149,19 @@ export default async function DashboardPage() {
             </p>
             <Button className="mt-5" variant="outline" nativeButton={false} render={<Link href="/match/video" />}>
               Choose live practice
+            </Button>
+          </article>
+
+          <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+              <Mic className="size-5" />
+            </span>
+            <h3 className="mt-4 text-lg font-semibold">Voice Practice</h3>
+            <p className="mt-2 flex-1 text-sm text-muted-foreground">
+              Live audio conversation with a partner. No camera, nothing to set up.
+            </p>
+            <Button className="mt-5" variant="outline" nativeButton={false} render={<Link href="/match/voice" />}>
+              Find a voice match
             </Button>
           </article>
 

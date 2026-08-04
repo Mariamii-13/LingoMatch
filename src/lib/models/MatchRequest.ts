@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose'
 
 const MatchRequestSchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  type: { type: String, enum: ['chat', 'video'], required: true },
+  type: { type: String, enum: ['chat', 'video', 'voice'], required: true },
   targetLanguage: { type: String, required: true },
   nativeLanguage: { type: String, required: true },
   interests: { type: [String], default: [] },
