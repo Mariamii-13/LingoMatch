@@ -2727,6 +2727,71 @@ scope**: demoting text/video to secondary per 18.5's full direction (dashboard/l
 default queue), and the two-way liquidity/growth work (SEO, wider rollout) that §20.4 sequences
 *after* this step.
 
+### 3.55 Public SEO surface (§20.4 step 5; §18.3) — sitemap, robots, structured data, `/learn` pages
+
+**Why this was picked.** §20.4 step 5 ("Growth/SEO surface — 18.3") was explicitly gated on "a
+working voice-matching product, Tier-1 pairs with real density" existing first — true as of 3.54.
+Steps 1–2 above it are owner-blocked (§17); step 3 is done; step 4 (this step's own prerequisite)
+is done. Nothing above step 5 in the owner-endorsed sequence was left to do, and unlike step 6
+(demoting text/video to secondary — an owner-facing UX/product-framing call the roadmap notes
+deserves a brief brainstorm rather than a solo pick) this item is mechanical, evidence-backed, and
+had no owner dependency, so it was the highest-value unblocked item.
+
+**What was built.** §18.3's own checklist, plus the "genuinely differentiated content" bar it sets
+(no thin/auto-generated pages):
+- `src/app/robots.ts` and `src/app/sitemap.ts` (Next's file-convention metadata routes) — the app's
+  first robots/sitemap. `robots.ts` explicitly disallows every authenticated route family (already
+  invisible to crawlers via `proxy.ts`'s auth gate, per 18.3's existing note — this makes it
+  explicit rather than relying on a login-redirect crawlers would otherwise index as the page).
+- `src/lib/site.ts` — a single `SITE_URL` constant (the real live Vercel domain,
+  `lingomatch-lac.vercel.app`, confirmed via the Vercel API against the `voxa` project — no custom
+  domain purchased yet) used everywhere a canonical/OG/sitemap URL is built, so a future custom
+  domain is a one-line change.
+- `metadataBase`, OpenGraph and Twitter-card defaults on the root layout; a canonical link on the
+  landing page.
+- `src/components/shared/json-ld.tsx` — a small `JsonLd` component; `Organization` structured data
+  on every page (root layout), `Article` structured data on each `/learn/[pair]` page.
+- **`/learn` and `/learn/[pair]`** — a new indexable public route, statically generated
+  (`generateStaticParams`) for the 5 unordered Tier-1 language pairs from §19.5's 8 directional
+  rows (Spanish↔English, Portuguese↔English, Spanish↔French, Portuguese↔Spanish, English↔French).
+  Each page's content (`src/lib/learn-pairs.ts`) is a real, pair-specific linguistic challenge plus
+  the actual shipped product mechanism that addresses it — not a template with the language name
+  swapped in. The Portuguese↔Spanish page in particular describes the real "portuñol"
+  language-mixing weakness this project's own AI-quality evaluation harness found and fixed (3.40,
+  3.43) — true, verifiable, and specific to that pair, satisfying 18.3's "says something true and
+  useful about that pair" bar directly.
+- `src/proxy.ts`: `/learn*` added to the public-path allowlist (so it renders instead of
+  redirecting to `/login`), and the middleware `matcher` updated to exclude `robots.txt` and
+  `sitemap.xml` — **a real bug caught live**: both new routes initially 307-redirected to `/login`
+  because the existing matcher only excluded `_next/static|_next/image|favicon.ico|public`, not
+  these two file-convention routes, so every crawler request for either would have hit the auth
+  gate instead of the actual file.
+- Landing page nav/footer gained a "Language Pairs" link to `/learn` for internal linking and
+  discoverability — no other landing copy changed (18.5's dashboard/landing reframing remains
+  explicitly out of scope, unchanged from 3.54).
+
+**Live verification.** Built and ran via `next start` (not dev mode, per 17's own note on
+chrome-devtools-mcp reliability): confirmed via direct `fetch`/`curl` against the real server —
+`/robots.txt` and `/sitemap.xml` serve the real file (initially 307'd before the `proxy.ts` matcher
+fix above; re-verified 200 after) with the real production `lingomatch-lac.vercel.app` domain in
+every URL; `/learn` and all 5 `/learn/[pair]` routes return 200 with real per-pair copy, correct
+`<title>`, canonical link, OpenGraph tags, and `Article` JSON-LD; an unknown slug
+(`/learn/nonexistent-pair`) correctly 404s; `/dashboard` (and other authenticated routes) still
+307-redirect to `/login` unchanged — the new public paths didn't loosen the auth gate anywhere
+else. Caught and fixed one further content issue during verification: the first draft of the
+Portuguese↔Spanish and Spanish↔French copy cited internal `PROJECT_PASSPORT.md` section numbers
+directly in public-facing text — removed before this was considered done, since that's an internal
+citation, not something a real visitor should see.
+
+**Full suite.** 479 passed, 11 skipped, 49 files — clean lint, clean `tsc`, clean build (all 5
+`/learn/[pair]` routes confirmed statically generated, not server-rendered on demand).
+
+**Production readiness.** Production Ready. **Not yet done, deliberately out of scope**: paid
+acquisition (18.3 explicitly gates that on roadmap #13, still owner-blocked); expanding `/learn`
+beyond the 5 Tier-1 pairs (18.3's own warning against thin/low-value pages argues for waiting on
+real search-console data, not guessing more pairs); a custom domain (cosmetic, no functional
+blocker — `SITE_URL` makes it a one-line change whenever the owner buys one).
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3798,6 +3863,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 35 | ~~Production routing metrics~~ (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | **Done, 2026-08-02 — see 3.45.** Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) is now real; verified live against OpenRouter | — |
 | 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35 (both done) — still gated on real metrics actually accumulating in production, and a confirmed concrete reason per 19.6.4 |
 | 37 | ~~Human-to-human voice matching~~ (18.5 human half, §20.4 step 4) — new `voice` match/session type, audio-only LiveKit room reusing `video`'s matching/liveness mechanics | High | Moderate | **Done, 2026-08-04 — see 3.54.** §19.4's "needs no AI at all... lower-risk, cheaper, sooner-shippable half of 18.5", now built and live-verified with two real accounts and a real LiveKit room. Also found and fixed a real pre-existing bug affecting `chat`/`video` too: the `matchrequests` TTL index was stuck at 60s instead of the schema's declared 900s | #17 (blocking/moderation, done, 3.36) — 18.5's own stated prerequisite. **Not done**: demoting text/video to secondary (18.5's full direction) — deliberately out of scope, still future work |
+| 38 | ~~Public SEO surface~~ (§20.4 step 5, §18.3) — sitemap, robots.txt, canonical/OG metadata, structured data, indexable `/learn/[pair]` pages for the 5 Tier-1 language pairs | High | Moderate | **Done, 2026-08-04 — see 3.55.** §20.4's own gate ("worth writing once there is something genuinely differentiated to say") cleared once #37 shipped. Live-verified against a real production build; caught and fixed a real bug along the way (`robots.txt`/`sitemap.xml` were 307-redirecting to `/login` — the auth middleware's matcher predated these routes) | #37 (done, 3.54) — §20.4's own stated gate |
 
 ---
 
@@ -4823,10 +4889,12 @@ tested combinations" requirement is unmet today and should not be claimed.
 - **Advertising spend and channels must be chosen from real conversion and retention evidence**,
   not assumptions.
 
-*Current position:* the only public pages are the landing page, login, register and
-`/forgot-password`. No sitemap, no `robots.txt`, no structured data, and no canonical URLs
-exist. That is a gap against this requirement, not a completed state — but it is deliberately
-**not** work for the current block.
+*Current position, updated 2026-08-04 (roadmap #38, see 3.55):* `robots.txt`, `sitemap.xml`,
+canonical URLs, OpenGraph/Twitter metadata, and `Organization`/`Article` structured data now exist,
+plus a first indexable content surface — `/learn` and 5 `/learn/[pair]` pages covering every
+Tier-1 language pair. Still a gap against this requirement: no custom domain (sitemap/canonical
+URLs point at the real `lingomatch-lac.vercel.app` Vercel domain), and no paid advertising — still
+correctly gated on roadmap #13 (owner-blocked).
 
 ### 18.4 How these interact with the existing roadmap
 
@@ -4841,7 +4909,7 @@ governs *within* a release. Section 18 governs *what may be built at all*:
 | 17 — user blocking + moderation audit trail | **Re-prioritised upward by 18.5, and done** — see 3.36. Live voice between strangers cannot be reviewed after the fact the way a text transcript can; safety controls needed to exist *before* voice is the default experience, not after |
 | 22 — payments | Unchanged; still requires demand evidence |
 | 24 — speaking practice | **Requires the written architecture and product plan first** (18.2), which 18.5 now says must cover human-to-human voice matching as well as the AI tutor, not the tutor alone. This is the largest planned initiative in the project |
-| — new | Public SEO surface (landing pages, sitemap, robots, structured data, per-pair content) is now an explicit future roadmap area (18.3) |
+| — new | Public SEO surface (landing pages, sitemap, robots, structured data, per-pair content) is now an explicit future roadmap area (18.3). **Sitemap/robots/structured data/first `/learn` content pages done, 2026-08-04 — roadmap #38, see 3.55**; a custom domain and paid-ads gating (#13) remain open |
 | — new | Voice-first human exchange (18.5): audio-first matching UX, a moderation model that assumes conversations are not reviewable after the fact, and demoting text to a supporting role — see 18.5 for what this does and does not authorise building now |
 | — new | Business & growth strategy (section 20, recorded 2026-07-31): monetization shape, the AI teacher's long-term pedagogical model, and the liquidity/growth mechanics 18.5 makes more urgent — the owner-requested evidence-based plan this table's items 22, 25, 27, 31–33 now point back to |
 | — new | Provider-independent AI routing (section 21, recorded 2026-08-01): deepens 18.1 from "stay swappable" to a specified registry/metrics/circuit-breaker architecture — items 1, 28–30 now feed it directly (cost data, quality signals, live model picks all become router inputs rather than separate concerns), and new items 34–36 implement it |
@@ -5648,7 +5716,7 @@ principle, which still governs *within* a phase:**
 | 2 | **Product analytics — roadmap #13** | This is the evidence gate the owner's own answers repeatedly invoke ("evaluate objectively," "recommend based on evidence") — every hypothesis in 20.1–20.3 needs this to be checked against reality, and it was already section 10's stated precondition for monetization |
 | 3 | **AI-teacher quality loop — roadmap #28, #29, then #31** | Cheapest, highest-leverage, needs no owner action, and directly serves the owner's explicitly stated top priority (retention/quality) before any large bet is placed. Runs **in parallel** with #13, not after it — neither blocks the other |
 | 4 | **Human-to-human voice matching + liquidity mechanics — the human half of 18.5, plus roadmap #32, #33** | §19.4 already concluded human voice "needs no AI at all" and is "the lower-risk, cheaper, sooner-shippable half of 18.5." Combined with the liquidity mechanics in 20.3, this is the highest-leverage lever available that isn't gated on anything above, and it compounds directly with #13 (more signal, faster). **Liquidity mechanics (#32, #33) done 2026-08-02; the voice-matching piece itself (roadmap #37) done 2026-08-04 — see 3.54.** Text/video are not yet demoted to secondary — that remains future work, deliberately separate from shipping the `voice` type itself |
-| 5 | **Growth/SEO surface — 18.3** | Worth writing once there is something genuinely differentiated to say (a working voice-matching product, Tier-1 pairs with real density) rather than generic content describing a still-changing product |
+| 5 | ~~Growth/SEO surface — 18.3~~ | **Done, 2026-08-04 — roadmap #38, see 3.55.** Worth writing once there was something genuinely differentiated to say (a working voice-matching product, Tier-1 pairs with real density) rather than generic content describing a still-changing product — that gate cleared once #37 shipped |
 | 6 | **Monetization — roadmap #22, per 20.1** | Deliberately last of the strategic bets — gated on #13 producing real retention/usage evidence, exactly as the owner's own answer requires ("smaller, sustainable business" over "short-term revenue") |
 | 7 | **AI tutor voice — roadmap #24** | Last, because §19.4 already flags an unresolved latency contradiction (Gemini Live 2.98s vs 320–800ms) and a real cost-curve risk that must be spiked before committing. By the time items 2–6 are done, the eval harness (#29) and cost-counting (#30) it depends on already exist, so it gets built once, safely, instead of twice |
 
