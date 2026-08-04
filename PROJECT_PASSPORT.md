@@ -120,14 +120,15 @@ practise:
    a specific learner's strengths and weaknesses across sessions and adapts accordingly, not a
    stateless chatbot — not yet implemented; see 18.2 and 20.8 before changing tutor personalization.
 2. **Human language exchange** — a learner is matched with another user on a reciprocal basis
-   (A speaks what B is learning and vice versa) for a text conversation, an optional live video
-   call, or (new, 2026-08-04, see 3.54) a live voice-only call. All three are co-equal options on
-   the match chooser today — video and voice both remain optional, never a requirement. **This is
-   the current, built state.** The owner's binding long-term direction (18.5) is for live voice
-   conversation to become the *primary* human-exchange mode, with text demoted to a supporting
-   feature — the `voice` match/session type itself is now built and live-verified, but that
-   demotion (dashboard/landing copy, default queue) has **not** happened yet; read 18.5 before
-   changing matching, messaging or the dashboard.
+   (A speaks what B is learning and vice versa) for **live voice conversation (the primary,
+   promoted mode)**, text (a supporting mode — coordination, sharing a note/link, or when voice
+   isn't available), or a direct video call (an alternative entry point into the same kind of
+   live room, for anyone who wants their camera on from the start). **Updated 2026-08-04 (see
+   3.56): this is now the built and live-verified state**, per the owner's binding 18.5 direction.
+   Every session that starts as voice can turn its camera on mid-call without re-matching — video
+   is a real in-call upgrade from voice, not just marketing copy; see 3.56 for the mechanism. Text
+   and direct-video remain fully one-click reachable everywhere voice is — nothing was removed,
+   only re-prioritised, so voice is never forced on someone who genuinely can't use it.
 
 Supporting features: profiles, friend requests, a persistent conversation list, partner
 discovery/search, practice history, and an admin console.
@@ -137,9 +138,10 @@ discovery/search, practice history, and an admin console.
 Self-directed adult language learners who want conversation practice specifically — not
 vocabulary drills or gamified lessons. The AI tutor serves learners who are nervous about
 speaking to strangers or who want practice at 2am; human exchange serves learners who want
-authentic conversation and cultural contact. The product's positioning is explicitly
-"practise your way" — text-first, video optional — which differentiates it from
-video-first exchange apps that intimidate beginners.
+authentic, spoken conversation and cultural contact. The product's positioning (updated
+2026-08-04, 18.5) is **"speak your way"** — live voice conversation is the primary human-exchange
+mode, text is a supporting feature, and video is an optional upgrade you turn on once you're
+already talking, not a separate mode you have to choose upfront.
 
 ### Business model
 
@@ -2725,7 +2727,8 @@ either, per 14's stated I/O-testing philosophy); verified live instead, as above
 **Production readiness.** Production Ready. **Not yet done, deliberately out of this block's
 scope**: demoting text/video to secondary per 18.5's full direction (dashboard/landing reframing,
 default queue), and the two-way liquidity/growth work (SEO, wider rollout) that §20.4 sequences
-*after* this step.
+*after* this step. **Update 2026-08-05: both now done — see 3.55 (SEO) and 3.56 (the voice-first
+UX redesign).**
 
 ### 3.55 Public SEO surface (§20.4 step 5; §18.3) — sitemap, robots, structured data, `/learn` pages
 
@@ -2791,6 +2794,120 @@ acquisition (18.3 explicitly gates that on roadmap #13, still owner-blocked); ex
 beyond the 5 Tier-1 pairs (18.3's own warning against thin/low-value pages argues for waiting on
 real search-console data, not guessing more pairs); a custom domain (cosmetic, no functional
 blocker — `SITE_URL` makes it a one-line change whenever the owner buys one).
+
+### 3.56 Voice-first UX redesign (18.5's remaining direction; roadmap #39) — voice promoted,
+text reframed as supporting, video made a real in-call upgrade
+
+**Why this was picked, and why now rather than earlier.** This is 18.5's own remaining piece —
+memory from the prior session explicitly flagged it as needing "a real UX decision... worth a
+brief brainstorm/confirm with the owner rather than a solo CEO pick," unlike #37/#38 which had
+clear, narrow, evidence-backed scope. The owner supplied that direction directly this session (see
+§18.5 "Update 2" for the verbatim quote and the design decisions derived from it) — once given, it
+became the single highest-value unblocked item: §20.4 already named this the last piece of the
+biggest strategic bet (18.5) still open, and prior blocks (#17 moderation, #37 voice matching, #38
+SEO) had already cleared every one of its stated prerequisites.
+
+**What was built:**
+
+- **Dashboard** (`src/app/(app)/dashboard/page.tsx`): the three-way "Text/Live/Voice Practice"
+  co-equal card row is gone. Voice is now a hero-styled card (amber, `lg:col-span-2`, matching the
+  AI tutor card's visual weight) with the primary CTA "Find a voice match" and an inline secondary
+  link, "Prefer video from the start? →", pointing at the existing `/match/video` queue rather than
+  giving video its own competing card. Text Practice is reframed with the owner's own listed use
+  cases verbatim ("best for coordinating, sharing a note or link, or practising when voice isn't an
+  option right now").
+- **Landing page** (`src/app/page.tsx`): hero copy, the `features` list, and the `modes` section all
+  updated the same way — voice leads, text is support, video is folded into voice's own copy as an
+  anytime upgrade rather than a third co-equal card. Root layout's default `<title>`/description/OG/
+  Twitter metadata (`src/app/layout.tsx`) updated to match — these feed real search-result and
+  social-share text, so the old "text conversations, or optional live practice" framing would have
+  kept shipping the pre-redesign product story indefinitely otherwise.
+- **`/explore` and `/match` hub** (`src/app/(app)/explore/page.tsx`,
+  `src/app/(app)/match/page.tsx`): both three-card rows reordered voice-first, with Video's card
+  copy changed to "Same live room as Voice Practice — camera on from the start" rather than a
+  competing description. The `/match/chat`, `/match/video`, `/match/voice` sub-page headers
+  (`ChatMatchClient.tsx`, `VideoMatchClient.tsx`, `VoiceMatchClient.tsx`) were renamed to one
+  canonical scheme ("Text Practice" / "Video Call" / "Voice Practice") — they previously read "Chat
+  Match" / "Video Match" / "Voice Match," a naming mismatch against dashboard/explore found while
+  doing this pass, not introduced by it.
+- **The actual functional upgrade mechanism — `VideoSession.tsx`'s `ControlsBar`.** This is the
+  literal, working meaning of "video is an upgrade from voice," not just reworded copy. Previously
+  the camera button was omitted entirely when `audioOnly` (voice) was true — a voice session could
+  never turn a camera on without leaving and re-matching into `/match/video`. Now, whenever
+  `audioOnly && !cameraEnabled`, the control bar shows a labelled "Add video" pill instead of the
+  plain icon toggle; clicking it calls `localParticipant.setCameraEnabled(true)` (wrapped in
+  `cameraPending` state and a `try/catch` → `toast.error` on failure), requesting camera permission
+  and publishing a track mid-call. Once a camera is on, it behaves exactly like a normal video
+  call's toggle from then on, including turning off again. **This was mechanically already
+  possible and required no server/token change**: `src/lib/livekit.ts`'s `generateToken` grants
+  `canPublish: true` unconditionally, regardless of session type — only this component's own UI was
+  ever blocking it. A companion caption ("Voice call — add video anytime") appears under the
+  partner's avatar placeholder while camera is off, mirroring the existing "Camera off" caption
+  video sessions already show.
+- **A real, pre-existing bug found and fixed live while verifying the match flow, unrelated to the
+  redesign's copy but directly in the same surface:** `MatchFoundModal.tsx` — shared by all three
+  match flows — always showed a **"Start Chat"** CTA with a message-bubble icon, regardless of
+  whether the match was chat, video, or voice. A user matched for a live voice call was told they
+  were about to "Start Chat." Fixed with a `mode` prop (`"chat" | "video" | "voice"`) that now
+  drives the right label/icon/colour: "Start Chat" (blue), "Join Video Call" (violet), "Join Voice
+  Call" (amber) — confirmed live, see below.
+- **Sidebar nav** (`src/components/shared/sidebar.tsx`): added a persistent "Voice Practice" entry
+  (linking to `/match/voice`) between "AI Practice" and "Find Partners," so voice is reachable as an
+  ongoing app area the way "Conversations" already is for text, not only from a practice-picker
+  card. **Deliberately not added to the mobile bottom nav** (`mobile-nav.tsx`): its primary row is
+  already at 4 items plus a "More" trigger; a 5th slot would crowd a small-screen tab bar for
+  marginal benefit, since `/explore`'s reordered cards and the dashboard's promoted voice card
+  already surface voice prominently on mobile without spending a tab slot.
+
+**Live verification, 2026-08-05, against the real database, a real LiveKit Cloud room, and two
+real accounts (`qaftue001`/`qaphase001`), not mocks:**
+
+- Static copy confirmed via authenticated `fetch`/`curl` against a real `next start` build: landing
+  page (logged out), dashboard, `/explore`, and `/match` all render the new voice-first copy and
+  hierarchy exactly as written; sidebar's "Voice Practice" link present in the server-rendered HTML.
+- **Full real match-to-call flow, two isolated browser contexts (chrome-devtools-mcp)**: both
+  accounts queued for Voice Practice through the real UI (language-agnostic 5-second fallback
+  paired them, since both are native-English/learning-Spanish — not a reciprocal pair); a real
+  `MatchRequest` → real `Conversation` (`type: "voice"`) → real LiveKit room was created; **the
+  `MatchFoundModal` fix was confirmed live** — both accounts saw "Join Voice Call," not "Start
+  Chat"; both landed on `/session/voice/{id}` and connected to the same real room, each seeing the
+  other's name/avatar and the "Voice call — add video anytime" caption with the "Add video" pill.
+- **The "Add video" control itself**: clicking it correctly entered a `cameraPending` state
+  ("Requesting camera…", button disabled) and triggered a real, pending native browser camera-
+  permission prompt (confirmed via `navigator.permissions.query({name:'camera'})` returning
+  `"prompt"`) — this sandbox has no exposed way to click that native OS-level dialog (the same
+  documented limitation as 3.53's camera verification), so the actual grant/video-track-appears
+  step could not be observed pixel-by-pixel. **What was confirmed instead**: the pending state
+  entered and held correctly with no crash, the partner's session remained fully connected and
+  unaffected throughout, and — encountered once by accident when a network-address switch
+  temporarily left `navigator.mediaDevices` undefined (an insecure-HTTP-origin browser restriction,
+  not a code defect) — the `try/catch/finally` handled that failure gracefully too: `cameraPending`
+  reset, the button returned to its normal state, the call was never disrupted. Production is
+  always served over real HTTPS (Vercel), so that specific insecure-origin case cannot occur for a
+  real user; it happened here only because this sandbox's browser automation reaches the dev/test
+  server over a plain-HTTP LAN address (17's own documented reachability workaround) rather than
+  `localhost`.
+- Both test sessions were ended cleanly via the real "Leave room" control (→ `POST
+  /api/session/{id}/end`), confirmed redirecting to `/dashboard` on both sides — no dangling call
+  state left behind.
+
+**Testing.** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean (all routes
+compile, no new warnings). **Full `vitest` suite was flaky in this session independent of these
+changes**: repeated full runs (with and without a concurrent build) hit worker-thread timeouts and
+one outright segfault, always isolated to `*.live.test.ts` files (network/credential-gated AI
+tests unrelated to anything touched in this block) or the vitest worker pool itself — a small,
+targeted run (`match-defaults.test.ts`, `onboarding-access.test.ts`) passed cleanly, confirming the
+runner itself isn't broken. None of the files this block touched (dashboard, landing, explore,
+match pages, `MatchFoundModal`, `VideoSession`, sidebar) have existing unit tests to run in the
+first place — consistent with this project's established practice of verifying LiveKit-heavy,
+largely-copy-and-hierarchy UI changes live rather than with brittle mocks of
+`@livekit/components-react`.
+
+**Production readiness.** Production Ready. **Not yet done, deliberately out of scope** (see
+§18.5 "Update 2" point 5 for the full reasoning): merging the `video`/`voice` `MatchRequest` queues
+at the data-model level; extending roadmap #32's `MatchAvailability` scheduled-matching mechanic to
+voice (still chat-only — voice-first makes this liquidity gap more urgent, not less, a real
+follow-up worth picking up soon); any AI-tutor speech work (roadmap #24, still last per §20.4).
 
 ### Frontend
 
@@ -3862,8 +3979,9 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 34 | ~~Model registry + tier-eligibility hard filter~~ ~~+ circuit breaker~~ (§21.4 Phase 1) | High | Moderate | **Done, 2026-08-02 — see 3.39 (registry/filter) and 3.45 (circuit breaker).** Registry + hard filter shipped 2026-08-01, verified live. Circuit breaker built on `rateLimit.ts`'s existing counter — a model failing 5x in a 5-minute window is skipped without spending a network attempt | — |
 | 35 | ~~Production routing metrics~~ (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | **Done, 2026-08-02 — see 3.45.** Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) is now real; verified live against OpenRouter | — |
 | 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35 (both done) — still gated on real metrics actually accumulating in production, and a confirmed concrete reason per 19.6.4 |
-| 37 | ~~Human-to-human voice matching~~ (18.5 human half, §20.4 step 4) — new `voice` match/session type, audio-only LiveKit room reusing `video`'s matching/liveness mechanics | High | Moderate | **Done, 2026-08-04 — see 3.54.** §19.4's "needs no AI at all... lower-risk, cheaper, sooner-shippable half of 18.5", now built and live-verified with two real accounts and a real LiveKit room. Also found and fixed a real pre-existing bug affecting `chat`/`video` too: the `matchrequests` TTL index was stuck at 60s instead of the schema's declared 900s | #17 (blocking/moderation, done, 3.36) — 18.5's own stated prerequisite. **Not done**: demoting text/video to secondary (18.5's full direction) — deliberately out of scope, still future work |
+| 37 | ~~Human-to-human voice matching~~ (18.5 human half, §20.4 step 4) — new `voice` match/session type, audio-only LiveKit room reusing `video`'s matching/liveness mechanics | High | Moderate | **Done, 2026-08-04 — see 3.54.** §19.4's "needs no AI at all... lower-risk, cheaper, sooner-shippable half of 18.5", now built and live-verified with two real accounts and a real LiveKit room. Also found and fixed a real pre-existing bug affecting `chat`/`video` too: the `matchrequests` TTL index was stuck at 60s instead of the schema's declared 900s | #17 (blocking/moderation, done, 3.36) — 18.5's own stated prerequisite. **Demoting text/video to secondary: done 2026-08-05, see #39/3.56** |
 | 38 | ~~Public SEO surface~~ (§20.4 step 5, §18.3) — sitemap, robots.txt, canonical/OG metadata, structured data, indexable `/learn/[pair]` pages for the 5 Tier-1 language pairs | High | Moderate | **Done, 2026-08-04 — see 3.55.** §20.4's own gate ("worth writing once there is something genuinely differentiated to say") cleared once #37 shipped. Live-verified against a real production build; caught and fixed a real bug along the way (`robots.txt`/`sitemap.xml` were 307-redirecting to `/login` — the auth middleware's matcher predated these routes) | #37 (done, 3.54) — §20.4's own stated gate |
+| 39 | ~~Voice-first UX redesign~~ (18.5's remaining direction) — promote voice to the primary human-practice mode across dashboard/landing/explore/match, reframe text as supporting, make video a real in-call upgrade from voice | High | Moderate | **Done, 2026-08-05 — see 3.56.** Owner supplied explicit UX direction this session (quoted in full at §18.5 "Update 2"); implemented and live-verified end-to-end with two real accounts and a real LiveKit room. Found and fixed two real pre-existing bugs along the way: `MatchFoundModal` always showed "Start Chat" regardless of match type, and the three match sub-pages used an inconsistent naming scheme across surfaces | #37 (voice matching, done, 3.54) — 18.5's own stated prerequisite for this piece |
 
 ---
 
@@ -4917,8 +5035,10 @@ governs *within* a release. Section 18 governs *what may be built at all*:
 
 ### 18.5 Voice-first human exchange (primary interaction model)
 
-**Status: binding, recorded 2026-07-30. Partially implemented as of 2026-08-04 (see update below)
-— the direction itself is unchanged and still binding for what remains.**
+**Status: binding, recorded 2026-07-30. Fully implemented as of 2026-08-04 (see the two updates
+below) — the dashboard/landing/explore/match surfaces now present voice as primary, text as
+supporting, and video as an in-call upgrade from voice, with a real functional upgrade mechanism
+behind that framing, not just copy.**
 
 **The owner's direction:** text messaging between users must stop being the primary way people
 practise together. The product's centre of gravity moves to **live, real-time voice
@@ -4997,6 +5117,53 @@ above) and §20.4's sequencing both cleared. **Still true, unchanged by that blo
 and landing copy have **not** been reworded, text and video have **not** been demoted to
 secondary, and the AI tutor speech work has **not** started — this section's remaining direction
 is still binding for all of that.
+
+**Update 2, 2026-08-04 (roadmap #39, see 3.56) — the UX demotion itself, owner-directed:** the
+owner gave explicit, concrete UX direction for this section's remaining piece, quoted here in
+full since it's the standing spec for anything that touches matching/dashboard/landing copy going
+forward:
+
+> *"I want LingoMatch to be a conversation-first platform. The primary goal is speaking, not
+> messaging. Human voice conversations should become the default way people communicate. Text
+> chat should remain available, but only as a supporting feature for coordination, clarification,
+> accessibility, or when voice is temporarily unavailable. Video should be optional and presented
+> as an upgrade from voice, not the default experience. The product should naturally guide users
+> toward speaking instead of typing, but it should never force voice if the user genuinely cannot
+> use it."*
+
+**Design decisions made from this direction (see 3.56 for the full implementation):**
+
+1. **Voice is promoted to the primary, highlighted call-to-action** everywhere a human-practice
+   mode is presented — dashboard, landing page, `/explore`, and the `/match` hub — replacing the
+   previous three-way "co-equal cards" framing this section originally flagged as the thing to
+   overturn.
+2. **Text is reframed as explicitly supporting**, both visually (smaller/secondary styling) and
+   in copy ("best for coordinating, sharing a note or link, or practising when voice isn't an
+   option right now") — matching the owner's own listed use cases almost verbatim. **Text is not
+   hidden, gated, or made harder to reach** — every text entry point is still exactly one click
+   away everywhere it was before. This is the "never force voice" half of the direction: the
+   product recommends speaking, it does not remove the alternative.
+3. **Video becomes a real in-call upgrade from voice, not just a reworded card.** Rather than
+   restructuring `MatchRequest`/`Conversation` to merge the `video` and `voice` queues (a much
+   larger, riskier change touching every match route, and unnecessary to satisfy the direction),
+   the actual video-call queue/model/session-page stays as an alternative entry point for someone
+   who wants their camera on from the very first moment — but is now demoted to a small secondary
+   link/card, and **every voice session gained a real "Add video" control** that requests camera
+   permission and publishes a video track mid-call (`VideoSession.tsx`'s `ControlsBar`), so a
+   conversation that started as voice-only can genuinely become video without ending the call and
+   re-matching. This is the literal, functional meaning of "video is an upgrade from voice," not
+   a metaphor — see 3.56 for why this was mechanically already possible (the LiveKit token already
+   grants `canPublish` unconditionally; only the client UI was blocking it).
+4. **A persistent "Voice Practice" entry was added to the desktop sidebar nav** (not the mobile
+   bottom bar — see 3.56 for why), reinforcing voice as an ongoing, first-class app area the way
+   "Conversations" already does for text, rather than something only reachable from a
+   practice-picker card.
+5. **Not done in this block, and deliberately so:** merging the `video`/`voice` `MatchRequest`
+   queues at the data-model level (the in-call upgrade above achieves the product goal without
+   this); extending roadmap #32's `MatchAvailability` scheduled-matching mechanic to voice (today
+   still chat-only — see 3.56 for why this is flagged as real future work, since voice-first makes
+   the liquidity risk this section already named worse, not better); any change to the AI tutor's
+   own speech capability (roadmap #24, still explicitly last per §20.4).
 
 ### 18.6 Evidence over originality, and minimal scope over broad coverage
 
@@ -5715,7 +5882,7 @@ principle, which still governs *within* a phase:**
 | 1 | Existing operational basics — roadmap #1, #5, #6, #7 | Unchanged from section 12; nothing else is safely buildable on a shared dev/prod database or with the tutor capped at 50 req/day |
 | 2 | **Product analytics — roadmap #13** | This is the evidence gate the owner's own answers repeatedly invoke ("evaluate objectively," "recommend based on evidence") — every hypothesis in 20.1–20.3 needs this to be checked against reality, and it was already section 10's stated precondition for monetization |
 | 3 | **AI-teacher quality loop — roadmap #28, #29, then #31** | Cheapest, highest-leverage, needs no owner action, and directly serves the owner's explicitly stated top priority (retention/quality) before any large bet is placed. Runs **in parallel** with #13, not after it — neither blocks the other |
-| 4 | **Human-to-human voice matching + liquidity mechanics — the human half of 18.5, plus roadmap #32, #33** | §19.4 already concluded human voice "needs no AI at all" and is "the lower-risk, cheaper, sooner-shippable half of 18.5." Combined with the liquidity mechanics in 20.3, this is the highest-leverage lever available that isn't gated on anything above, and it compounds directly with #13 (more signal, faster). **Liquidity mechanics (#32, #33) done 2026-08-02; the voice-matching piece itself (roadmap #37) done 2026-08-04 — see 3.54.** Text/video are not yet demoted to secondary — that remains future work, deliberately separate from shipping the `voice` type itself |
+| 4 | ~~**Human-to-human voice matching + liquidity mechanics — the human half of 18.5, plus roadmap #32, #33**~~ | §19.4 already concluded human voice "needs no AI at all" and is "the lower-risk, cheaper, sooner-shippable half of 18.5." Combined with the liquidity mechanics in 20.3, this is the highest-leverage lever available that isn't gated on anything above, and it compounds directly with #13 (more signal, faster). **Liquidity mechanics (#32, #33) done 2026-08-02; voice matching (#37) done 2026-08-04 (3.54); the text/video demotion (#39) done 2026-08-05 (3.56)** — this step is now fully complete |
 | 5 | ~~Growth/SEO surface — 18.3~~ | **Done, 2026-08-04 — roadmap #38, see 3.55.** Worth writing once there was something genuinely differentiated to say (a working voice-matching product, Tier-1 pairs with real density) rather than generic content describing a still-changing product — that gate cleared once #37 shipped |
 | 6 | **Monetization — roadmap #22, per 20.1** | Deliberately last of the strategic bets — gated on #13 producing real retention/usage evidence, exactly as the owner's own answer requires ("smaller, sustainable business" over "short-term revenue") |
 | 7 | **AI tutor voice — roadmap #24** | Last, because §19.4 already flags an unresolved latency contradiction (Gemini Live 2.98s vs 320–800ms) and a real cost-curve risk that must be spiked before committing. By the time items 2–6 are done, the eval harness (#29) and cost-counting (#30) it depends on already exist, so it gets built once, safely, instead of twice |
