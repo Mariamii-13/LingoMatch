@@ -54,6 +54,18 @@ See 3.45. Verified live against the real database and OpenRouter, not just mocke
 turns through the presentation-check test account, including one that triggered a real correction
 and exercised the new explanation-language metric-enrichment path end to end.
 
+A sixth pass, 2026-08-04, built the human half of **§18.5's voice-first direction** — a new `voice`
+match/session type (audio-only LiveKit room, reusing `video`'s matching/liveness mechanics exactly
+as 19.4 specified), picked as the highest-value unblocked item per §20.4's own sequencing (step 4,
+"human-to-human voice matching," everything ahead of it in that order being either done or
+owner-blocked). See 3.54. It also found and fixed a real, previously-invisible production bug
+while live-verifying: the `matchrequests` collection's TTL index was still `expireAfterSeconds: 60`
+in the live database, 14 minutes short of the `expires: 900` the `MatchRequest` schema has declared
+for a long time — Mongoose never migrates an existing index's options when a schema changes, so
+`chat` and `video` matching have been silently subject to the same 60-second window all along, not
+just `voice`. Fixed by dropping and recreating the index directly against the live database (an
+index correction, not a data mutation). See 3.54 and 13.
+
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
 > **Section 18 is binding product direction** set by the owner — it constrains architecture and
@@ -108,11 +120,14 @@ practise:
    a specific learner's strengths and weaknesses across sessions and adapts accordingly, not a
    stateless chatbot — not yet implemented; see 18.2 and 20.8 before changing tutor personalization.
 2. **Human language exchange** — a learner is matched with another user on a reciprocal basis
-   (A speaks what B is learning and vice versa) for a text conversation, with optional live
-   video. Video is deliberately optional throughout the product, never a requirement. **This is
+   (A speaks what B is learning and vice versa) for a text conversation, an optional live video
+   call, or (new, 2026-08-04, see 3.54) a live voice-only call. All three are co-equal options on
+   the match chooser today — video and voice both remain optional, never a requirement. **This is
    the current, built state.** The owner's binding long-term direction (18.5) is for live voice
-   conversation to become the primary human-exchange mode, with text demoted to a supporting
-   feature — not yet implemented; read 18.5 before changing matching, messaging or the dashboard.
+   conversation to become the *primary* human-exchange mode, with text demoted to a supporting
+   feature — the `voice` match/session type itself is now built and live-verified, but that
+   demotion (dashboard/landing copy, default queue) has **not** happened yet; read 18.5 before
+   changing matching, messaging or the dashboard.
 
 Supporting features: profiles, friend requests, a persistent conversation list, partner
 discovery/search, practice history, and an admin console.
@@ -2604,6 +2619,114 @@ clean build.
 
 **Production readiness.** Production Ready.
 
+### 3.54 Human-to-human voice matching (18.5 human half; §20.4 step 4) — new `voice` match type
+
+**Why this was picked.** §20.4's own owner-endorsed sequencing puts "human-to-human voice matching
++ liquidity mechanics" at step 4, gated only on steps 1–3 above it. Step 1 (operational basics) and
+step 2 (analytics) are owner-blocked (§17); step 3 (`#28`, `#29`, `#31`, the AI-teacher quality
+loop) is done. §19.4 already concluded human voice "needs no AI at all" and is "the lower-risk,
+cheaper, sooner-shippable half of 18.5" — and 18.5's own stated prerequisite for starting it (a
+working block/report loop so strangers aren't put in live audio with weaker safety tooling than the
+text product already has) shipped as roadmap #17 in an earlier block (3.36). Nothing above step 4
+in the sequence was left to do; this was the highest-value unblocked item.
+
+**What was built.** A third match/session type, `voice` — an audio-only LiveKit room reusing
+`video`'s matching/liveness mechanics exactly as 19.4 specified, not a new realtime vendor and not
+`chat`'s asynchronous queue model:
+- `MatchRequest`/`Conversation` `type` enum widened to `['chat','video','voice']`
+  (`src/lib/models/MatchRequest.ts`, `src/lib/models/Conversation.ts`); the three inline
+  `"chat"|"video"` TypeScript unions in `src/types/index.ts` widened to include `"voice"` (no
+  single source of truth existed to edit once — noted for whoever adds a fourth mode).
+- `src/app/api/match/voice/route.ts` + `.../cancel/route.ts` — a structural clone of the video
+  match route (same `GHOST_THRESHOLD_MS=12s` liveness filter, same 5s language-agnostic fallback,
+  same `buildMatchPartner`/`MATCH_PARTNER_SELECT` shared helper, same blocked-user exclusion),
+  `type: 'voice'` throughout. `src/lib/validations/match.ts`'s `matchRequestSchema` needed **no**
+  change — it was already mode-agnostic; each route hardcodes its own `type` literal server-side,
+  never client-supplied.
+- `src/app/session/voice/[id]/page.tsx` — gates on `conv.type === "voice"`, always passes
+  `initialCamera={false}` (ignores any camera query param entirely, unlike video's page) plus a new
+  `audioOnly` prop into `VideoSession`. `src/app/api/session/[id]/token/route.ts`'s guard widened
+  to accept `voice` alongside `video`.
+- `VideoSession.tsx` gained an `audioOnly` prop rather than a parallel component: forces
+  `video={false}` on `LiveKitRoom` regardless of `initialCamera`, and hides the Camera toggle
+  button in `ControlsBar` entirely (an audio-only room shouldn't offer to publish camera mid-call).
+  The existing muted-remote-track avatar fallback (the 3.53 bugfix) already renders exactly the
+  right UI for a room where nobody ever publishes video — reused as-is, zero new rendering logic
+  needed for the "show the partner" case.
+- `PreJoinScreen.tsx` gained a `voiceOnly` prop: an entirely separate render branch with no camera
+  section at all (camera state initialised `false` and never surfaced), mic-only, always calling
+  `onFindPartner(false, micEnabled)`. The existing "Voice-only mode" hint text already living in
+  this component (as an opt-in *within* video) is what this productizes as its own entry point.
+- New `VoiceMatchClient.tsx` + `/match/voice` page — a clone of `VideoMatchClient`'s state machine
+  (prejoin → searching → found → session), routing to `/session/voice/[id]` instead.
+- UI wiring: a third "Voice Match" card on `/match` (chooser grid widened to 3 columns) and
+  `/explore`'s mode picker; a "Voice Practice" card on the dashboard; an amber `Mic`-icon badge for
+  `voice` conversations in `MessengerShell`'s inbox list (alongside the existing blue chat / violet
+  video dots). Per 18.5's own rule ("do not claim a voice-first product before voice matching
+  exists — update copy in the same block that ships the capability"), these are additive third
+  options, not a reframing of text/video as secondary; that demotion is still future work.
+
+**Real bug found live: the `matchrequests` TTL index was stuck at 60 seconds, not 900.** The first
+live two-account match attempt failed — one side's queued request came back `{"matched":false,
+"expired":true}` after roughly 70 seconds of real wall-clock time between the two browser windows,
+well under the 15-minute TTL the schema comment and `expires: 900` declare. Queried the live
+database directly (read-only) and found the actual index: `{ key: { createdAt: 1 },
+expireAfterSeconds: 60 }` — a stale value from some earlier point in the schema's history.
+Mongoose's `autoIndex` does not migrate an existing index's *options* when the schema changes; it
+only creates indexes that don't yet exist by that name, and a conflicting `expireAfterSeconds` on
+an already-present index is silently left alone. **This bug is not specific to voice** — `chat` and
+`video` share the same collection and the same index, and have been silently subject to the same
+60-second window all along; nobody preparing anything in advance of a real conversation-partner
+being ready (bio, notes, another tab) would have this MatchRequest survive to be matched.
+Fixed by dropping and recreating the index directly against the live database
+(`db.matchrequests.dropIndex('createdAt_1')` /
+`createIndex({createdAt:1},{expireAfterSeconds:900})`) — an index-shape correction, not a data
+mutation, done the same way 13's "mixed update operator" fix was: identify the real cause against
+real infrastructure, fix it at the source. No code change was needed since `MatchRequest.ts`
+already declared the correct value; only the already-provisioned database's stale index did not
+match it.
+
+**Verified live, end-to-end, against real infrastructure, 2026-08-04** (`next start`, two real
+QA accounts — `qaftue001`/`qaphase001`, temporarily flipped to a reciprocal Spanish↔English pair
+via the real `PUT /api/user/me/language-profile` endpoint and reverted after, same pattern as
+3.53 — two isolated browser contexts, real MongoDB, real LiveKit Cloud, no mocks):
+- Real reciprocal match through the actual UI (config form → voice-only prejoin → `POST`/`GET
+  /api/match/voice`): instant match on the second account's queue attempt, correct partner shape
+  on both sides (`compatibilityPct: 89`, real name/flag/level data), Match Found modal rendered
+  correctly.
+- Both accounts joined the same real LiveKit room (`lm-voice-<conversationId>`, confirmed via a
+  real signed token and `wss://…livekit.cloud` connection log reaching `connected`); the
+  participant panel showed both real identities (`You` / `Partner`) — a genuine two-way room, not
+  a solo connection.
+- Session UI matched the audio-only design exactly: no Camera toggle button (5 controls instead of
+  6), the avatar-fallback view from 3.53 rendering cleanly with no leftover "Camera off" caption
+  (suppressed specifically for `audioOnly`), mic mute/unmute working.
+- In-call text send: the `/api/session/[id]/messages` POST/GET endpoints (mode-agnostic, untouched
+  by this change) were confirmed working directly against the real voice conversation; one
+  in-browser click on the icon-only send button did not register in this automation pass
+  (no network request fired) — inconclusive rather than a confirmed regression, since 3.53 already
+  live-verified this exact data-channel path working for `video` and nothing in this feature
+  touched `ChatPanel`/`sendMessage`/`useDataChannel`. Worth a two-second recheck by a human on a
+  future pass; not blocking.
+- The completed voice conversation surfaced correctly in `/messages` with the new amber `Mic`
+  badge (`bg-amber-500`, confirmed via computed class name, not just visually).
+- Both QA accounts' language profiles confirmed reverted to their original native English/learning
+  Spanish state after the test; the test conversation was ended via the real `/api/session/[id]/end`
+  endpoint rather than left dangling.
+
+**New tests.** 3 added to `PreJoinScreen.test.tsx` for the `voiceOnly` branch: renders no camera
+switch and calls no `getUserMedia`; calls `onFindPartner` with `cameraEnabled=false` regardless of
+mic state; disables "Find Partner" once the microphone is turned off. No route-level test added for
+`/api/match/voice` (matching this project's existing precedent — `/api/match/video` has none
+either, per 14's stated I/O-testing philosophy); verified live instead, as above.
+
+**Full suite.** 479 passed (3 new), 11 skipped, 49 files — clean lint, clean `tsc`, clean build.
+
+**Production readiness.** Production Ready. **Not yet done, deliberately out of this block's
+scope**: demoting text/video to secondary per 18.5's full direction (dashboard/landing reframing,
+default queue), and the two-way liquidity/growth work (SEO, wider rollout) that §20.4 sequences
+*after* this step.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3674,6 +3797,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 34 | ~~Model registry + tier-eligibility hard filter~~ ~~+ circuit breaker~~ (§21.4 Phase 1) | High | Moderate | **Done, 2026-08-02 — see 3.39 (registry/filter) and 3.45 (circuit breaker).** Registry + hard filter shipped 2026-08-01, verified live. Circuit breaker built on `rateLimit.ts`'s existing counter — a model failing 5x in a 5-minute window is skipped without spending a network attempt | — |
 | 35 | ~~Production routing metrics~~ (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | **Done, 2026-08-02 — see 3.45.** Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) is now real; verified live against OpenRouter | — |
 | 36 | **Second gateway adapter (Vercel AI Gateway) + score-based dynamic routing** (§21.4 Phase 2) | Medium | High | The literal fulfilment of intelligent, evidence-based routing across providers | #34, #35 (both done) — still gated on real metrics actually accumulating in production, and a confirmed concrete reason per 19.6.4 |
+| 37 | ~~Human-to-human voice matching~~ (18.5 human half, §20.4 step 4) — new `voice` match/session type, audio-only LiveKit room reusing `video`'s matching/liveness mechanics | High | Moderate | **Done, 2026-08-04 — see 3.54.** §19.4's "needs no AI at all... lower-risk, cheaper, sooner-shippable half of 18.5", now built and live-verified with two real accounts and a real LiveKit room. Also found and fixed a real pre-existing bug affecting `chat`/`video` too: the `matchrequests` TTL index was stuck at 60s instead of the schema's declared 900s | #17 (blocking/moderation, done, 3.36) — 18.5's own stated prerequisite. **Not done**: demoting text/video to secondary (18.5's full direction) — deliberately out of scope, still future work |
 
 ---
 
@@ -3745,6 +3869,22 @@ gap the language-detector bug above already demonstrated, now in a completely di
 *Lesson: a mocked test can only be as good as the assumption baked into the mock. Fixed by
 wrapping every key under an explicit operator (`$set`/`$addToSet`), never mixing a bare field
 with one.*
+
+**A MongoDB TTL index silently stayed at an old value the schema no longer declared (roadmap #37,
+3.54).** `MatchRequest.ts` has said `expires: 900` (15 minutes) for a long time, but the live
+database's actual `createdAt_1` index was still `expireAfterSeconds: 60` — a value from some
+earlier point in the schema's history. Mongoose's `autoIndex` creates indexes that don't yet
+exist; it does not detect or migrate a changed *option* on an index that already exists by the
+same key, so the code and the database silently diverged and nothing ever surfaced it — no error,
+no warning, no failing test (nothing in the suite exercises real Mongo TTL behaviour; it can't,
+without a live cluster and real wall-clock waiting). Found only because a real two-account live
+match, timed across two actual browser windows, took close to 70 seconds and came back
+`{"expired":true}`. Affects `chat` and `video` too, not just the new `voice` type — same
+collection, same index. *Lesson: a schema file is a declaration of intent, not a guarantee of the
+live database's actual state, for anything Mongoose doesn't actively reconcile on every connect
+(index options are one of the gaps). When a live timing-dependent test fails in a way pure code
+reading can't explain, query the actual index/schema state directly rather than re-reading the
+model file — the model file was already correct here, and re-reading it would not have found this.*
 
 ### Unexpected architecture problems
 
@@ -3834,8 +3974,12 @@ runs in a fresh process; confirmed by restarting the dev server and re-testing.*
 
 ### Coverage
 
-**476 tests passing, 11 skipped, across 46 files** (as of the roadmap #4 block, 2026-08-03 — see
-3.53). 2 new tests in `match-partner.server.test.ts`, pinning the `buildMatchPartner` shape
+**479 tests passing, 11 skipped, across 49 files** (as of the roadmap #37 block, 2026-08-04 — see
+3.54). 3 new tests, all in `PreJoinScreen.test.tsx`, covering the new `voiceOnly` render branch —
+no new test *file* (no route-level test for `/api/match/voice`, matching this project's existing
+precedent that `/api/match/video` has none either; verified live instead). Before that (as of the
+roadmap #4 block, 2026-08-03 — see 3.53): 476 tests passing, 11 skipped, across 46 files. 2 new
+tests in `match-partner.server.test.ts`, pinning the `buildMatchPartner` shape
 regression that crashed the video Match Found modal live. Before that (2026-08-03, roadmap #20,
 3.52): 474 tests, 11 skipped, 45 files (6 removed with the deleted refresh-throttle, 5 added for
 `ban-access.test.ts`). Before that (roadmap #34/#35 block, 2026-08-02): 435 tests passing, 11
@@ -3876,7 +4020,7 @@ and `SessionControls.test.tsx` (accessibility, 3.23, roadmap #21), and 1 more in
 
 ```
 src/app/(app)/ai-practice/AIPracticeClient.test.tsx   tutor UI: setup, streaming, errors, resume, aria-live, randomUUID fallback
-src/components/session/PreJoinScreen.test.tsx         camera/mic switch semantics: role, aria-checked
+src/components/session/PreJoinScreen.test.tsx         camera/mic switch semantics: role, aria-checked; voiceOnly branch
 src/components/session/SessionControls.test.tsx       aria-pressed state, handler wiring
 src/constants/languages.test.ts                       level labels, CEFR meanings, legacy migration
 src/hooks/use-match-notification.test.tsx             permission gating, visibility/focus, dedup
@@ -4705,8 +4849,8 @@ governs *within* a release. Section 18 governs *what may be built at all*:
 
 ### 18.5 Voice-first human exchange (primary interaction model)
 
-**Status: binding, recorded 2026-07-30. Not implemented. Does not authorise starting
-implementation on its own — see "What this block does not do" below.**
+**Status: binding, recorded 2026-07-30. Partially implemented as of 2026-08-04 (see update below)
+— the direction itself is unchanged and still binding for what remains.**
 
 **The owner's direction:** text messaging between users must stop being the primary way people
 practise together. The product's centre of gravity moves to **live, real-time voice
@@ -4777,6 +4921,14 @@ plan must now scope human-to-human voice matching alongside the tutor. **What th
 do** is update this passport with the direction and act on the one piece of preparatory work that
 is genuinely evidence-justified today and has no owner-approval dependency: user blocking and a
 moderation audit trail (roadmap #17), because voice-first raises the cost of shipping without it.
+
+**Update, 2026-08-04 (roadmap #37, see 3.54):** the `voice` match/session type described above as
+not-yet-built now exists — an audio-only LiveKit room, live-verified with two real accounts. This
+was picked up in a later, separate block once its own stated prerequisite (the block/report loop,
+above) and §20.4's sequencing both cleared. **Still true, unchanged by that block:** the dashboard
+and landing copy have **not** been reworded, text and video have **not** been demoted to
+secondary, and the AI tutor speech work has **not** started — this section's remaining direction
+is still binding for all of that.
 
 ### 18.6 Evidence over originality, and minimal scope over broad coverage
 
@@ -5495,7 +5647,7 @@ principle, which still governs *within* a phase:**
 | 1 | Existing operational basics — roadmap #1, #5, #6, #7 | Unchanged from section 12; nothing else is safely buildable on a shared dev/prod database or with the tutor capped at 50 req/day |
 | 2 | **Product analytics — roadmap #13** | This is the evidence gate the owner's own answers repeatedly invoke ("evaluate objectively," "recommend based on evidence") — every hypothesis in 20.1–20.3 needs this to be checked against reality, and it was already section 10's stated precondition for monetization |
 | 3 | **AI-teacher quality loop — roadmap #28, #29, then #31** | Cheapest, highest-leverage, needs no owner action, and directly serves the owner's explicitly stated top priority (retention/quality) before any large bet is placed. Runs **in parallel** with #13, not after it — neither blocks the other |
-| 4 | **Human-to-human voice matching + liquidity mechanics — the human half of 18.5, plus roadmap #32, #33** | §19.4 already concluded human voice "needs no AI at all" and is "the lower-risk, cheaper, sooner-shippable half of 18.5." Combined with the liquidity mechanics in 20.3, this is the highest-leverage lever available that isn't gated on anything above, and it compounds directly with #13 (more signal, faster) |
+| 4 | **Human-to-human voice matching + liquidity mechanics — the human half of 18.5, plus roadmap #32, #33** | §19.4 already concluded human voice "needs no AI at all" and is "the lower-risk, cheaper, sooner-shippable half of 18.5." Combined with the liquidity mechanics in 20.3, this is the highest-leverage lever available that isn't gated on anything above, and it compounds directly with #13 (more signal, faster). **Liquidity mechanics (#32, #33) done 2026-08-02; the voice-matching piece itself (roadmap #37) done 2026-08-04 — see 3.54.** Text/video are not yet demoted to secondary — that remains future work, deliberately separate from shipping the `voice` type itself |
 | 5 | **Growth/SEO surface — 18.3** | Worth writing once there is something genuinely differentiated to say (a working voice-matching product, Tier-1 pairs with real density) rather than generic content describing a still-changing product |
 | 6 | **Monetization — roadmap #22, per 20.1** | Deliberately last of the strategic bets — gated on #13 producing real retention/usage evidence, exactly as the owner's own answer requires ("smaller, sustainable business" over "short-term revenue") |
 | 7 | **AI tutor voice — roadmap #24** | Last, because §19.4 already flags an unresolved latency contradiction (Gemini Live 2.98s vs 320–800ms) and a real cost-curve risk that must be spiked before committing. By the time items 2–6 are done, the eval harness (#29) and cost-counting (#30) it depends on already exist, so it gets built once, safely, instead of twice |
