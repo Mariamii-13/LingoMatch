@@ -117,9 +117,11 @@ export function ChatMatchClient({ defaults }: { defaults: MatchDefaults }) {
           <div className="flex size-9 items-center justify-center rounded-lg bg-blue-500/15 text-blue-500">
             <MessageSquare className="size-5" />
           </div>
-          <h1 className="text-2xl font-bold">Chat Match</h1>
+          <h1 className="text-2xl font-bold">Text Practice</h1>
         </div>
-        <p className="mt-1 text-muted-foreground">Find a text conversation partner</p>
+        <p className="mt-1 text-muted-foreground">
+          Best for coordinating, or when voice isn&apos;t an option right now
+        </p>
       </div>
 
       {queuedForLater && (

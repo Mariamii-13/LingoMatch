@@ -6,8 +6,8 @@ import {
   Bot,
   Compass,
   MessageSquare,
+  Mic,
   Sparkles,
-  Video,
   type LucideIcon,
 } from "lucide-react"
 
@@ -28,14 +28,14 @@ const features: { title: string; description: string; icon: LucideIcon }[] = [
     icon: Bot,
   },
   {
-    title: "Text practice",
-    description: "Match with another learner and practise through a real-time text conversation.",
-    icon: MessageSquare,
+    title: "Live voice conversation",
+    description: "Talk live with a real partner — the fastest way to build real speaking confidence. Turn on video anytime once you're already talking.",
+    icon: Mic,
   },
   {
-    title: "Optional live practice",
-    description: "Practise live when you choose. Video is an option, never a requirement.",
-    icon: Video,
+    title: "Text practice",
+    description: "Best for coordinating, sharing a note or link, or practising when voice isn't an option right now.",
+    icon: MessageSquare,
   },
   {
     title: "Find language partners",
@@ -55,18 +55,21 @@ const modes = [
     description: "A growing space for guided, independent language practice.",
     label: "Preview",
     icon: Bot,
+    highlight: true,
+  },
+  {
+    title: "Voice Practice",
+    description: "Talk live with a real partner — no camera, nothing to set up. Add video anytime once you're already talking, or start with your camera on if you'd rather.",
+    label: "Live conversation",
+    icon: Mic,
+    highlight: true,
   },
   {
     title: "Text Practice",
-    description: "Connect with a real partner and practise through messages.",
-    label: "Partner practice",
+    description: "Best for coordinating, sharing a note or link, or practising when voice isn't an option right now.",
+    label: "Supporting",
     icon: MessageSquare,
-  },
-  {
-    title: "Live Practice",
-    description: "Talk with a real partner when live conversation suits you.",
-    label: "Optional",
-    icon: Video,
+    highlight: false,
   },
 ]
 
@@ -97,13 +100,14 @@ export default function LandingPage() {
           </div>
           <div className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6 md:py-28 lg:px-8">
             <Badge variant="secondary" className="mb-6 gap-1.5">
-              <Sparkles className="size-3" /> AI practice and real human connection
+              <Sparkles className="size-3" /> AI practice and real live conversation
             </Badge>
             <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-              Practise your way. <span className="gradient-text">Build real confidence.</span>
+              Speak your way. <span className="gradient-text">Build real confidence.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-              LingoMatch brings AI-guided practice, text conversations, and optional live practice with language partners into one place.
+              LingoMatch pairs you with real people for live voice conversation, backed by an
+              always-available AI tutor and text practice whenever that suits you better.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button size="lg" className="h-12 px-6 text-base" nativeButton={false} render={<Link href="/register" />}>
@@ -120,7 +124,7 @@ export default function LandingPage() {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
               <h2 className="text-3xl font-bold sm:text-4xl">A focused place to practise</h2>
-              <p className="mt-4 text-muted-foreground">Choose independent practice or connect with people, without being pushed into video.</p>
+              <p className="mt-4 text-muted-foreground">Speak live with real people, practise independently with your AI tutor, or keep it text-first — video is always optional, never required.</p>
             </div>
             <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {features.map((feature) => {
@@ -146,15 +150,15 @@ export default function LandingPage() {
               <p className="mt-4 text-muted-foreground">Start with the format that matches your goals and comfort level today.</p>
             </div>
             <div className="mt-12 grid gap-6 lg:grid-cols-3">
-              {modes.map((mode, index) => {
+              {modes.map((mode) => {
                 const Icon = mode.icon
                 return (
-                  <article key={mode.title} className={index === 0 ? "rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm" : "rounded-2xl border bg-card p-6 shadow-sm"}>
+                  <article key={mode.title} className={mode.highlight ? "rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm" : "rounded-2xl border bg-card p-6 shadow-sm"}>
                     <div className="flex items-center justify-between">
                       <span className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <Icon className="size-6" />
                       </span>
-                      <Badge variant={index === 0 ? "secondary" : "outline"}>{mode.label}</Badge>
+                      <Badge variant={mode.highlight ? "secondary" : "outline"}>{mode.label}</Badge>
                     </div>
                     <h3 className="mt-5 text-xl font-semibold">{mode.title}</h3>
                     <p className="mt-2 text-sm text-muted-foreground">{mode.description}</p>
@@ -183,7 +187,7 @@ export default function LandingPage() {
             <div className="rounded-3xl bg-gradient-to-br from-primary to-fuchsia-600 px-6 py-14 text-center text-white shadow-xl">
               <h2 className="text-3xl font-bold sm:text-4xl">Make practice fit your day</h2>
               <p className="mx-auto mt-4 max-w-xl text-white/90">
-                Practise independently, exchange messages, or choose an optional live conversation when you are ready.
+                Speak live with a real partner, practise independently with your AI tutor, or keep it text-first when that suits you better.
               </p>
               <Button size="lg" variant="secondary" className="mt-8" nativeButton={false} render={<Link href="/register" />}>
                 Get Started <ArrowRight className="size-4" />

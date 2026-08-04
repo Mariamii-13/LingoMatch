@@ -9,6 +9,7 @@ import {
   Inbox,
   LayoutDashboard,
   type LucideIcon,
+  Mic,
   RotateCcw,
   Settings,
   Shield,
@@ -25,6 +26,10 @@ type NavItem = { label: string; href: string; icon: LucideIcon }
 const productNav: NavItem[] = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "AI Practice", href: "/ai-practice", icon: Bot },
+  // Voice is the primary human-practice mode (18.5) — a persistent nav entry
+  // reflects that the way "Conversations" already does for text, rather than
+  // only being reachable via a dashboard/explore card.
+  { label: "Voice Practice", href: "/match/voice", icon: Mic },
   { label: "Find Partners", href: "/explore", icon: Compass },
   { label: "Conversations", href: "/messages", icon: Inbox },
   // Four surfaces let people send friend requests, but until this appeared in

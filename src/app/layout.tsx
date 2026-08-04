@@ -14,7 +14,7 @@ const inter = Inter({
 })
 
 const description =
-  "Practise a language with an AI tutor, exchange messages with real partners, or go live when you choose. Video is always optional."
+  "Speak live with real language partners, practise any time with an AI tutor, and keep it text-first whenever that suits you better. Video is always optional."
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -22,19 +22,19 @@ export const metadata: Metadata = {
   // `default` covers the landing page. Without this, each route reused one
   // title and browser tabs were indistinguishable.
   title: {
-    default: "LingoMatch — practise a language your way",
+    default: "LingoMatch — speak a language your way",
     template: "%s · LingoMatch",
   },
   description,
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    title: "LingoMatch — practise a language your way",
+    title: "LingoMatch — speak a language your way",
     description,
   },
   twitter: {
     card: "summary",
-    title: "LingoMatch — practise a language your way",
+    title: "LingoMatch — speak a language your way",
     description,
   },
 }

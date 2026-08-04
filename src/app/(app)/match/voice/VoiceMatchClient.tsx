@@ -113,9 +113,12 @@ export function VoiceMatchClient({ defaults }: { defaults: MatchDefaults }) {
           <div className="flex size-9 items-center justify-center rounded-lg bg-amber-500/15 text-amber-500">
             <Mic className="size-5" />
           </div>
-          <h1 className="text-2xl font-bold">Voice Match</h1>
+          <h1 className="text-2xl font-bold">Voice Practice</h1>
         </div>
-        <p className="mt-1 text-muted-foreground">Connect over live audio — no camera, nothing to set up</p>
+        <p className="mt-1 text-muted-foreground">
+          Live conversation — no camera, nothing to set up. Add video anytime once you&apos;re
+          already talking
+        </p>
       </div>
 
       <div className="rounded-2xl border bg-card p-6">
@@ -147,6 +150,7 @@ export function VoiceMatchClient({ defaults }: { defaults: MatchDefaults }) {
       {matchResult && phase === "found" && (
         <MatchFoundModal
           result={matchResult}
+          mode="voice"
           onStartChat={() => {
             const { mic } = devicePrefsRef.current
             router.push(`/session/voice/${matchResult.conversationId}?mic=${mic ? "1" : "0"}`)

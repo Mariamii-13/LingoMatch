@@ -14,6 +14,7 @@ import {
   useConnectionState,
 } from "@livekit/components-react"
 import { LocalParticipant, Track, ConnectionState } from "livekit-client"
+import { toast } from "sonner"
 import {
   Loader2,
   AlertCircle,
@@ -22,6 +23,7 @@ import {
   X,
   Camera,
   CameraOff,
+  Video,
   Mic,
   MicOff,
   MessageSquare,
@@ -39,7 +41,10 @@ interface VideoSessionProps {
   serverUrl: string
   initialCamera?: boolean
   initialMic?: boolean
-  // Voice-mode room: never publish or offer to publish a camera track.
+  // Voice-mode room: connects with no camera track, but 18.5 (video-as-an-
+  // upgrade-from-voice) still lets either side turn one on mid-call — the
+  // LiveKit token already grants `canPublish` unconditionally (src/lib/livekit.ts),
+  // so nothing server-side blocks it, only this component's own UI used to.
   audioOnly?: boolean
 }
 
@@ -128,6 +133,7 @@ function ParticipantPanel({
 
 function ControlsBar({
   cameraEnabled,
+  cameraPending,
   micEnabled,
   chatOpen,
   participantsOpen,
@@ -140,6 +146,7 @@ function ControlsBar({
   onEnd,
 }: {
   cameraEnabled: boolean
+  cameraPending: boolean
   micEnabled: boolean
   chatOpen: boolean
   participantsOpen: boolean
@@ -151,9 +158,26 @@ function ControlsBar({
   onAddFriend: () => void
   onEnd: () => void
 }) {
+  // A voice call with the camera still off shows a labelled "Add video"
+  // action instead of the plain icon toggle (18.5: video is an upgrade you
+  // opt into, not a control you'd expect to already understand at a glance).
+  // Once either side's camera is on, it behaves exactly like a video call's
+  // toggle from then on — including being turned off again.
+  const isVideoUpgrade = audioOnly && !cameraEnabled
+
   return (
     <div className="flex items-center justify-center gap-3 bg-zinc-900/80 px-4 py-3 backdrop-blur">
-      {!audioOnly && (
+      {isVideoUpgrade ? (
+        <button
+          onClick={onToggleCamera}
+          disabled={cameraPending}
+          title="Turn on your camera"
+          className="flex h-11 items-center gap-2 rounded-full bg-violet-600 px-4 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-60"
+        >
+          <Video className="size-4" />
+          {cameraPending ? "Requesting camera…" : "Add video"}
+        </button>
+      ) : (
         <button
           onClick={onToggleCamera}
           title={cameraEnabled ? "Turn off camera" : "Turn on camera"}
@@ -240,6 +264,7 @@ function VideoSessionInner({
   const [chatOpen, setChatOpen] = React.useState(false)
   const [participantsOpen, setParticipantsOpen] = React.useState(false)
   const [messages, setMessages] = React.useState<Message[]>([])
+  const [cameraPending, setCameraPending] = React.useState(false)
 
   const connectionState = useConnectionState()
   const { localParticipant } = useLocalParticipant()
@@ -249,6 +274,24 @@ function VideoSessionInner({
 
   const cameraEnabled = localParticipant.isCameraEnabled
   const micEnabled = localParticipant.isMicrophoneEnabled
+
+  const toggleCamera = async () => {
+    if (cameraEnabled) {
+      localParticipant.setCameraEnabled(false)
+      return
+    }
+    setCameraPending(true)
+    try {
+      await localParticipant.setCameraEnabled(true)
+    } catch {
+      // Denied permission, no device, or already in use elsewhere — the
+      // call itself is unaffected either way, so this is a toast, not a
+      // blocking error state.
+      toast.error("Couldn't turn on your camera. Check your browser's camera permission and try again.")
+    } finally {
+      setCameraPending(false)
+    }
+  }
 
   const { send } = useDataChannel("chat", (msg) => {
     try {
@@ -327,6 +370,9 @@ function VideoSessionInner({
             </Avatar>
             <p className="text-lg font-semibold">{partner.name} {partner.flag}</p>
             {!audioOnly && <p className="text-sm text-white/50">Camera off</p>}
+            {audioOnly && !cameraEnabled && (
+              <p className="text-sm text-white/50">Voice call — add video anytime</p>
+            )}
           </div>
         )}
 
@@ -358,11 +404,12 @@ function VideoSessionInner({
       {/* Controls */}
       <ControlsBar
         cameraEnabled={cameraEnabled}
+        cameraPending={cameraPending}
         micEnabled={micEnabled}
         chatOpen={chatOpen}
         participantsOpen={participantsOpen}
         audioOnly={audioOnly}
-        onToggleCamera={() => localParticipant.setCameraEnabled(!cameraEnabled)}
+        onToggleCamera={toggleCamera}
         onToggleMic={() => localParticipant.setMicrophoneEnabled(!micEnabled)}
         onToggleChat={() => setChatOpen((v) => !v)}
         onToggleParticipants={() => setParticipantsOpen((v) => !v)}

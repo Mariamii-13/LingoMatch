@@ -1,6 +1,6 @@
 "use client"
 
-import { MessageSquare } from "lucide-react"
+import { MessageSquare, Mic, Video } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { MatchResult } from "@/types"
@@ -8,12 +8,24 @@ import { FlagImage } from "@/components/shared/flag-image"
 
 interface MatchFoundModalProps {
   result: MatchResult
+  // Found live while verifying 18.5's voice-first redesign: this modal is
+  // shared by all three match flows but its CTA used to always read "Start
+  // Chat," even for a voice or video match about to open a live call.
+  mode?: "chat" | "video" | "voice"
   onStartChat: () => void
   onSkip: () => void
 }
 
-export function MatchFoundModal({ result, onStartChat, onSkip }: MatchFoundModalProps) {
+const CTA_BY_MODE = {
+  chat: { label: "Start Chat", icon: MessageSquare, className: "bg-blue-600 hover:bg-blue-700" },
+  video: { label: "Join Video Call", icon: Video, className: "bg-violet-600 hover:bg-violet-700" },
+  voice: { label: "Join Voice Call", icon: Mic, className: "bg-amber-600 hover:bg-amber-700" },
+} as const
+
+export function MatchFoundModal({ result, mode = "chat", onStartChat, onSkip }: MatchFoundModalProps) {
   const { partner, compatibilityPct } = result
+  const cta = CTA_BY_MODE[mode]
+  const CtaIcon = cta.icon
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -59,8 +71,8 @@ export function MatchFoundModal({ result, onStartChat, onSkip }: MatchFoundModal
         )}
 
         <div className="mt-5 flex flex-col gap-2">
-          <Button className="w-full bg-blue-600 text-white hover:bg-blue-700" onClick={onStartChat}>
-            <MessageSquare className="size-4" /> Start Chat
+          <Button className={`w-full text-white ${cta.className}`} onClick={onStartChat}>
+            <CtaIcon className="size-4" /> {cta.label}
           </Button>
           <Button variant="ghost" className="w-full text-muted-foreground" onClick={onSkip}>
             Skip this match

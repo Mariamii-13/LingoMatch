@@ -117,9 +117,11 @@ export function VideoMatchClient({ defaults }: { defaults: MatchDefaults }) {
           <div className="flex size-9 items-center justify-center rounded-lg bg-violet-500/15 text-violet-500">
             <Video className="size-5" />
           </div>
-          <h1 className="text-2xl font-bold">Video Match</h1>
+          <h1 className="text-2xl font-bold">Video Call</h1>
         </div>
-        <p className="mt-1 text-muted-foreground">Connect over video, voice, or both</p>
+        <p className="mt-1 text-muted-foreground">
+          Same live room as Voice Practice — camera on from the start
+        </p>
       </div>
 
       <div className="rounded-2xl border bg-card p-6">
@@ -151,6 +153,7 @@ export function VideoMatchClient({ defaults }: { defaults: MatchDefaults }) {
       {matchResult && phase === "found" && (
         <MatchFoundModal
           result={matchResult}
+          mode="video"
           onStartChat={() => {
             const { camera, mic } = devicePrefsRef.current
             router.push(

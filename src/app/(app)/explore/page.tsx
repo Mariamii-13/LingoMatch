@@ -288,34 +288,11 @@ export default function ExplorePage() {
         </p>
       </div>
 
+      {/* Voice leads as the primary human-practice mode (18.5): first, highlighted,
+          and the only one with a filled button. Video is reframed as an
+          alternative entry point into the same kind of room, not a competing
+          default — see PROJECT_PASSPORT.md §18.5. */}
       <section className="grid gap-3 sm:grid-cols-3">
-        <div className="flex items-center gap-4 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
-            <MessageSquare className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="font-semibold">Text Practice</h2>
-            <p className="text-sm text-muted-foreground">
-              Find a partner for an instant text conversation.
-            </p>
-          </div>
-          <Button nativeButton={false} render={<Link href="/match/chat" />}>Start</Button>
-        </div>
-        <div className="flex items-center gap-4 rounded-xl border bg-card p-4">
-          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-            <Video className="size-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="font-semibold">Live Practice</h2>
-              <Badge variant="outline">Optional</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Practise live with camera and microphone controls.
-            </p>
-          </div>
-          <Button variant="outline" nativeButton={false} render={<Link href="/match/video" />}>Choose</Button>
-        </div>
         <div className="flex items-center gap-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
           <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white">
             <Mic className="size-5" />
@@ -323,10 +300,34 @@ export default function ExplorePage() {
           <div className="min-w-0 flex-1">
             <h2 className="font-semibold">Voice Practice</h2>
             <p className="text-sm text-muted-foreground">
-              Live audio conversation, no camera needed.
+              Live conversation with a partner. No camera, nothing to set up.
             </p>
           </div>
-          <Button variant="outline" nativeButton={false} render={<Link href="/match/voice" />}>Choose</Button>
+          <Button nativeButton={false} render={<Link href="/match/voice" />}>Start</Button>
+        </div>
+        <div className="flex items-center gap-4 rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+            <MessageSquare className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold">Text Practice</h2>
+            <p className="text-sm text-muted-foreground">
+              Best for coordinating, or when voice isn&apos;t an option right now.
+            </p>
+          </div>
+          <Button variant="outline" nativeButton={false} render={<Link href="/match/chat" />}>Choose</Button>
+        </div>
+        <div className="flex items-center gap-4 rounded-xl border bg-card p-4">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            <Video className="size-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-semibold">Video Call</h2>
+            <p className="text-sm text-muted-foreground">
+              Same live room as Voice Practice — camera on from the start.
+            </p>
+          </div>
+          <Button variant="outline" nativeButton={false} render={<Link href="/match/video" />}>Choose</Button>
         </div>
       </section>
 

@@ -10,7 +10,6 @@ import {
   Inbox,
   MessageSquare,
   Mic,
-  Video,
 } from "lucide-react"
 
 import { auth } from "@/auth"
@@ -91,7 +90,10 @@ export default async function DashboardPage() {
       <section aria-labelledby="practice-heading">
         <div className="mb-4">
           <h2 id="practice-heading" className="text-lg font-semibold">Start practising</h2>
-          <p className="text-sm text-muted-foreground">AI, text, and optional live practice are all available from one place.</p>
+          <p className="text-sm text-muted-foreground">
+            Speaking live is the fastest way to build real confidence — text stays here for
+            coordinating, or for whenever voice isn&apos;t the right fit.
+          </p>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -123,73 +125,80 @@ export default async function DashboardPage() {
             </div>
           </article>
 
+          {/* Voice is the primary human-practice mode (18.5): the largest, most
+              prominent card here, with video framed as an in-card upgrade link
+              rather than a competing card — see PROJECT_PASSPORT.md §18.5. */}
+          <article className="relative flex flex-col overflow-hidden rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 shadow-sm lg:col-span-2">
+            <div className="pointer-events-none absolute -right-10 -top-10 size-36 rounded-full bg-amber-500/10 blur-2xl" />
+            <div className="relative flex items-start gap-4">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
+                <Mic className="size-6" />
+              </span>
+              <div className="flex-1">
+                <h3 className="text-xl font-semibold">Start a voice conversation</h3>
+                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                  Talk live with a real partner — no camera, nothing to set up. It&apos;s the
+                  fastest way to build real speaking confidence, and you can turn your camera on
+                  anytime once you&apos;re already talking.
+                </p>
+              </div>
+            </div>
+            <div className="relative mt-5 flex flex-wrap items-center gap-4">
+              <Button size="lg" nativeButton={false} render={<Link href="/match/voice" />}>
+                Find a voice match <ArrowRight className="size-4" />
+              </Button>
+              <Link
+                href="/match/video"
+                className="text-sm font-medium text-muted-foreground hover:text-foreground"
+              >
+                Prefer video from the start? →
+              </Link>
+            </div>
+          </article>
+
           <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
             <span className="flex size-11 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
               <MessageSquare className="size-5" />
             </span>
             <h3 className="mt-4 text-lg font-semibold">Text Practice</h3>
             <p className="mt-2 flex-1 text-sm text-muted-foreground">
-              Match with a language partner for an instant text conversation.
+              Best for coordinating, sharing a note or link, or practising when voice isn&apos;t an
+              option right now.
             </p>
             <Button className="mt-5" variant="outline" nativeButton={false} render={<Link href="/match/chat" />}>
               Find a text match
             </Button>
           </article>
 
-          <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <span className="flex size-11 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600">
-                <Video className="size-5" />
-              </span>
-              <Badge variant="outline">Optional</Badge>
-            </div>
-            <h3 className="mt-4 text-lg font-semibold">Live Practice</h3>
-            <p className="mt-2 flex-1 text-sm text-muted-foreground">
-              Practise live with a partner when you want to. Camera use is always your choice.
-            </p>
-            <Button className="mt-5" variant="outline" nativeButton={false} render={<Link href="/match/video" />}>
-              Choose live practice
-            </Button>
-          </article>
-
-          <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
-            <span className="flex size-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
-              <Mic className="size-5" />
-            </span>
-            <h3 className="mt-4 text-lg font-semibold">Voice Practice</h3>
-            <p className="mt-2 flex-1 text-sm text-muted-foreground">
-              Live audio conversation with a partner. No camera, nothing to set up.
-            </p>
-            <Button className="mt-5" variant="outline" nativeButton={false} render={<Link href="/match/voice" />}>
-              Find a voice match
-            </Button>
-          </article>
-
           {/* Promised recent practice for as long as this card existed; now that
               sessions are recorded, it can actually show it. */}
           {lastPractice ? (
-            <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="flex size-11 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
+            <article className="flex flex-col rounded-2xl border bg-card p-5 shadow-sm lg:col-span-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600">
                   <History className="size-5" />
                 </span>
-                {summary.currentStreak > 0 && (
-                  <Badge variant="secondary" className="gap-1">
-                    <Flame className="size-3" />
-                    {summary.currentStreak}-day streak
-                  </Badge>
-                )}
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-semibold">Pick up where you left off</h3>
+                    {summary.currentStreak > 0 && (
+                      <Badge variant="secondary" className="gap-1">
+                        <Flame className="size-3" />
+                        {summary.currentStreak}-day streak
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Last practice: {lastPracticeLanguage ?? "a session"}
+                    {lastPractice.kind === "tutor" && lastPractice.mode
+                      ? ` · ${lastPractice.mode}`
+                      : " · with a partner"}
+                    .
+                  </p>
+                </div>
               </div>
-              <h3 className="mt-4 text-lg font-semibold">Pick up where you left off</h3>
-              <p className="mt-2 flex-1 text-sm text-muted-foreground">
-                Last practice: {lastPracticeLanguage ?? "a session"}
-                {lastPractice.kind === "tutor" && lastPractice.mode
-                  ? ` · ${lastPractice.mode}`
-                  : " · with a partner"}
-                .
-              </p>
               <Button
-                className="mt-5"
+                className="mt-4 lg:mt-0"
                 variant="outline"
                 nativeButton={false}
                 render={<Link href="/progress" />}
@@ -198,7 +207,7 @@ export default async function DashboardPage() {
               </Button>
             </article>
           ) : (
-            <article className="flex flex-col justify-center rounded-2xl border border-dashed bg-muted/20 p-5">
+            <article className="flex flex-col justify-center rounded-2xl border border-dashed bg-muted/20 p-5 lg:col-span-3">
               <p className="font-medium">Your recent practice will appear here</p>
               <p className="mt-2 text-sm text-muted-foreground">
                 There is no recorded practice activity to show yet. Start with any practice mode when you are ready.
