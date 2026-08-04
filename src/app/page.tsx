@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import {
   ArrowRight,
@@ -14,6 +15,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { BrandMark } from "@/components/shared/brand-mark"
+import { SITE_URL } from "@/lib/site"
+
+export const metadata: Metadata = {
+  alternates: { canonical: SITE_URL },
+}
 
 const features: { title: string; description: string; icon: LucideIcon }[] = [
   {
@@ -73,6 +79,7 @@ export default function LandingPage() {
           <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground md:flex">
             <a href="#features" className="hover:text-foreground">Features</a>
             <a href="#modes" className="hover:text-foreground">Practice Modes</a>
+            <Link href="/learn" className="hover:text-foreground">Language Pairs</Link>
           </nav>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -195,6 +202,7 @@ export default function LandingPage() {
           <nav className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground">
             <a href="#features" className="hover:text-foreground">Features</a>
             <a href="#modes" className="hover:text-foreground">Practice Modes</a>
+            <Link href="/learn" className="hover:text-foreground">Language Pairs</Link>
             <Link href="/login" className="hover:text-foreground">Login</Link>
             <Link href="/register" className="hover:text-foreground">Get Started</Link>
           </nav>

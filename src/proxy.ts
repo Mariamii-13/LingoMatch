@@ -14,6 +14,8 @@ export default auth((req) => {
   const publicPaths = ['/', '/login', '/register', '/forgot-password']
   const isPublic =
     publicPaths.includes(pathname) ||
+    // Public SEO surface (§18.3) — indexable content pages, no auth required.
+    pathname.startsWith('/learn') ||
     pathname.startsWith('/api/auth') ||
     // Browsers crash on the signed-out pages too, and a redirect to /login
     // would silently discard exactly those reports.
@@ -55,5 +57,5 @@ export default auth((req) => {
 })
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|public).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|public|robots.txt|sitemap.xml).*)'],
 }
