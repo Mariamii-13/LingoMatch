@@ -2907,7 +2907,87 @@ largely-copy-and-hierarchy UI changes live rather than with brittle mocks of
 §18.5 "Update 2" point 5 for the full reasoning): merging the `video`/`voice` `MatchRequest` queues
 at the data-model level; extending roadmap #32's `MatchAvailability` scheduled-matching mechanic to
 voice (still chat-only — voice-first makes this liquidity gap more urgent, not less, a real
-follow-up worth picking up soon); any AI-tutor speech work (roadmap #24, still last per §20.4).
+follow-up worth picking up soon). **Update 2026-08-06: done — see 3.57.** Any AI-tutor speech work
+(roadmap #24) remains last per §20.4.
+
+### 3.57 Extend declared-availability matching (roadmap #32) to voice — roadmap #40
+
+**Why this was picked.** The prior two blocks (#38 SEO, #39 voice-first UX) both flagged the same
+concrete follow-up: roadmap #32's `MatchAvailability` scheduled-matching mechanic — "I'm free
+around this time," matched even while the declaring user is offline — was chat-only, and 18.5's
+own standing argument is that voice-first makes the underlying liquidity risk *more* urgent, not
+less, since the primary human-practice mode is now the one with the harder-to-satisfy "both sides
+live" requirement. With #38/#39 shipped, this was the highest-value unblocked item left in §12: no
+owner dependency, a well-scoped extension of an already-proven pattern (chat's own implementation,
+3.46), and directly serves the same retention/liquidity goal 18.5 and §20.3 both prioritise.
+
+**What was built** — the same mechanism chat already has (3.46), extended to `voice`:
+
+- `MatchAvailability.ts`: `type` enum widened from `['chat']` to `['chat', 'voice']`. This is a
+  Mongoose-level (application) validator, not a MongoDB index constraint, so — unlike 3.54's TTL
+  index finding — no live-database migration step was needed here; a plain schema/enum change
+  takes effect on the next deploy.
+- `src/app/api/match/voice/route.ts`: `POST` now accepts `availabilityMinutes` (the schema already
+  validated it generically; the route just wasn't reading it) and, mirroring chat's `route.ts`
+  exactly: cancels any existing open `voice`-type `MatchAvailability` row for the user alongside
+  the existing `MatchRequest` cancel; tries a new `tryAvailabilityMatch` helper (reciprocal
+  language match against standing `voice` rows) as a fallback when no live searcher is found;
+  creates a new standing `MatchAvailability` row (`type: 'voice'`) instead of a live `MatchRequest`
+  when `availabilityMinutes > 0` and neither live nor standing match hit. **Video was deliberately
+  left out** — it still needs both sides live for the call itself, exactly as 3.46's own original
+  scoping decision said, and that reasoning hasn't changed.
+- **The cross-match path creates a real `Conversation` (`type: 'voice'`) and a real LiveKit room**,
+  reusing the route's existing `createVoiceConversation` helper — a user who declared availability
+  and gets matched later by someone live-searching ends up in a genuinely joinable room, not just a
+  database row.
+- `src/lib/pending-matches.server.ts`: the conversation's own `type` is now carried through into
+  each `MatchResult` (defaulting to `"chat"` when absent, so old chat-only rows are unaffected).
+- `src/types/index.ts`: `MatchResult` gained an optional `type?: "chat" | "video" | "voice"` field.
+- `src/components/dashboard/pending-match-card.tsx`: branches on `match.type` — a voice pending
+  match now shows "voice conversation" (not "text conversation"), a `Mic`-icon "Join voice call"
+  button, and links to `/session/voice/{id}` instead of `/messages/{id}`. Chat's rendering is
+  byte-identical to before when `type` is `"chat"` or absent.
+- `src/app/(app)/match/voice/VoiceMatchClient.tsx`: gained the same "When are you free?" selector
+  chat's config form already has (`MatchConfigForm`'s `availabilityMinutes` prop was already
+  generic — voice just wasn't passing it), plus a `queuedForLater` confirmation state mirroring
+  `ChatMatchClient`'s, shown when the server responds `{ availability: true }` instead of an
+  instant match.
+
+**Live verification, 2026-08-06, against the real database and real LiveKit Cloud, not mocks** (via
+authenticated `curl` against a real `next start` build — a pure data/API-plane feature, so this
+was sufficient without browser automation): `qaphase001`'s language profile was temporarily flipped
+to native Spanish/learning English via the real `PUT /api/user/me/language-profile` endpoint (same
+pattern as 3.53/3.54), then declared a 24-hour voice availability window via the real endpoint —
+confirmed `{"matched":false,"availability":true,"availabilityId":...}`, a genuine standing
+`MatchAvailability` row. `qaftue001` then submitted an instant ("right now") voice search — the
+real API response was `{"matched":true,"conversationId":...,"partner":{...},"compatibilityPct":89}`,
+proving the cross-match consumed the standing row and created a real `Conversation` synchronously,
+in the same request. `qaphase001`'s dashboard, fetched fresh, showed the pending-match card with
+the new voice-specific copy ("voice conversation") and a "Join voice call" button linking to the
+real `/session/voice/{conversationId}` URL; a second dashboard fetch showed no card (one-shot
+`seen` semantics preserved). `qaftue001` then loaded that exact `/session/voice/{id}` URL directly
+and got a real `200` with the partner's real name rendered — confirming the `Conversation` really
+had `type: "voice"` (the session page 404s otherwise) and a real LiveKit token was generated
+against a real room (`livekitRoomName` was genuinely set by `createVoiceConversation`, not left at
+its placeholder). Cleaned up afterward via the real end-session endpoint and reverted
+`qaphase001`'s language profile back to its baseline — both QA fixtures unchanged for future runs.
+
+**Testing.** `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` clean. Added one new
+test to `pending-matches.server.test.ts` covering the new `type` pass-through (voice row → `type:
+"voice"`, a row with no `type` on its conversation → defaults to `"chat"`) — 5/5 passing. Ran the
+full `pending-matches.server.test.ts` plus the existing `matching`/`match-defaults` suites (12/12
+passing) rather than the full `vitest` suite, given the prior block's documented full-suite
+flakiness in this environment (worker-thread timeouts isolated to unrelated `.live.test.ts` files)
+— no route-level test exists for any `/api/match/*` route in this project (chat included),
+consistent with 14's established "verify matching live" precedent.
+
+**Production readiness.** Production Ready. **Not yet done, deliberately out of scope**: a cancel
+endpoint for a standing voice availability row (chat doesn't have one either — a user can only
+supersede a standing row by submitting a new one, not withdraw it early; pre-existing gap, not
+introduced here); country-preference filtering for voice matching (voice's live-match query has
+never had it, chat's has — a separate matching-quality concern, not this block's scope); merging
+the `video`/`voice` `MatchRequest` queues at the data-model level (still explicitly out of scope
+per 3.56).
 
 ### Frontend
 
@@ -3974,7 +4054,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 29 | ~~Build the AI-quality eval harness~~ (§19.6.2) — **v1 done, 2026-08-01, see 3.40**: one seeded mistake per Tier-1 pair (not yet the full 20-turn/multi-error-type version) | High | Moderate | Already paid for itself: found a real, confirmed weakness on the Portuguese↔Spanish pair (2/2 samples) — §19.5's own predicted "extreme case" risk, now evidenced rather than theoretical | #28 (done, 3.38) made the key metric machine-gradable |
 | 30 | ~~Extend `tutor-budget.ts` from request-counting to cost-counting~~ (§19.6.3) | Medium | Moderate | **Done, 2026-08-02/03 — see 3.7 and 3.47.** A fourth budget tier gates on real accumulated `$` cost (default $3/day), checked last, fed by the `costUsd` roadmap #35 already captures. Dormant until #1 ships real paid-chain traffic to meter — verified live that the new code path doesn't disturb the existing free-tier hot path | #1 (buying credits) makes this urgent, not optional |
 | 31 | ~~Spaced-repetition review deck built from real tutor corrections~~ (§20.2) — **Phase 1 fully done, 2026-08-01, see 3.41 and 3.42** (including tutor-context weak-area injection) | High | Moderate | Evidence-based retention lever (up to 3x vocabulary retention in published studies) that doesn't reintroduce a lesson tree or streak pressure. Verified end-to-end against the real database and a real tutor exchange, not mocks | #28 (done, 3.38) — each `correction` object in the structured tutor output is now real. **Phase 2 (fitted half-life regression) remains open**, gated on real review-outcome data |
-| 32 | ~~Declared-availability matching windows~~ (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | **Done, 2026-08-02 — see 3.46.** Chat only (video needs both sides live for the call itself); a new `MatchAvailability` collection, cross-matched at write-time against both the live queue and other standing rows, surfaced to the offline party via a dashboard card. Verified live against the real database with two real accounts | — |
+| 32 | ~~Declared-availability matching windows~~ (§20.3) — "I'm free around this time" instead of requiring both users online now | High | Moderate | **Done, 2026-08-02 — see 3.46.** Chat only (video needs both sides live for the call itself); a new `MatchAvailability` collection, cross-matched at write-time against both the live queue and other standing rows, surfaced to the offline party via a dashboard card. Verified live against the real database with two real accounts. **Extended to voice, 2026-08-06 — see #40/3.57.** | — |
 | 33 | ~~Invite-a-partner referral flow~~ (§20.3) — built into the reciprocal-match mechanic itself, not a generic "invite a friend" bolt-on | High | Low–Moderate | **Done, 2026-08-02 — see 3.44.** Solves acquisition and liquidity simultaneously; verified live end-to-end, including two real bugs found and fixed along the way | Google-signup referral capture is a known, documented gap — credentials registration only for now |
 | 34 | ~~Model registry + tier-eligibility hard filter~~ ~~+ circuit breaker~~ (§21.4 Phase 1) | High | Moderate | **Done, 2026-08-02 — see 3.39 (registry/filter) and 3.45 (circuit breaker).** Registry + hard filter shipped 2026-08-01, verified live. Circuit breaker built on `rateLimit.ts`'s existing counter — a model failing 5x in a 5-minute window is skipped without spending a network attempt | — |
 | 35 | ~~Production routing metrics~~ (`lm-model-metric`, §21.4 Phase 1) | High | Low–Moderate | **Done, 2026-08-02 — see 3.45.** Prerequisite for any evidence-driven routing decision (§21.4 Phase 2) is now real; verified live against OpenRouter | — |
@@ -3982,6 +4062,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | 37 | ~~Human-to-human voice matching~~ (18.5 human half, §20.4 step 4) — new `voice` match/session type, audio-only LiveKit room reusing `video`'s matching/liveness mechanics | High | Moderate | **Done, 2026-08-04 — see 3.54.** §19.4's "needs no AI at all... lower-risk, cheaper, sooner-shippable half of 18.5", now built and live-verified with two real accounts and a real LiveKit room. Also found and fixed a real pre-existing bug affecting `chat`/`video` too: the `matchrequests` TTL index was stuck at 60s instead of the schema's declared 900s | #17 (blocking/moderation, done, 3.36) — 18.5's own stated prerequisite. **Demoting text/video to secondary: done 2026-08-05, see #39/3.56** |
 | 38 | ~~Public SEO surface~~ (§20.4 step 5, §18.3) — sitemap, robots.txt, canonical/OG metadata, structured data, indexable `/learn/[pair]` pages for the 5 Tier-1 language pairs | High | Moderate | **Done, 2026-08-04 — see 3.55.** §20.4's own gate ("worth writing once there is something genuinely differentiated to say") cleared once #37 shipped. Live-verified against a real production build; caught and fixed a real bug along the way (`robots.txt`/`sitemap.xml` were 307-redirecting to `/login` — the auth middleware's matcher predated these routes) | #37 (done, 3.54) — §20.4's own stated gate |
 | 39 | ~~Voice-first UX redesign~~ (18.5's remaining direction) — promote voice to the primary human-practice mode across dashboard/landing/explore/match, reframe text as supporting, make video a real in-call upgrade from voice | High | Moderate | **Done, 2026-08-05 — see 3.56.** Owner supplied explicit UX direction this session (quoted in full at §18.5 "Update 2"); implemented and live-verified end-to-end with two real accounts and a real LiveKit room. Found and fixed two real pre-existing bugs along the way: `MatchFoundModal` always showed "Start Chat" regardless of match type, and the three match sub-pages used an inconsistent naming scheme across surfaces | #37 (voice matching, done, 3.54) — 18.5's own stated prerequisite for this piece |
+| 40 | ~~Extend declared-availability matching (#32) to voice~~ | High | Moderate | **Done, 2026-08-06 — see 3.57.** Voice-first (18.5) makes #32's original liquidity risk more urgent, not less — a user who declares availability can now be cross-matched into a real voice `Conversation`/LiveKit room while offline, not just a chat conversation. Live-verified end-to-end against the real database and real LiveKit Cloud with two real accounts | #32 (chat availability matching, done, 3.46) — same mechanism, extended |
 
 ---
 
