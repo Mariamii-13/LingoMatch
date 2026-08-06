@@ -66,6 +66,28 @@ for a long time — Mongoose never migrates an existing index's options when a s
 just `voice`. Fixed by dropping and recreating the index directly against the live database (an
 index correction, not a data mutation). See 3.54 and 13.
 
+A seventh pass, also 2026-08-04, built §20.4 step 5 (the growth/SEO surface, §18.3) once #37
+made it evidence-justified: `robots.ts`/`sitemap.ts`, canonical/OG metadata, structured data, and
+5 indexable `/learn/[pair]` pages with real, pair-specific content (not templated filler). See 3.55.
+Found and fixed a real bug live: the auth middleware's matcher predated `robots.txt`/`sitemap.xml`
+and was 307-redirecting both to `/login`.
+
+An eighth pass, 2026-08-05, shipped 18.5's remaining direction: the owner gave explicit UX
+direction (quoted in full at 18.5 "Update 2") to make voice the primary human-practice mode
+everywhere, text a supporting feature, and video a real in-call upgrade from voice rather than a
+competing mode. See 3.56. Found and fixed two real bugs live: `MatchFoundModal` always read
+"Start Chat" regardless of match type, and the three match sub-pages used an inconsistent naming
+scheme across surfaces.
+
+A ninth pass, 2026-08-06, extended roadmap #32's declared-availability matching from chat-only to
+voice — flagged as a direct follow-up of the eighth pass, since voice-first makes that liquidity
+mechanic's original justification more urgent, not less. See 3.57. Live-verified end to end
+against the real database and real LiveKit Cloud with two real accounts. The same day, a full
+CEO-level review of this passport against its real current state (requested by the owner) found
+several sections (8, 9, 10) had drifted out of sync with work completed in passes six through
+nine — video, Cloudinary cleanup, the messages-page split and backwards pagination were still
+marked as open problems after being resolved. Corrected throughout; no code changed in that pass.
+
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
 > **Section 18 is binding product direction** set by the owner — it constrains architecture and
@@ -189,18 +211,22 @@ data as real. All of that is resolved.
 | Dimension | State |
 |---|---|
 | Builds and typechecks | Clean |
-| Automated tests | 306 passing |
+| Automated tests | 480+ passing (last cleanly confirmed full run: 479 passed, 11 skipped, 2026-08-04, see 3.55; the full suite became flaky in this sandbox as of 2026-08-05/06 — worker-thread timeouts isolated to unrelated `.live.test.ts` files, see 17 — so per-block targeted runs have been used since, all clean) |
 | Lint | 0 errors, 0 warnings |
 | Core AI tutor | Works, persists, streams, is metered |
-| Human matching | Works (a severe silent bug was fixed) |
+| Human matching | Works — text, voice (primary, 18.5) and video, plus offline cross-matching for both text and voice (#32/#40) |
 | Messaging | Works cross-account |
 | Auth | Works (Google + credentials), rate-limited |
 | Fabricated data | None remaining anywhere |
 | **Blocker** | AI provider allows **50 requests/day account-wide** |
 | **Gap** | No self-service password reset (no email provider) |
 
-**Verdict: ready for a closed beta with a handful of testers today. Not ready for a public
-beta until the AI quota is raised (~$10) and password recovery exists.**
+**Verdict: ready for a closed beta with a handful of testers today (see §10). Not ready for a
+public beta until the AI quota is raised (~$10), password recovery exists, and dev/prod are
+separated with junk accounts cleaned up — see §10's "Can a public beta start?" for the full list.
+Product-wise the biggest remaining lever isn't more building — every unblocked, evidence-justified
+roadmap item through #40 is shipped — it's product analytics (#13), still blocked on the owner
+approving a Vercel Marketplace install.**
 
 ### Overall health of the repository
 
@@ -3475,18 +3501,18 @@ kind of compounding failure section 13 keeps finding.
 | AI tutor (code) | **Production Ready** | Chain, persistence, streaming, metering, all verified live |
 | AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker |
 | Explanation-language validation & repair | **Production Ready** | Structured output + detection verified live and correct (3.38); repair now targets a reachable free model for free-tier callers (roadmap #34) and was verified succeeding live 3/3 times triggered (3.43) — no longer blocked on roadmap #1 |
-| Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and metrics (§21.4 Phase 1) not yet built |
+| Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and `lm-model-metric` production metrics (§21.4 Phase 1) also done, 2026-08-02 (3.45) — Phase 2 (score-based routing, #36) is technically possible but still gated on real production traffic accumulating |
 | Tier-1 language-pair quality | **Needs Work at the raw-model level, substantially mitigated in production** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the raw free-tier model (2/2 samples) — still do not present this pair as reliably supported on model quality alone. **But** production's repair mechanism now actually works (3.43): 3/3 triggered mismatches on this exact pair were corrected before the learner saw them |
 | Spaced-repetition review deck | **Production Ready** | Population, Leitner scheduling, API, UI and navigation all verified live end-to-end against the real database (3.41); Phase 2 (fitted half-life curve) and tutor-context injection of weak areas remain open |
 | Invite-a-partner referral flow | **Production Ready** | Verified live end-to-end against the real database and a real running server (3.44); two real bugs found and fixed along the way. Google-signup referral capture is a documented gap, credentials-only for now |
 | Tutor persistence | **Production Ready** | Verified reload, resume, continue, end, cross-account refusal |
 | Tutor streaming | **Production Ready** | Verified incremental render; errors before commit stay HTTP |
 | Cost metering | **Production Ready** | Three tiers, ordering tested, live 429 verified |
-| Language matching | **Mostly Ready** | Engine correct and verified; depends on user liquidity |
+| Language matching | **Mostly Ready** | Engine correct and verified; still depends on user liquidity, though the risk is now actively mitigated — declared-availability cross-matching exists for both text (roadmap #32, 3.46) and voice (roadmap #40, 3.57), and voice is now the primary human-practice mode (18.5, 3.56) with its own reciprocal referral mechanic (#33, 3.44) |
 | Friends & requests | **Production Ready** | Full loop verified with two accounts |
 | Messaging | **Production Ready** | Cross-account delivery verified; paging bug fixed |
 | Conversation list | **Production Ready** | Real data, preview promotion works |
-| Notifications | **Not Implemented** | Fake implementation deleted; only the friend badge exists |
+| Notifications | **Mostly Ready** | No general notification inbox/bell — only the friend-request badge and a browser `Notification` API popup on match-found (roadmap #18, 3.9). Real, not fake, but narrow in scope |
 | Dashboard | **Production Ready** | Server-rendered, real recent practice |
 | Navbar search | **Production Ready** | Keys, copy and full combobox pattern fixed and verified |
 | Explore | **Production Ready** | Real data, filters, pagination verified |
@@ -3501,10 +3527,10 @@ kind of compounding failure section 13 keeps finding.
 | Error handling | **Production Ready** | Three boundary layers, verified with a real crash |
 | 404 handling | **Production Ready** | Branded, in-app variant keeps navigation |
 | Loading states | **Production Ready** | Route-level fallback plus derived per-view states |
-| Accessibility | **Needs Work** | Lint clean and combobox fixed; no audit of video controls, contrast, or the streaming transcript |
-| Live video | **Needs Work** | Tokens and pre-join verified; **a real two-party call never tested** |
+| Accessibility | **Mostly Ready** | Lint clean, combobox fixed; `aria-live` added to the tutor transcript and accessible switch semantics to the video toggles (roadmap #21, 3.23). **Still open**: the dark-mode primary-button contrast finding (4.30:1, needs 4.5:1) — a brand-colour change, needs the owner (11's rule) |
+| Live video | **Production Ready** | **Done, 2026-08-03 — see 3.53.** A real two-party call was tested (one real camera + one voice-only participant, the maximum this sandbox could produce) and three real bugs were found and fixed: prejoin camera/mic choice was discarded, the match-found modal crashed on a real match, and a remote camera-off never fell back to the avatar |
 | Pre-join screen | **Production Ready** | Two real bugs fixed (preview never displayed; camera leak) |
-| Cloudinary uploads | **Mostly Ready** | Validated and throttled; old assets never deleted |
+| Cloudinary uploads | **Production Ready** | Validated and throttled; **old assets now deleted on replacement** (roadmap #15, 3.51 — audited the real account, found and fixed the actual leak source, not just a one-time cleanup) |
 | Progress | **Production Ready** | Real data, bounded queries, streak unit tested |
 | Languages/CEFR | **Production Ready** | Single registry, plain-language levels, legacy migration |
 | Flags | **Production Ready** | Image-based, works on Windows |
@@ -3551,13 +3577,12 @@ connection strings. **Owner decision — risks production data.**
 
 ### High
 
-**9.4 Live video never tested with two real participants.**
-*Why:* only one camera was available during development.
-*Impact:* the flow could fail in ways no amount of code reading reveals; it depends on a
-third-party service.
-*Difficulty:* low — needs two devices and ten minutes.
-*Solution:* two humans, two cameras, one call. Check tokens, join, publish, subscribe,
-mute/unmute, leave, and the ended-session state.
+**9.4 ~~Live video never tested with two real participants.~~** **Resolved, 2026-08-03 — see
+3.53.** One real camera + one voice-only participant (the maximum two devices this sandbox could
+produce) exercised the complete real signaling/publish/subscribe/mute/leave path and found three
+real bugs, now fixed: prejoin camera/mic choice was discarded, the match-found modal crashed on a
+real match, and a remote camera-off never fell back to the avatar. True simultaneous two-camera
+video remains unverified for lack of a second physical camera, but the flow itself is proven.
 
 **9.5 Four admin pages verified only statically.**
 *Why:* no admin account was available, and both routes to creating one were correctly blocked.
@@ -3587,13 +3612,10 @@ webhook to a Slack channel is the cheapest next step and needs no code.
 `7ff87da`. Both render on the server; their data access lives in `lib/friends.server.ts` and
 `lib/settings-form-state.ts`.
 
-**9.9 Old Cloudinary avatars are never deleted.**
-*Why:* the upload route only writes.
-*Impact:* storage grows monotonically; `Upload` rows accumulate.
-*Difficulty:* low.
-*Solution:* on replacement, look up the previous `Upload` for that user and
-`cloudinary.uploader.destroy` best-effort. **This deletes user files — a considered change, not
-a drive-by.**
+**9.9 ~~Old Cloudinary avatars are never deleted.~~** **Resolved, 2026-08-03 — see 3.51**
+(roadmap #15). `deleteSupersededAvatars` now fires after every avatar upload; the real Cloudinary
+account was also audited for pre-existing orphans (2 found and deleted). Owner had confirmed no
+real production users yet, unblocking the "deletes user files" caution for that one-time cleanup.
 
 **9.10 `SessionProvider` issues two `/api/auth/session` calls per page load.**
 *Difficulty:* low. *Solution:* audit provider placement and `refetchOnWindowFocus`.
@@ -3608,10 +3630,10 @@ delay before a ban takes effect.
 *Impact:* starting via that script breaks Google OAuth callbacks.
 *Difficulty:* trivial. *Solution:* change one of them; probably delete the script.
 
-**9.13 Messages page is 774 lines.**
-*Impact:* hard to navigate; audited and sound, but change is riskier than it should be.
-*Difficulty:* moderate. *Solution:* extract the composer, the thread and the feedback dialog.
-Note the polling/realtime logic is correct — **do not rewrite it, just move it.**
+**9.13 ~~Messages page is 774 lines.~~** **Resolved, 2026-08-03 — see 3.48** (roadmap #16).
+Network/realtime logic moved to a hook in an earlier block; the three remaining inline modal
+components moved to `src/components/messages/`, 664 → 358 lines. The polling/realtime logic was
+moved, not rewritten, per this item's own original instruction.
 
 **9.14 `isVerified` exists but is never enforced.**
 *Impact:* email ownership is unproven for credentials accounts.
@@ -3644,8 +3666,10 @@ the log beyond newest-first, and no export.
 plausibly involved in the 13-minute connection stall. **Investigate before removing — it may
 be load-bearing on the owner's network.**
 
-**9.22 No pagination backwards through message history.** The cursor only moves forwards; the
-newest 100 is all a user can see.
+**9.22 ~~No pagination backwards through message history.~~** **Resolved — shipped in `ee637c5`
+alongside #16, verified live 2026-08-03 — see 3.49** (roadmap #19). A `before`-cursor walk was
+seeded past 100 messages and confirmed to partition history with no gap or duplicate at the
+boundary.
 
 **9.23 `interests` sub-selections are collected but unused** beyond category presence.
 
@@ -3670,9 +3694,10 @@ newest 100 is all a user can see.
 ### Can real users use it?
 
 **Yes, with two caveats.** A user can register, onboard, practise with the AI tutor, be matched
-with a partner, exchange messages, add friends and see genuine progress. The caveats: the tutor
-runs out after ~50 requests/day platform-wide, and a credentials user who forgets their password
-needs an operator.
+with a partner for live voice (the primary mode, 18.5/3.56), text, or video, exchange messages,
+add friends and see genuine progress. Declared-availability matching (#32/#40) means a match can
+even form while a user is offline. The caveats: the tutor runs out after ~50 requests/day
+platform-wide, and a credentials user who forgets their password needs an operator.
 
 ### Can friends test it?
 
@@ -3694,7 +3719,9 @@ failures are visible.
 3. Dev/prod database separation and junk-account cleanup — otherwise real users see fake
    profiles and local work endangers production data.
 
-Strongly recommended alongside: error tracking, and a real two-party video test.
+Strongly recommended alongside: point `ERROR_REPORT_WEBHOOK_URL` at a real channel — error
+tracking exists (3.34) but nobody currently receives it. The two-party video test recommended
+here previously is now done (3.53).
 
 ### Can subscriptions begin?
 
@@ -3722,12 +3749,18 @@ people want it — which is the point of a beta.
 
 1. **No demand evidence.** Nothing is instrumented, so the beta must be designed to produce
    learning, not just uptime.
-2. **Two-sided liquidity.** Human matching only works if compatible users are online together.
-   The AI tutor is the correct hedge and should stay the headline.
+2. **Two-sided liquidity.** Human matching only works if compatible users are online together —
+   and this got structurally harder, not easier, once voice became the primary mode (18.5) since
+   a live audio call has a higher "both sides live" bar than text ever did. Actively mitigated,
+   not solved: declared-availability cross-matching now covers both text (#32) and voice (#40),
+   and the AI tutor remains the correct always-available hedge.
 3. **AI cost scaling.** Capped today, but a paid tier changes the calculus and the caps will
    need revisiting.
-4. **Moderation exposure.** Strangers talking to strangers, with reporting but no blocking, no
-   appeals and no audit trail.
+4. **Moderation exposure.** Strangers talking to strangers — reporting, blocking, and an audit
+   trail all exist now (roadmap #17, 3.36), re-prioritised specifically because voice-first raises
+   the cost of shipping without them. **Still no appeals process.** Voice moderation is also
+   necessarily preventive (who can reach whom) rather than retrospective (review a transcript) —
+   see 18.5 for why that's a deliberate, not accidental, gap.
 5. **Trust.** The product previously showed invented data. That is fixed, but the standard must
    hold — a single fabricated number in a beta is disproportionately damaging.
 
@@ -3737,7 +3770,9 @@ people want it — which is the point of a beta.
 2. **Nobody is alerted.** Failures are no longer silent — every one is recorded as a structured
    `lm-error` line with a correlation id (3.34) — but with `ERROR_REPORT_WEBHOOK_URL` unset,
    seeing a failure still requires somebody to go and read the logs.
-3. **Untested video** — a whole feature depends on an unverified third-party integration.
+3. ~~Untested video~~ — **resolved, 2026-08-03 (3.53)**: a real two-party call (one camera, one
+   voice-only participant) exercised the full path and found/fixed three real bugs. True
+   simultaneous two-camera video remains unverified for lack of a second physical camera.
 4. **Single points of failure** — MongoDB outage is total; LiveKit outage removes video and
    degrades text.
 5. **Auth.js v5 is a beta dependency** — API changes are possible.
