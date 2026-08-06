@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { connectDB } from '@/lib/db'
 import MatchRequest from '@/lib/models/MatchRequest'
+import MatchAvailability from '@/lib/models/MatchAvailability'
 import Conversation from '@/lib/models/Conversation'
 import User from '@/lib/models/User'
 import { createRoom } from '@/lib/livekit'
@@ -15,6 +16,7 @@ import { buildMatchPartner as buildPartner, MATCH_PARTNER_SELECT } from '@/lib/m
 // camera track, not a different queue model.
 const GHOST_THRESHOLD_MS = 12_000
 const LANGUAGE_FALLBACK_MS = 5_000
+const AVAILABILITY_MAX_MINUTES = 1440
 
 function compatibilityPct(idA: string, idB: string): number {
   const hash = [...(idA + idB)].reduce((acc, c) => acc + c.charCodeAt(0), 0)
@@ -39,6 +41,31 @@ async function createVoiceConversation(userId: string, partnerId: string, langua
   return conv
 }
 
+/**
+ * Roadmap #32 extended to voice (18.5): the same liquidity fallback chat's
+ * route already has. Tried only at POST time, after the live queue comes up
+ * empty — this collection is never polled (see `MatchAvailability.ts`).
+ */
+async function tryAvailabilityMatch(
+  userId: string,
+  targetLanguage: string,
+  nativeLanguage: string,
+  excludedIds: string[]
+) {
+  return MatchAvailability.findOneAndUpdate(
+    {
+      type: 'voice',
+      targetLanguage: nativeLanguage,
+      nativeLanguage: targetLanguage,
+      status: 'open',
+      userId: { $nin: [userId, ...excludedIds] },
+      expiresAt: { $gt: new Date() },
+    },
+    { $set: { status: 'matched' } },
+    { returnDocument: 'after' }
+  )
+}
+
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -51,7 +78,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     )
   }
-  const { targetLanguage, nativeLanguage, interests } = parsed.data
+  const { targetLanguage, nativeLanguage, interests, availabilityMinutes } = parsed.data
 
   const { allowed } = await checkRateLimit('match-queue-voice', session.user.id, 5, 60)
   if (!allowed) {
@@ -64,24 +91,31 @@ export async function POST(req: NextRequest) {
   await connectDB()
   const userId = session.user.id
 
-  await MatchRequest.findOneAndUpdate(
-    { userId, type: 'voice', status: 'waiting' },
-    { $set: { status: 'cancelled' } }
-  )
+  await Promise.all([
+    MatchRequest.findOneAndUpdate(
+      { userId, type: 'voice', status: 'waiting' },
+      { $set: { status: 'cancelled' } }
+    ),
+    MatchAvailability.findOneAndUpdate(
+      { userId, type: 'voice', status: 'open' },
+      { $set: { status: 'cancelled' } }
+    ),
+  ])
 
   const excludedIds = await getBlockedUserIds(userId)
-  const existing = await MatchRequest.findOneAndUpdate(
-    {
-      type: 'voice',
-      targetLanguage: nativeLanguage,
-      nativeLanguage: targetLanguage,
-      status: 'waiting',
-      userId: { $nin: [userId, ...excludedIds] },
-      lastPolledAt: activeFilter(),
-    },
-    { $set: { status: 'matched' } },
-    { returnDocument: 'after' }
-  )
+  const existing =
+    (await MatchRequest.findOneAndUpdate(
+      {
+        type: 'voice',
+        targetLanguage: nativeLanguage,
+        nativeLanguage: targetLanguage,
+        status: 'waiting',
+        userId: { $nin: [userId, ...excludedIds] },
+        lastPolledAt: activeFilter(),
+      },
+      { $set: { status: 'matched' } },
+      { returnDocument: 'after' }
+    )) ?? (await tryAvailabilityMatch(userId, targetLanguage, nativeLanguage, excludedIds))
 
   if (existing) {
     const partnerDoc = await User.findById(existing.userId)
@@ -96,6 +130,26 @@ export async function POST(req: NextRequest) {
       conversationId: conv._id.toString(),
       partner: buildPartner(partnerDoc),
       compatibilityPct: compatibilityPct(userId, existing.userId.toString()),
+    })
+  }
+
+  if (availabilityMinutes > 0) {
+    const minutes = Math.min(availabilityMinutes, AVAILABILITY_MAX_MINUTES)
+    const availability = await MatchAvailability.create({
+      userId,
+      type: 'voice',
+      targetLanguage,
+      nativeLanguage,
+      interests,
+      status: 'open',
+      expiresAt: new Date(Date.now() + minutes * 60_000),
+    })
+
+    return NextResponse.json({
+      matched: false,
+      availability: true,
+      availabilityId: availability._id.toString(),
+      expiresAt: availability.expiresAt,
     })
   }
 

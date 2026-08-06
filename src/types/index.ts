@@ -192,4 +192,6 @@ export interface MatchResult {
     "id" | "name" | "username" | "country" | "flag" | "avatarInitials" | "avatarColor" | "native" | "learning" | "interests"
   >
   compatibilityPct: number
+  /** Only set on pending (offline-match) results — see PendingMatchCard. */
+  type?: "chat" | "video" | "voice"
 }

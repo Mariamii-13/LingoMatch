@@ -76,6 +76,28 @@ describe('getPendingMatches', () => {
     expect(result[0].partner.name).toBe('Alex Rivera')
   })
 
+  it('carries the conversation type through, defaulting to chat when absent', async () => {
+    availabilityFind.mockReturnValue(
+      sortable([
+        { _id: 'row-1', conversationId: 'conv-voice', targetLanguage: 'es' },
+        { _id: 'row-2', conversationId: 'conv-chat', targetLanguage: 'es' },
+      ]),
+    )
+    conversationFindById.mockImplementation((id: string) => {
+      if (id === 'conv-voice') {
+        return leanOnly({ participants: ['user-1', 'partner-1'], compatibilityPct: 90, type: 'voice' })
+      }
+      return leanOnly({ participants: ['user-1', 'partner-2'], compatibilityPct: 80 })
+    })
+    userFindById.mockReturnValue(selectable({ _id: 'partner-1', displayName: 'Alex Rivera' }))
+
+    const result = await getPendingMatches('user-1')
+
+    expect(result).toHaveLength(2)
+    expect(result.find((r) => r.conversationId === 'conv-voice')?.type).toBe('voice')
+    expect(result.find((r) => r.conversationId === 'conv-chat')?.type).toBe('chat')
+  })
+
   it('skips a row whose conversation no longer exists rather than throwing', async () => {
     availabilityFind.mockReturnValue(
       sortable([{ _id: 'row-1', conversationId: 'conv-gone', targetLanguage: 'es' }]),

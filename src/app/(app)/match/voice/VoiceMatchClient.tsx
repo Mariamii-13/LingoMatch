@@ -19,7 +19,13 @@ export function VoiceMatchClient({ defaults }: { defaults: MatchDefaults }) {
   const [targetLanguage, setTargetLanguage] = React.useState(defaults.targetLanguage)
   const [nativeLanguage, setNativeLanguage] = React.useState(defaults.nativeLanguage)
   const [interests, setInterests] = React.useState<string[]>([])
+  const [availabilityMinutes, setAvailabilityMinutes] = React.useState(0)
   const [matchResult, setMatchResult] = React.useState<MatchResult | null>(null)
+  // Roadmap #40 (18.5): set when a windowed (availabilityMinutes > 0) request
+  // finds no live partner immediately — mirrors ChatMatchClient's own flag.
+  // There is nothing to poll for; the match, if any, surfaces later via the
+  // dashboard's pending-match card.
+  const [queuedForLater, setQueuedForLater] = React.useState(false)
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
   const requestIdRef = React.useRef<string | null>(null)
   // Camera never applies here — only the mic choice needs to survive into the session.
@@ -44,11 +50,12 @@ export function VoiceMatchClient({ defaults }: { defaults: MatchDefaults }) {
   const startSearching = async (_cameraEnabled: boolean, micEnabled: boolean) => {
     devicePrefsRef.current = { mic: micEnabled }
     requestMatchNotificationPermission()
+    setQueuedForLater(false)
     setPhase("searching")
     const res = await fetch("/api/match/voice", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetLanguage, nativeLanguage, interests }),
+      body: JSON.stringify({ targetLanguage, nativeLanguage, interests, availabilityMinutes }),
     })
     if (!res.ok) {
       const failure = await res.json().catch(() => ({}))
@@ -61,6 +68,14 @@ export function VoiceMatchClient({ defaults }: { defaults: MatchDefaults }) {
     if (data.matched) {
       setMatchResult(data)
       setPhase("found")
+      return
+    }
+
+    if (data.availability) {
+      // Windowed request, no live partner right now — discovered later via
+      // the dashboard's pending-match card, same as ChatMatchClient.
+      setPhase("idle")
+      setQueuedForLater(true)
       return
     }
 
@@ -121,6 +136,16 @@ export function VoiceMatchClient({ defaults }: { defaults: MatchDefaults }) {
         </p>
       </div>
 
+      {queuedForLater && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-sm">
+          <p className="font-medium text-emerald-700 dark:text-emerald-400">You&apos;re on the list</p>
+          <p className="mt-1 text-muted-foreground">
+            No live partner right now — we&apos;ll match you as soon as one turns up, and show it
+            here or on your dashboard. No need to keep this tab open.
+          </p>
+        </div>
+      )}
+
       <div className="rounded-2xl border bg-card p-6">
         <MatchConfigForm
           targetLanguage={targetLanguage}
@@ -129,6 +154,8 @@ export function VoiceMatchClient({ defaults }: { defaults: MatchDefaults }) {
           onTargetLanguage={setTargetLanguage}
           onNativeLanguage={setNativeLanguage}
           onInterests={setInterests}
+          availabilityMinutes={availabilityMinutes}
+          onAvailabilityMinutes={setAvailabilityMinutes}
         />
 
         <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-sm text-amber-300">

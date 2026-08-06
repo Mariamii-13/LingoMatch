@@ -44,6 +44,7 @@ export async function getPendingMatches(userId: string): Promise<MatchResult[]> 
         const conv = await Conversation.findById(row.conversationId).lean<{
           participants: { toString(): string }[]
           compatibilityPct?: number
+          type?: 'chat' | 'video' | 'voice'
         } | null>()
         if (!conv) return null
 
@@ -62,6 +63,10 @@ export async function getPendingMatches(userId: string): Promise<MatchResult[]> 
           conversationId: String(row.conversationId),
           partner: buildMatchPartner(partnerDoc),
           compatibilityPct: conv.compatibilityPct ?? 75,
+          // `MatchAvailability.type` is 'chat' | 'voice' (video has no
+          // availability path), but the conversation's own real `type` is the
+          // source of truth for how the pending-match card should link out.
+          type: conv.type ?? 'chat',
         } as MatchResult
       }),
     )

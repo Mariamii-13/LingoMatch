@@ -11,10 +11,17 @@ import mongoose, { Schema } from 'mongoose'
  * Matching happens synchronously whenever either side's request is written
  * (see `tryMatch` in the chat match route): no cron job scans this
  * collection, it is only ever read at another request's insert time.
+ *
+ * `voice` added 2026-08-06 (roadmap #40, 18.5): now that live voice is the
+ * primary human-practice mode, the liquidity risk this collection exists to
+ * soften applies to voice too, not just chat. `video` is deliberately still
+ * excluded — a video call needs both sides live with a camera ready for the
+ * call itself, so "match me later while I'm away" doesn't fit it the way it
+ * fits an audio-only room.
  */
 const MatchAvailabilitySchema = new Schema({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-  type: { type: String, enum: ['chat'], required: true, default: 'chat' },
+  type: { type: String, enum: ['chat', 'voice'], required: true, default: 'chat' },
   targetLanguage: { type: String, required: true },
   nativeLanguage: { type: String, required: true },
   interests: { type: [String], default: [] },
