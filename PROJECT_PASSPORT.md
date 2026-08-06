@@ -99,6 +99,18 @@ correct #1 owner action, now with the accurate reason (raises the account's shar
 rate ceiling ~50/day → 1,000/day) instead of the stale one (paid-model access for regular users,
 which the tier hard filter now deliberately prevents).
 
+An eleventh pass, also 2026-08-06, was the owner's requested final AI-stack review before
+actually spending that money. Re-verifying live (not trusting §19.3's six-day-old picks) found
+both of its recommended models gone from OpenRouter entirely, and one of the three live
+`FREE_TUTOR_MODELS` entries dead too (confirmed by a real API call, not a catalogue read). See
+19.8 for the full re-verification — new picks (`anthropic/claude-sonnet-5` for the paid chain;
+drop `inclusionai/ling-3.0-flash:free` from the free chain), a live-reproduced reconfirmation that
+`nvidia/nemotron-3-super-120b-a12b:free` still leaks reasoning into replies (1/5 fresh samples,
+consistent with July's ~1/3 finding), and two newly-disqualified free-tier candidates
+(`openai/gpt-oss-20b:free`, `nvidia/nemotron-nano-9b-v2:free`). No code changed in this pass —
+evaluation only, per the owner's explicit instruction; the concrete env-var/array changes are
+queued for the next pass once credits are purchased.
+
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
 > **Section 18 is binding product direction** set by the owner — it constrains architecture and
@@ -4096,7 +4108,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are now already configured for a specific paid chain (§19.3: `google/gemini-3-flash-preview` → `anthropic/claude-haiku-4.5` → free tier), verified live-reachable and correctly priced; only the credit purchase itself remains | Critical | Trivial | **Real impact, corrected 2026-08-06 (see 3.58): raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter already keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money. ~~⚠️ Model routing must become plan-aware first~~ **Done — roadmap #34 shipped 2026-08-01/02 and already hard-filters `'free'` callers away from the paid chain; safe to buy credits now, no further engineering prerequisite (3.58)** |
+| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are **not** currently set to a live chain: §19.3's picks (`google/gemini-3-flash-preview`, `anthropic/claude-haiku-4.5`) were both confirmed **dead on OpenRouter as of 2026-08-06** (see 19.8, the final pre-purchase re-verification). Live-verified replacement: `AI_MODEL_DEFAULT=anthropic/claude-sonnet-5`, no fallback yet (19.8 found no second paid vendor with equally confirmed low latency). `FREE_TUTOR_MODELS` also needs `inclusionai/ling-3.0-flash:free` dropped (confirmed 404) | Critical | Trivial (credit purchase) + small (env var / one-line array edit, not yet applied) | **Real impact, corrected 2026-08-06 (see 3.58): raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter already keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money. ~~⚠️ Model routing must become plan-aware first~~ **Done — roadmap #34 already hard-filters `'free'` callers away from the paid chain; safe to buy credits now, no further engineering prerequisite (3.58)** |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | ~~Test live video with two real cameras~~ | High | Low | **Done, 2026-08-03 — see 3.53.** Found and fixed three real live-verified bugs: prejoin camera/mic choice was silently discarded by the real session, the video-match route's own broken partner-shaping crashed the Match Found modal for every real match, and a remote camera-off never fell back to the avatar placeholder | Two devices for true simultaneous two-way video — worked around with one real camera + one voice-only participant to still verify the full real path |
@@ -5466,6 +5478,12 @@ part of the fix, not just a side effect.
 
 ### 19.3 Text tutor model — comparison and pick
 
+**⚠️ Superseded, 2026-08-06 — see 19.8.** Both models this section picked
+(`google/gemini-3-flash-preview`, `anthropic/claude-haiku-4.5`) no longer exist on OpenRouter as
+of six days later. The *methodology and reasoning* below are still correct and worth reading —
+19.8 follows the exact same discipline with today's live-verified replacements. This section is
+kept as the historical record and is why 19.8 exists as a re-verification, not a rewrite.
+
 **Current architecture is already right and stays unchanged in shape:** direct OpenRouter HTTP
 (no SDK), an env-driven ordered model chain (`resolveModelChain()`), and advance-on-failure rules
 that only advance past 402/404/429/5xx (never past a timeout or a malformed reply, because those
@@ -5852,6 +5870,158 @@ otherwise. This section is the plan; the log is the record of what was actually 
   confident cost-driven pick for a closed beta with ~20 accounts would be over-fitting. Cost
   becomes a real decision variable for voice (where the per-minute spread is 10–20×) and for text
   only once DAU is real.
+
+### 19.8 Production model re-verification, 2026-08-06 — the final check before buying credits
+
+**Why this exists.** The owner asked for a final production review of the AI stack before
+spending the ~$10 roadmap #1 asks for — a deliberate last check, not a rubber stamp. §19.3 was
+written 2026-07-31; the free-model roster was already documented as volatile enough to shift
+within *days* (§17, §20.6: 20 → 17 → 14 free models in nine days). Six days had passed. Every
+figure below was re-verified **live** today, against the real OpenRouter API and the project's
+own `OPENROUTER_API_KEY` — not re-read from §19.3 — following the same discipline that section
+established. This found real drift.
+
+**Finding 1 — both of §19.3's picked models are gone.** `google/gemini-3-flash-preview` and
+`anthropic/claude-haiku-4.5` no longer exist on OpenRouter at all (confirmed against the live
+`/api/v1/models` catalogue, 399 models, zero matches for either id — not renamed, not
+deprecated-with-redirect, just absent). Anthropic currently offers exactly three chat models on
+OpenRouter: Opus 5, Sonnet 5, Fable 5 — no Haiku tier exists right now. **§19.3's recommended
+chain would 404 on both entries today** and silently fall through to the free tier every time —
+which is precisely the class of drift 19.3 itself warned this market moves fast enough to cause.
+
+**Finding 2 — one of the three live `FREE_TUTOR_MODELS` entries is dead, confirmed by a real
+API call, not a catalogue lookup.** All three current entries were probed directly
+(`POST /chat/completions`, real key, `max_tokens: 1`):
+
+| Model | Live result |
+|---|---|
+| `google/gemma-4-26b-a4b-it:free` (primary) | **200 OK** — healthy |
+| `inclusionai/ling-3.0-flash:free` (2nd fallback) | **404** — `"This model is unavailable for free. The paid version is available now: inclusionai/ling-3.0-flash"`. Gone, permanently free-tier-wise. |
+| `google/gemma-4-31b-it:free` (3rd fallback) | **429**, `"temporarily rate-limited upstream"`, in 3 of 5 probe attempts across this session |
+
+The chain's existing `isModelUnavailable()` rule already advances past both a 404 and a 429
+correctly — **this is not an outage**, since the primary entry is healthy — but the safety net
+behind it is thinner than documented: one dead entry, one entry that failed upstream 60% of the
+time it was called today. If the primary ever has a bad moment at the same time #2 or #3 is
+saturated, a free-tier user gets a hard failure. This is a real, small, unblocked code fix
+(remove the dead entry) — flagged here, not applied yet, per the owner's "no code until the
+evaluation is complete" instruction.
+
+**Finding 3 — the two obvious free-tier replacement candidates both failed live testing, for two
+different, instructive reasons.** Tested against the same explanation-language methodology §20.6
+established (a real grammar-correction prompt, target-language conversation / native-language
+explanation, including the harder non-English-bridge case — French target, Spanish explanation):
+
+- `openai/gpt-oss-20b:free` — clean on the easy Spanish/English pair (2/2), but on the harder
+  French/Spanish pair it burned its entire 400-token output budget on a **repetitive internal
+  reasoning loop** ("achete should be acheté... achete missing accent... achete is present... so
+  we correct" repeated 8 times) and returned **empty content**, `finish_reason: "length"`. A
+  reasoning model with no way to cap its own reasoning budget on OpenRouter's free tier is a worse
+  failure mode than a wrong-language explanation — it fails silently with nothing to repair.
+  **Disqualified.**
+- `nvidia/nemotron-3-super-120b-a12b:free` — this is the exact model 20.6 removed from the chain
+  in July for leaking raw chain-of-thought into replies. Re-tested live today, 5 fresh samples:
+  4/5 clean and genuinely good (fast, 353–1,089ms, correct language split on both easy and hard
+  pairs) — but **1/5 reproduced the identical original defect**, the internal reasoning verbatim
+  in the reply, `finish_reason: "length"`, no usable content. A 20% live failure rate today is
+  consistent with the original ~33% finding, not a contradiction of it. **The first two clean
+  samples alone would have looked like a fix — this is 20.6's own "sample-size honesty" lesson
+  reproducing itself in real time. Confirmed still disqualified; do not re-add.**
+- `nvidia/nemotron-nano-9b-v2:free` (also tested, not previously benchmarked) — inconsistent in a
+  third way: one reply was 100% English with no target-language conversation at all, one mixed
+  Spanish and French mid-sentence, one mislabeled a Spanish explanation as `"En inglés:"`.
+  **Disqualified** — worse language-control consistency than either existing chain entry.
+
+**Conclusion for the free tier: no clean third model exists among today's live candidates.**
+Recommended fix (code, not yet applied): drop `inclusionai/ling-3.0-flash:free` and run
+`FREE_TUTOR_MODELS` as the two confirmed-good entries — `google/gemma-4-26b-a4b-it:free`,
+`google/gemma-4-31b-it:free` — rather than carry a permanently-dead third entry that adds a
+network round-trip on every fallback without ever being able to answer.
+
+**Finding 4 — the paid-chain replacement, chosen from what's actually live today.** All
+candidates below were confirmed *routable* (a live `402 Insufficient credits` response — the
+correct behaviour with zero balance — not a `404`, which would mean a wrong id):
+`anthropic/claude-sonnet-5`, `google/gemini-3.6-flash`, `google/gemini-3.5-flash-lite`,
+`openai/gpt-5.6-sol`, `openai/gpt-5.6-terra`, `qwen/qwen3.7-flash`,
+`deepseek/deepseek-v4-flash-0731`.
+
+**Latency is again the deciding factor, and again contains a trap — this time on the Google side
+instead of OpenAI's.** Per Artificial Analysis (live, today): Gemini 3.6 Flash's tested
+configuration has a **16.41s time-to-first-token** (vs. a 2.79s peer median) — worse than the
+GPT-5.6 Luna trap §19.3 already flagged, and no non-reasoning/minimal-effort variant is
+documented or exposed for it the way the old Gemini 3 Flash Preview's `minimal` thinking level
+was. Gemini 3.5 Flash-Lite is no better: **10.20s TTFT**, reasoning-on by default, per
+Artificial Analysis's own model page. Neither Google model is safe to default to without a
+dedicated latency spike confirming a fast mode actually exists and is reachable through
+OpenRouter — **eval candidates, not production defaults**, exactly the same verdict 19.3 already
+gave GPT-5.6 Luna for the same reason.
+
+**Claude Sonnet 5, by contrast, is confirmed fast by default.** Per OpenRouter's own migration
+docs, Sonnet 5's adaptive thinking is **opt-in** — `"reasoning": {"enabled": true}` must be set
+explicitly, and the current `openrouter.ts` request body sets no such field. Measured
+non-reasoning TTFT: **1.29–1.75s** (two independent Artificial Analysis comparison pages),
+Intelligence Index 42 non-reasoning — slower to start than the old Gemini 3 Flash Preview's 0.83s
+but not in the same category as the Gemini/GPT-5.6 reasoning traps, and it requires no extra
+configuration to stay fast — the code's existing request shape is already correct for it.
+
+**GPT-5.6 Terra, Qwen3.7-Flash, and DeepSeek V4 Flash** are all live and extremely cheap
+(Qwen3.7-Flash: $0.03/$0.13 per M — near-free even on the paid chain) but none were
+latency/quality-tested this pass. Recorded as eval candidates for the eval harness (roadmap #29),
+not production defaults, per the same standard applied to every untested candidate in 19.3.
+
+**Recommended production chain, replacing §19.3's now-dead picks:**
+
+```
+AI_MODEL_DEFAULT   = anthropic/claude-sonnet-5   # reasoning left unset/off — do not add a
+                                                   # "reasoning" field to the request body
+AI_MODEL_FALLBACKS = (none confirmed live yet — see below)
+FREE_TUTOR_MODELS  = google/gemma-4-26b-a4b-it:free, google/gemma-4-31b-it:free
+                      (drop inclusionai/ling-3.0-flash:free — confirmed dead, 404)
+```
+
+**No second paid-chain vendor is recommended yet.** §19.3's original reasoning for a second paid
+entry (provider diversity, so one vendor's outage doesn't take down the whole paid chain) still
+holds, but nothing tested today can fill that slot with equal confidence to Sonnet 5 — Gemini's
+two candidates both have an unresolved latency trap, and GPT-5.6/Qwen/DeepSeek are untested.
+Running a single-entry paid chain is an acceptable interim state precisely *because* the paid
+chain is currently unreachable by any real user (§3.58 — the tier hard filter keeps 100% of
+today's `'free'`-tier traffic off it entirely); there is no live exposure to a paid-chain gap
+while no premium plan exists. Resolve this properly — a confirmed-fast second vendor, or a
+confirmed-fast Gemini minimal-reasoning mode — before roadmap #22 (payments) ships, not before
+this credit purchase.
+
+**Answering the review's specific dimensions, current state:**
+
+| Dimension | Answer |
+|---|---|
+| Default production model | `anthropic/claude-sonnet-5` (paid chain; dormant until #22/trial routing — see below) |
+| Fallback chain | Sonnet 5 → `FREE_TUTOR_MODELS` (`gemma-4-26b` → `gemma-4-31b`). No second paid entry yet — see above |
+| Free-tier models | `gemma-4-26b-a4b-it:free`, `gemma-4-31b-it:free` — the only two that passed live testing today |
+| Paid-tier models | `claude-sonnet-5` only, for now |
+| Cost per conversation | Free tier: **$0** (structurally, by the tier hard filter, §3.58). Paid chain, if/when reachable: ≈$0.01/message (4,000in/200out tokens × $2/$10 per M) ≈ **$60/mo at closed-beta volume (~6k msg), ≈$1,200/mo at 200 DAU** — pricier than §19.3's dead Gemini pick, but the paid chain carries zero live traffic today regardless |
+| Latency | Free tier: 0.35–2.0s TTFT observed live today (both entries). Paid (Sonnet 5, non-reasoning): 1.29–1.75s per Artificial Analysis — not directly re-measured against this app's own request shape this pass |
+| Multilingual teaching quality | Free primary (`gemma-4-26b`): correct target/explanation-language split, re-confirmed live today, both easy and hard pairs. Paid (Sonnet 5): not live-tested this pass — Artificial Analysis has no language-specific score for it; treat as unverified on this project's specific axis until run through the eval harness (#29) |
+| Instruction-following quality | Free primary: consistently followed the "explain only in native language" rule across every sample today. `gemma-4-31b`: correct when it answered, but 3/5 attempts never reached the model at all (upstream 429) |
+| Reasoning quality | Not the relevant axis for this product — a tutor reply needs fast, reliable instruction-following, not deep reasoning; every model with reasoning defaulted on (Gemini flash tier, `gpt-oss-20b`, `nemotron-3-super` intermittently) performed *worse* here, not better, exactly matching §19.3's original latency-trap finding |
+| Long-context reliability | Not a differentiator at current usage — every candidate offers ≥1M token context; the app replays ≤20 messages (~4,000 tokens), nowhere near any tested model's limit |
+| Availability/stability | Free tier: 2/2 primary, 2/5 secondary (upstream-limited, not code-limited). Paid candidates: 7/7 confirmed routable (proper 402s, no 404s) |
+| Long-term maintainability | No architecture change needed — the existing env-driven ordered chain + roadmap #34's tier hard filter already does exactly what this section needs; only the concrete model ids drift, which is why this section exists as a repeatable re-verification, not a one-time pick |
+
+**Never revert:** do not add a `"reasoning"` field to the OpenRouter request body for
+`anthropic/claude-sonnet-5` without re-confirming TTFT stays under ~2s with it — this is what
+keeps Sonnet 5 out of the Gemini/GPT-5.6 latency trap. Do not re-add
+`inclusionai/ling-3.0-flash:free` (permanently free-tier-dead, confirmed 404) or
+`nvidia/nemotron-3-super-120b-a12b:free`/`nvidia/nemotron-3-nano-30b-a3b:free` (both reproduce
+the reasoning-leak defect live, most recently today) without a fresh multi-sample live check
+showing the defect gone, not just 1–2 clean calls. Do not default to `google/gemini-3.6-flash` or
+`google/gemini-3.5-flash-lite` in `AI_MODEL_DEFAULT` without first confirming, live, a fast
+non-reasoning path exists — both currently measure 10–16s TTFT, worse than the original 9-second
+complaint this whole review exists to prevent.
+
+**What this section does not do:** it does not change `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS`/
+`FREE_TUTOR_MODELS` in the actual codebase — the owner asked for the evaluation before any code
+changes. See the chat response accompanying this pass for the exact owner action (credit amount,
+which env vars to set).
 
 ---
 
