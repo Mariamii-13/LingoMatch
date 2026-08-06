@@ -111,6 +111,17 @@ consistent with July's ~1/3 finding), and two newly-disqualified free-tier candi
 evaluation only, per the owner's explicit instruction; the concrete env-var/array changes are
 queued for the next pass once credits are purchased.
 
+A twelfth pass, same day, answered a direct owner follow-up (exactly which requests reach
+`claude-sonnet-5`, with confirmation free users never do — answered from code already read, no
+new research needed) and re-ran 19.8's paid-chain pick cost-first, per an explicit request for one
+free model plus **two** low-cost paid models rather than relying on the single moderate-cost
+Sonnet 5 pick. See 19.9. Found and live-verified OpenRouter's cross-provider
+`reasoning:{effort:"none"}` parameter (confirmed safe on a non-reasoning free model and
+syntactically accepted on all three paid candidates at zero credits), considered and rejected
+`qwen/qwen3.7-flash` despite its rock-bottom price (vision-positioned, zero independent
+benchmarks), and landed on `deepseek/deepseek-v4-flash-0731` → `openai/gpt-5.6-terra` as the new
+paid chain — Sonnet 5 demoted to a documented-but-unwired future option. No code changed.
+
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
 > **Section 18 is binding product direction** set by the owner — it constrains architecture and
@@ -4108,7 +4119,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are **not** currently set to a live chain: §19.3's picks (`google/gemini-3-flash-preview`, `anthropic/claude-haiku-4.5`) were both confirmed **dead on OpenRouter as of 2026-08-06** (see 19.8, the final pre-purchase re-verification). Live-verified replacement: `AI_MODEL_DEFAULT=anthropic/claude-sonnet-5`, no fallback yet (19.8 found no second paid vendor with equally confirmed low latency). `FREE_TUTOR_MODELS` also needs `inclusionai/ling-3.0-flash:free` dropped (confirmed 404) | Critical | Trivial (credit purchase) + small (env var / one-line array edit, not yet applied) | **Real impact, corrected 2026-08-06 (see 3.58): raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter already keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money. ~~⚠️ Model routing must become plan-aware first~~ **Done — roadmap #34 already hard-filters `'free'` callers away from the paid chain; safe to buy credits now, no further engineering prerequisite (3.58)** |
+| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are **not** currently set to a live chain: §19.3's picks (`google/gemini-3-flash-preview`, `anthropic/claude-haiku-4.5`) were both confirmed **dead on OpenRouter as of 2026-08-06** (19.8), then re-evaluated cost-first per the owner's ask (19.9). Live-verified replacement: `AI_MODEL_DEFAULT=deepseek/deepseek-v4-flash-0731`, `AI_MODEL_FALLBACKS=openai/gpt-5.6-terra`, both requests carrying `reasoning:{effort:"none"}` (a real OpenRouter-documented, live-confirmed-safe cross-provider parameter). `FREE_TUTOR_MODELS` also needs `inclusionai/ling-3.0-flash:free` dropped (confirmed 404) | Critical | Trivial (credit purchase) + small (env vars + one request-body parameter, not yet applied) | **Real impact, corrected 2026-08-06 (see 3.58): raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter already keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money. ~~⚠️ Model routing must become plan-aware first~~ **Done — roadmap #34 already hard-filters `'free'` callers away from the paid chain; safe to buy credits now, no further engineering prerequisite (3.58)** |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | ~~Test live video with two real cameras~~ | High | Low | **Done, 2026-08-03 — see 3.53.** Found and fixed three real live-verified bugs: prejoin camera/mic choice was silently discarded by the real session, the video-match route's own broken partner-shaping crashed the Match Found modal for every real match, and a remote camera-off never fell back to the avatar placeholder | Two devices for true simultaneous two-way video — worked around with one real camera + one voice-only participant to still verify the full real path |
@@ -6022,6 +6033,119 @@ complaint this whole review exists to prevent.
 `FREE_TUTOR_MODELS` in the actual codebase — the owner asked for the evaluation before any code
 changes. See the chat response accompanying this pass for the exact owner action (credit amount,
 which env vars to set).
+
+### 19.9 Cost-first re-evaluation, same day — two low-cost paid models instead of one moderate one
+
+**Why this exists.** The owner asked two things after reading 19.8: (1) exactly which requests
+would ever reach `anthropic/claude-sonnet-5`, with confirmation free users never do; and (2) a
+cost-first re-run with **one reliable free model plus two low-cost paid models**, rather than a
+single moderate-cost paid model. Both are answered here; (1) is also answered directly in this
+pass's chat response since it needed no new research, only a precise read of code already in
+place.
+
+**Which requests reach the paid chain — exact mechanism, unchanged by this pass.**
+`resolveTier()` (`src/app/api/ai-practice/route.ts`) returns `'paid'` only when
+`session.user.plan === 'premium'`, else `'free'`, for every value including missing/malformed —
+this is the one real production call site, and it is not permissive-by-default the way the lower
+resolver is for testability. **No account has `plan: 'premium'` today** — roadmap #22 (payments)
+is not built, and no trial mechanism (§20.5 item 2) exists either. `resolveChainForTier('free')`
+then hard-filters to entries whose `tierEligibility` includes `'free'` — only `FREE_TUTOR_MODELS`
+qualifies; every `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` entry is registered with
+`tierEligibility: ['trial', 'paid']` only (`model-registry.ts`), so it is **structurally
+unreachable** for a `'free'` caller, not just unlikely to be reached. **Confirmed: 100% of real
+traffic today, and every free user going forward until a premium plan or trial state exists, uses
+only `FREE_TUTOR_MODELS`.** The paid chain sits configured and idle — it exists for the moment a
+real paid/trial user shows up, not for today's traffic. This is exactly why 19.8 treated the
+specific paid pick as low-stakes relative to the free-tier fixes: nothing live depends on it yet.
+
+**Cost-first re-run of the paid slot, live-verified where the account's zero credit balance
+allows it.**
+
+- **`qwen/qwen3.7-flash` — the cheapest candidate ($0.03/$0.13 per M) — considered and rejected.**
+  It is positioned by its own vendor as a **vision-language agentic model** ("multimodal agents,
+  visual coding, spatial understanding"), not a general text model; **no independent benchmark
+  suite, including Artificial Analysis, has scored it**, and no multilingual data exists for it at
+  all. Cheapest-on-paper is not a reason to default to a model with zero evidence on this
+  project's actual requirement — the same discipline 19.3 already applied to DeepSeek/Qwen
+  candidates in July.
+- **A real, useful discovery that changes the picture: OpenRouter exposes a single, documented,
+  cross-provider parameter — `reasoning: { effort: "none" }`** — that disables reasoning
+  uniformly on OpenAI, Google, and DeepSeek models without per-vendor special-casing. **Live-
+  verified safe today**: sent to `google/gemma-4-26b-a4b-it:free` (a model that doesn't use
+  reasoning at all), it was silently accepted, `200 OK`, no behavior change — confirming it is
+  safe to attach to every chain entry unconditionally, not just the ones that need it. Also sent
+  to `deepseek/deepseek-v4-flash-0731`, `openai/gpt-5.6-terra`, and `anthropic/claude-sonnet-5`
+  with zero credits — all three still correctly returned `402` (not `400`), confirming the
+  parameter is syntactically accepted by every candidate, not just claimed to be by OpenRouter's
+  own docs.
+- **`deepseek/deepseek-v4-flash-0731` — recommended primary paid pick.** $0.09/$0.18 per M
+  (OpenRouter's own live pricing for this exact id) — roughly **22× cheaper than Sonnet 5 per
+  message**. A distinct non-reasoning benchmark exists for this model family (Artificial
+  Analysis), measuring **0.65–1.56s TTFT** across providers (not OpenRouter specifically — that
+  gap is real and flagged below, not glossed over). Different vendor from both Anthropic and
+  Google, satisfying 19.3's original provider-diversity reasoning for a second chain entry.
+- **`openai/gpt-5.6-terra` — recommended secondary paid pick.** $1.00/$6.00 per M — still ~2×
+  cheaper than Sonnet 5, and OpenAI's own docs document `reasoning_effort: "none"` as the
+  explicit, intended low-latency mode for this exact model family (the same family whose `max`
+  setting produced the 175s trap already documented in 19.8) — this is vendor-documented control,
+  not a guess. **Honest gap: no independent benchmark measures Terra's TTFT specifically at
+  `none` effort** — the qualitative guidance ("use none as your latency baseline") is strong but
+  not yet a number this document can cite the way it cites DeepSeek's or Sonnet 5's.
+- **`anthropic/claude-sonnet-5` — demoted out of the default chain, not deleted.** Still the only
+  candidate with a directly-measured non-reasoning TTFT this document has (1.29–1.75s) and the
+  only one needing zero extra request parameters to stay fast. Recorded as the option to reach
+  for if a future quality-gated tier (e.g. a paid-plus tier, per §20.1's "premium personas/
+  headroom" shape) needs it — **not wired into any chain today**, per the owner's explicit
+  cost-first instruction this pass.
+
+**Revised recommended chain:**
+
+```
+AI_MODEL_DEFAULT   = deepseek/deepseek-v4-flash-0731
+AI_MODEL_FALLBACKS = openai/gpt-5.6-terra
+# both requests must include: "reasoning": { "effort": "none" }
+FREE_TUTOR_MODELS  = google/gemma-4-26b-a4b-it:free, google/gemma-4-31b-it:free   (unchanged from 19.8)
+```
+
+**Cost per conversation, same methodology as 19.3/19.8** (≈4,000 input + ≈200 output tokens/msg):
+
+| Model | $/message | Closed beta (~6k msg/mo) | 200 DAU (120k msg/mo) |
+|---|---|---|---|
+| `deepseek/deepseek-v4-flash-0731` | $0.0004 | **$2.40** | **$48** |
+| `openai/gpt-5.6-terra` (fallback only) | $0.0052 | — | — |
+| `anthropic/claude-sonnet-5` (not wired in) | $0.0100 | — | — |
+
+DeepSeek primary is now **~4× cheaper than 19.8's already-cheap free-tier-adjacent estimate and
+~25× cheaper than Sonnet 5** — but exactly like every other paid-chain number in 19.8 and here,
+**this cost is theoretical until a premium plan or trial mechanism exists**; the tier hard filter
+keeps it at zero real spend today regardless of which model is configured.
+
+**When each model is actually used, restated plainly:**
+- **`FREE_TUTOR_MODELS` (gemma-4-26b → gemma-4-31b):** every real request today, and every
+  `'free'`-tier request forever, by construction — this is the only tier that exists in
+  production right now.
+- **`deepseek/deepseek-v4-flash-0731` → `openai/gpt-5.6-terra`:** would serve a `'trial'` or
+  `'paid'` caller, the moment either concept is real (roadmap #22, or the one-time trial
+  allotment in §20.5 item 2, both still correctly deferred pending #13 evidence). Idle until then.
+- **`anthropic/claude-sonnet-5`:** not in any chain. A documented option, not a live path.
+
+**Never revert:** do not drop the `reasoning: { effort: "none" }` parameter from either paid
+entry once implemented — without it, DeepSeek and especially GPT-5.6 Terra can silently reason by
+default and reintroduce the exact multi-second-to-multi-minute latency trap this document keeps
+finding on every model family that ships reasoning-on-by-default. Do not adopt
+`qwen/qwen3.7-flash` as a production default without first finding or producing independent
+multilingual/text-quality evidence for it — cheapest-with-zero-evidence is not this document's
+standard anywhere else, and shouldn't become the exception here.
+
+**What remains unverified, honestly.** Unlike the free-tier picks (fully live-tested with real
+completions on this project's actual explanation-language defect, §19.8), **neither DeepSeek V4
+Flash nor GPT-5.6 Terra has been tested with a real completion** — the account has zero credit
+balance, so only routability (`402`, not `404`) and parameter-acceptance were verifiable this
+pass, not actual reply quality or the `reasoning: none` TTFT specifically through OpenRouter's own
+routing. **Recommended before fully trusting this chain in production:** once credits exist, spend
+a few cents running both models through the same explanation-language live test §19.8/§20.6 used
+on the free tier — cheap, fast, and closes the one real gap this section couldn't close without
+spending money the owner hadn't yet approved.
 
 ---
 
