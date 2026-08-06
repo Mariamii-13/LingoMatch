@@ -88,6 +88,17 @@ several sections (8, 9, 10) had drifted out of sync with work completed in passe
 nine — video, Cloudinary cleanup, the messages-page split and backwards pagination were still
 marked as open problems after being resolved. Corrected throughout; no code changed in that pass.
 
+A tenth pass, also 2026-08-06, began execution of the production-readiness review as an ordered
+plan (owner's explicit ask: work the launch-blocker list in priority order, stop for owner action,
+resume on the highest-value unblocked item). Before asking for the first owner action, re-read the
+code behind it and found roadmap #1's own dependency note and §20.5's "prerequisite" paragraph
+were stale: both still described plan-aware model routing as unbuilt, when roadmap #34 (shipped
+2026-08-01/02, the same day 3.43 already used to correct two other stale claims) had already made
+it real. Corrected in place — see 3.58. No code changed; buying OpenRouter credits remains the
+correct #1 owner action, now with the accurate reason (raises the account's shared `:free`-model
+rate ceiling ~50/day → 1,000/day) instead of the stale one (paid-model access for regular users,
+which the tier hard filter now deliberately prevents).
+
 > **Read section 16 and 17 first if you are an AI assistant picking this up.** They contain
 > the operating instructions and the reasoning that exists nowhere else in the repository.
 > **Section 18 is binding product direction** set by the owner — it constrains architecture and
@@ -3015,6 +3026,48 @@ never had it, chat's has — a separate matching-quality concern, not this block
 the `video`/`voice` `MatchRequest` queues at the data-model level (still explicitly out of scope
 per 3.56).
 
+### 3.58 Correcting stale documentation: roadmap #1's "plan-aware routing" prerequisite was
+already satisfied by #34, and its impact claim needed updating
+
+**Why this exists.** The owner asked for a CEO-level execution pass through this document's own
+production-readiness review, in priority order, stopping for owner action where needed. Before
+asking for the first owner action (buying OpenRouter credits), the code behind that ask was
+re-read rather than assumed — the same "verify, don't guess" discipline 3.43 already established
+for this exact area. Two claims in the document turned out stale.
+
+**Claim 1 — roadmap #1's warning that plan-aware routing "must land before or alongside" the
+credit purchase.** This was true when written (2026-07-31, §20.5) but roadmap #34 shipped the very
+next day and made it false: `src/app/api/ai-practice/route.ts`'s `resolveTier()` already maps
+every caller to `'free'` unless `session.user.plan === 'premium'` — and no premium plan exists yet
+(#22 not built), so **100% of real traffic today resolves to `'free'`**. `resolveChainForTier`
+(`model-registry.ts`) hard-filters `'free'` callers to `FREE_TUTOR_MODELS` only — the env-configured
+paid chain has `tierEligibility: ['trial', 'paid']` and is structurally unreachable for a `'free'`
+caller regardless of `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS`. **The prerequisite is done, not
+pending** — buying credits today cannot create the unbounded-free-tier-cost risk §20.5 warned
+about, because the hard filter already prevents a free caller from ever reaching a paid model.
+
+**Claim 2 — roadmap #1's stated impact, "makes it ~10× faster."** That framing implied buying
+credits lets real users reach a faster paid model. They can't — see above, structurally, by
+design, correctly. **What buying credits actually still does, and why it remains the single
+highest-priority owner action:** §20.5 itself documented, and this pass re-confirmed by reading
+the OpenRouter rate-limit evidence again, that **the account's free-model (`:free`) request
+ceiling itself steps from ~50/day to 1,000/day once the account has ever purchased $10+ in
+credits — a permanent, one-time unlock, independent of whether any paid model is ever actually
+called.** 9.1's own stated impact ("the core feature is unusable at any real scale — with 21
+accounts that is ~2 messages each per day") is exactly this ceiling, and it is what a closed beta
+or any real traffic will hit first. Buying credits is still correctly the #1 owner action — just
+for the real reason (raises the shared free-tier rate ceiling 20×), not the stale one (paid-model
+access for regular users, which the tier filter now deliberately prevents).
+
+**What changed in this document.** Roadmap #1's dependency note and §20.5's "prerequisite this
+section adds to the roadmap" paragraph both updated in place to reflect that #34 already shipped
+and satisfies the constraint. No code changed — this is a documentation-accuracy correction only,
+the same category as 3.43.
+
+**Never revert:** do not read roadmap #1 as blocked on more engineering — it isn't. Do not restore
+the "makes it faster" framing — for as long as no premium plan exists, free-tier response speed is
+determined entirely by which zero-cost model is picked (§20.6), never by the credit balance.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -4043,7 +4096,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are now already configured for a specific paid chain (§19.3: `google/gemini-3-flash-preview` → `anthropic/claude-haiku-4.5` → free tier), verified live-reachable and correctly priced; only the credit purchase itself remains | Critical | Trivial | Unblocks the core product and makes it ~10× faster | Owner spending money. **⚠️ See §20.5 before flipping this on for all traffic**: once a free tier exists, routing every request through the paid chain is an unbounded per-free-user cost. Model routing must become plan-aware (free → `FREE_TUTOR_MODELS`, trial/paid → the paid chain) first or alongside this purchase |
+| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are now already configured for a specific paid chain (§19.3: `google/gemini-3-flash-preview` → `anthropic/claude-haiku-4.5` → free tier), verified live-reachable and correctly priced; only the credit purchase itself remains | Critical | Trivial | **Real impact, corrected 2026-08-06 (see 3.58): raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter already keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money. ~~⚠️ Model routing must become plan-aware first~~ **Done — roadmap #34 shipped 2026-08-01/02 and already hard-filters `'free'` callers away from the paid chain; safe to buy credits now, no further engineering prerequisite (3.58)** |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | ~~Test live video with two real cameras~~ | High | Low | **Done, 2026-08-03 — see 3.53.** Found and fixed three real live-verified bugs: prejoin camera/mic choice was silently discarded by the real session, the video-match route's own broken partner-shaping crashed the Match Found modal for every real match, and a remote camera-off never fell back to the avatar placeholder | Two devices for true simultaneous two-way video — worked around with one real camera + one voice-only participant to still verify the full real path |
@@ -6103,13 +6156,18 @@ volume cap holds.**
 | Free, one-time trial | Paid chain (§19.3) | First ≈15–20 messages or 3 days, lifetime-once | ≈$0.05/signup, one-time, scales with acquisition not retention |
 | Paid subscriber | Paid chain (§19.3) | ≈15/day (≈460/month) as the fair-use ceiling protecting margin at an $8/month anchor price; revisit once #13 gives a real usage distribution | ≈$1.20/month at the cap, ≈15% of an $8 subscription |
 
-**Prerequisite this section adds to the roadmap:** `resolveModelChain()` and the request path
-currently have no concept of plan or trial state — every caller gets the same chain. **Making
-the model chain plan-aware (free vs one-time-trial-active vs subscribed) must land before or
-alongside roadmap #1's credit purchase**, not after — buying credits and pointing
-`AI_MODEL_DEFAULT` at a paid model for 100% of traffic, as roadmap #1 was originally written,
-would immediately reintroduce the exact unbounded-cost risk this section exists to prevent, the
-moment there is more than a handful of free users. See the amendment added to §19.3 above.
+**Prerequisite this section adds to the roadmap: done.** ~~`resolveModelChain()` and the request
+path currently have no concept of plan or trial state~~ — **resolved by roadmap #34 (2026-08-01/02,
+§21.4 Phase 1): `resolveChainForTier()` hard-filters a `'free'` caller to `FREE_TUTOR_MODELS`
+before anything else runs, and `/api/ai-practice/route.ts`'s `resolveTier()` already maps every
+real caller to `'free'` unless `session.user.plan === 'premium'` (no premium plan exists yet).**
+Buying credits and pointing `AI_MODEL_DEFAULT` at a paid model no longer risks the unbounded-cost
+scenario this section warned about — the hard filter, not a volume cap, is what makes it safe, and
+it already exists. What is still missing, and remains genuinely optional rather than
+launch-blocking (no paid plan exists yet to make it load-bearing): the one-time trial allotment
+(item 2 above) and real paid-subscriber routing (item 3) — both correctly deferred alongside
+roadmap #22 until #13 (analytics) provides real conversion evidence. See 3.58 for the correction
+and the live re-verification of `model-registry.ts`.
 
 **Never revert:** do not let free-tier traffic reach the paid model chain by default once this
 routing exists. Do not make the one-time trial allotment recurring (daily, weekly) — its
