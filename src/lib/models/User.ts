@@ -79,6 +79,11 @@ const UserSchema = new Schema(
     },
     displayName: { type: String, required: true },
     passwordHash: { type: String, default: null },
+    // Password reset (roadmap #7): SHA-256 hash of the single-use reset
+    // token, never the raw token. Cleared on successful reset or once
+    // resetTokenExpiresAt has passed.
+    resetTokenHash: { type: String, default: null },
+    resetTokenExpiresAt: { type: Date, default: null },
     googleId: { type: String, default: null },
     avatar: { type: String, default: '' },
     bio: { type: String, default: '' },
@@ -155,5 +160,7 @@ UserSchema.index({
   'languageProfile.learningLanguages.code': 1,
   'languageProfile.learningLanguages.isPrimary': 1,
 })
+// Sparse: most users have no active reset token, so this stays small.
+UserSchema.index({ resetTokenHash: 1 }, { sparse: true })
 
 export default mongoose.models.User || mongoose.model('User', UserSchema)
