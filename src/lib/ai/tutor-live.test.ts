@@ -140,7 +140,7 @@ describe.skipIf(!LIVE)('tutor behaviour against the real provider', () => {
       console.error = originalConsoleError
     }
 
-    const attemptedPaidModel = calls.some((line) => line.includes('deepseek-v4-flash-0731'))
+    const attemptedPaidModel = calls.some((line) => line.includes('gpt-5.6-terra'))
     console.log(`attempted the paid model while tier: "free": ${attemptedPaidModel}`)
     expect(attemptedPaidModel).toBe(false)
   }, 30_000)

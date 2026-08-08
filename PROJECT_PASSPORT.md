@@ -120,6 +120,16 @@ resolve it, and only a full machine restart did. Once healthy, full verification
 are still not purchased, so paid-model reply quality remains genuinely unverified — documented as
 an open item, not glossed over.
 
+A fourteenth pass, also 2026-08-07, closed that exact item once the owner purchased real credits —
+confirmed via `GET /api/v1/credits` after two earlier checks that same day had both still shown
+`$0` despite the owner believing the purchase had gone through. Live completions against both
+paid models, on the same explanation-language methodology used throughout this document, found a
+real problem: `deepseek/deepseek-v4-flash-0731` (then-primary) raw-failed the rule 4 of 5 times;
+`openai/gpt-5.6-terra` (then-fallback) was clean 7/7 and faster. Reordered the chain on that
+evidence — see 3.60/§19.10. The tier hard filter was also re-verified live with real money on the
+line for the first time, not just a `402` short-circuit. Full suite/lint/tsc/build all clean.
+Roadmap #1 is now fully closed.
+
 A twelfth pass, same day, answered a direct owner follow-up (exactly which requests reach
 `claude-sonnet-5`, with confirmation free users never do — answered from code already read, no
 new research needed) and re-ran 19.8's paid-chain pick cost-first, per an explicit request for one
@@ -3102,6 +3112,12 @@ determined entirely by which zero-cost model is picked (§20.6), never by the cr
 
 ### 3.59 Production AI model configuration applied (roadmap #1, §19.9) — the cost-first chain is now live in code
 
+**⚠️ Chain order superseded the same day — see 3.60/19.10.** Once real credits allowed a live
+completion test, `deepseek/deepseek-v4-flash-0731` raw-failed the explanation-language rule 4/5
+times; `openai/gpt-5.6-terra` was clean 7/7. Terra is now `AI_MODEL_DEFAULT`, DeepSeek the
+fallback — the reverse of what this entry originally shipped. Everything else below (free chain,
+`reasoning:none`, the hard filter) is unchanged and still accurate.
+
 **What shipped, 2026-08-07.** §19.9's cost-first pick is now the actual configuration, not just a
 recommendation:
 
@@ -3158,6 +3174,45 @@ warnings; `npx tsc --noEmit` — clean; `npm run build` — clean, all 79 routes
 filter unchanged and re-tested, full suite green. Paid-model reply *quality*: **Not Yet
 Verified** — genuinely blocked on the owner purchasing credits, not on any remaining engineering
 work.
+
+### 3.60 Live paid-model verification with real credits — chain reordered on evidence (roadmap #1, §19.10)
+
+**What shipped, 2026-08-07, same day as 3.59.** The owner purchased real OpenRouter credits
+(confirmed via `GET /api/v1/credits`: `total_credits: 10`, `is_free_tier: false` — the account had
+shown `$0` on two earlier checks this same conversation, despite the owner believing the purchase
+had gone through each time). This closed 3.59/§19.9's one open gap: real completions against both
+configured paid models, on the same explanation-language methodology already used for the free
+tier (§20.6).
+
+**Finding: `deepseek/deepseek-v4-flash-0731` (then-primary) raw-failed the explanation-language
+rule 4 of 5 times** on the easy Spanish-target/English-explanation pair — replying entirely in
+Spanish with no English explanation at all, the exact defect roadmap #28's structured-output +
+repair pipeline exists to catch. `openai/gpt-5.6-terra` (then-fallback) was clean 7/7 across both
+the easy and hard pairs, and faster (381–761ms vs DeepSeek's 479–3,112ms). Full evidence, verbatim
+examples, and the sample-size reasoning are in §19.10 — not duplicated here.
+
+**Change made:** `.env.local` swapped — `AI_MODEL_DEFAULT=openai/gpt-5.6-terra`,
+`AI_MODEL_FALLBACKS=deepseek/deepseek-v4-flash-0731`. `src/lib/ai/tutor-live.test.ts`'s hardcoded
+"never attempts the configured paid model" assertion updated to check for `gpt-5.6-terra` (the new
+first-attempted model) instead of `deepseek-v4-flash-0731`. Nothing else changed — free chain,
+`reasoning:none`, the tier hard filter, and the registry/circuit-breaker/repair pipeline are all
+untouched, per the owner's own "do not change the model strategy unless live evidence shows a real
+problem" instruction — this pass found exactly that evidence and changed exactly the one thing it
+justified.
+
+**The tier hard filter was re-verified with real money on the line, not just a `402` short-circuit
+that happened to look like correct behaviour.** `LIVE_AI_TESTS=1 npx vitest run
+src/lib/ai/tutor-live.test.ts` — 5/5 passed, including the free-tier-never-reaches-paid regression
+test, now genuinely meaningful since a filter bug could have let a `'free'` caller reach and be
+served by a real, funded paid model this time.
+
+**Full verification after the reorder:** `npx vitest run` (full suite) — 480 passed, 11 skipped, 0
+failed; live suite — 5/5 passed; `npm run lint` — 0/0; `npx tsc --noEmit` — clean; `npm run build`
+— clean, all 79 routes.
+
+**Production readiness.** Paid-model configuration and reply quality: **Production Ready** —
+live-verified with real completions and real money, not just routability. Roadmap #1 is now fully
+closed — no further engineering or verification work remains on the AI model chain itself.
 
 ### Frontend
 
@@ -3643,7 +3698,7 @@ kind of compounding failure section 13 keeps finding.
 | Registration | **Production Ready** | Validated, throttled, verified 429 behaviour |
 | Onboarding | **Production Ready** | One required step, gated, unsaved-changes guard fixed |
 | AI tutor (code) | **Production Ready** | Chain, persistence, streaming, metering, all verified live |
-| AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker. Production model config now applied and live-verified (3.59: `deepseek-v4-flash-0731` → `gpt-5.6-terra`, `reasoning:none`) — the remaining gap is purely the credit purchase itself, no more engineering work stands between here and roadmap #1 closing |
+| AI tutor (service) | **Production Ready** | Credits purchased and verified (`total_credits: 10`). Production chain `gpt-5.6-terra` → `deepseek-v4-flash-0731` live-tested with real completions, not just routability (3.60/§19.10) — reordered from the original pick after DeepSeek raw-failed the explanation-language rule 4/5 times live. Account-wide `:free`-model rate ceiling now raised (50/day → 1,000/day, permanent, per the $10+ purchase threshold). Roadmap #1 fully closed |
 | Explanation-language validation & repair | **Production Ready** | Structured output + detection verified live and correct (3.38); repair now targets a reachable free model for free-tier callers (roadmap #34) and was verified succeeding live 3/3 times triggered (3.43) — no longer blocked on roadmap #1 |
 | Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and `lm-model-metric` production metrics (§21.4 Phase 1) also done, 2026-08-02 (3.45) — Phase 2 (score-based routing, #36) is technically possible but still gated on real production traffic accumulating |
 | Tier-1 language-pair quality | **Needs Work at the raw-model level, substantially mitigated in production** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the raw free-tier model (2/2 samples) — still do not present this pair as reliably supported on model quality alone. **But** production's repair mechanism now actually works (3.43): 3/3 triggered mismatches on this exact pair were corrected before the learner saw them |
@@ -3857,8 +3912,10 @@ failures are visible.
 
 ### Can a public beta start?
 
-**Not yet.** Three things must be true first:
-1. AI quota raised (~$10) — otherwise the core feature fails for most visitors.
+**Not yet.** Two things must still be true first (down from three):
+1. ~~AI quota raised (~$10)~~ **Done, 2026-08-07 — see 3.60/§19.10.** Credits purchased,
+   production chain live-verified with real completions, account-wide `:free`-model rate ceiling
+   now 1,000/day.
 2. Password recovery exists — otherwise support load and lockouts are guaranteed.
 3. Dev/prod database separation and junk-account cleanup — otherwise real users see fake
    profiles and local work endangers production data.
@@ -4187,7 +4244,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT=deepseek/deepseek-v4-flash-0731`, `AI_MODEL_FALLBACKS=openai/gpt-5.6-terra` **now applied and live-verified, 2026-08-07 (see 3.59)** — both requests carry `reasoning:{effort:"none"}`; `FREE_TUTOR_MODELS` trimmed to the two live-healthy free models. **Nothing engineering-side remains on this item** — full suite (480/11 skip), lint, tsc, build all clean against the new config | Critical | Trivial (credit purchase only — the rest is done) | **Raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money — the only remaining step. Once bought, recommended follow-up (not required to close this item): spend a few cents live-testing both paid models' actual reply quality (3.59's one open gap) |
+| 1 | ~~Buy ~$10 OpenRouter credits~~ | — | — | **Done, 2026-08-07 — see 3.60/§19.10.** Credits purchased and confirmed (`total_credits: 10`). Production chain live-tested with real completions: `openai/gpt-5.6-terra` → `deepseek/deepseek-v4-flash-0731` (reordered from the original pick after DeepSeek raw-failed the explanation-language rule 4/5 times live; Terra was clean 7/7). Free chain, `reasoning:none`, and the tier hard filter all re-verified with real money on the line. Full suite/lint/tsc/build all clean. Account-wide `:free`-model rate ceiling raised 50/day → 1,000/day, permanent. **Nothing remains on this item.** | — |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | ~~Test live video with two real cameras~~ | High | Low | **Done, 2026-08-03 — see 3.53.** Found and fixed three real live-verified bugs: prejoin camera/mic choice was silently discarded by the real session, the video-match route's own broken partner-shaping crashed the Match Found modal for every real match, and a remote camera-off never fell back to the avatar placeholder | Two devices for true simultaneous two-way video — worked around with one real camera + one voice-only participant to still verify the full real path |
@@ -6229,6 +6286,92 @@ routing. **Recommended before fully trusting this chain in production:** once cr
 a few cents running both models through the same explanation-language live test §19.8/§20.6 used
 on the free tier — cheap, fast, and closes the one real gap this section couldn't close without
 spending money the owner hadn't yet approved.
+
+### 19.10 Live paid-model verification with real credits, 2026-08-07 — a real problem found, chain reordered
+
+**Why this exists.** The owner bought OpenRouter credits and asked for exactly the gap 19.9 named
+to be closed: real completions against both paid models, on the same explanation-language
+methodology (§19.8/§20.6) already used for the free tier, including the hard non-English-bridge
+case. **This found a real, live, reproducible defect — not a false alarm — and the chain order
+was changed on that evidence, per the standing "verify, don't guess" rule this whole document
+follows.**
+
+**Credit verification first, since the previous two attempts both showed `$0` despite the owner
+believing credits were purchased.** `GET /api/v1/credits` on the configured key now returns
+`total_credits: 10`, `is_free_tier: false` — confirmed genuinely funded this time, unlike the two
+prior checks in this same conversation.
+
+**Methodology.** Same system prompts and grading standard as §20.6's free-model benchmark: a real
+grammar-correction turn, target-language conversation / native-language-only explanation, across
+an easy pair (Spanish target, English explanation) and the harder non-English-bridge pair (French
+target, Spanish explanation) 18.2 specifically requires. `reasoning: { effort: "none" }` set on
+every call, matching the exact production request shape (§19.9/3.59).
+
+**Results — `openai/gpt-5.6-terra`: 7/7 clean.** Every sample correctly conversed in the target
+language and explained only in the learner's native language, on both the easy and the hard pair.
+Fast and consistent: **381–761ms** per reply, no reasoning-token burn, no malformed output.
+Real measured cost per short test turn: **$0.0004–0.0005**.
+
+**Results — `deepseek/deepseek-v4-flash-0731`: 4/5 raw failures on the easy pair.** This is the
+real finding. Sample after sample explained the correction **entirely in Spanish** — the target
+language — with no English at all, on the exact rule this product's core architecture (roadmap
+#28, structured output + a machine-checked repair call) exists to catch and fix. One verbatim
+example: *"Pequeña corrección: en español decimos 'yo tengo un gato'... ¿Cómo se llama tu gato y
+de qué color es?"* — fluent, correct Spanish grammar, entirely the wrong language for an
+explanation the learner (an English speaker) was supposed to receive in English. Only 1 of 5
+samples correctly switched to English. On the harder French/Spanish pair, DeepSeek did better
+(clean on both samples tested) — the defect is concentrated on the easy pair specifically, the
+opposite of what §19.5's own risk model predicted (it expected non-English-bridge pairs to be the
+harder case). Latency was also slower and more variable: **479ms–3,112ms**. Real measured cost:
+**$0.00003–0.00005** per short test turn — genuinely far cheaper than Terra, but cheap and wrong
+is not a trade this document has ever endorsed (18.6, §19.9's own rejection of `qwen3.7-flash` on
+identical grounds).
+
+**Decision: reorder the chain on this evidence.** `AI_MODEL_DEFAULT` is now `openai/gpt-5.6-terra`;
+`AI_MODEL_FALLBACKS` is `deepseek/deepseek-v4-flash-0731`. DeepSeek is **not** dropped — its
+failure mode is a wrong-language explanation, not a broken or empty reply, which is exactly the
+class of defect the explanation-language repair pipeline (3.38/3.43) is built to catch in
+production, and keeping two vendors in the paid chain still satisfies §19.3's original
+provider-diversity reasoning (an OpenAI-side outage no longer takes down the whole paid tier).
+But it is no longer the model given first attempt on every request.
+
+**Cost impact of the reorder, restated with real per-conversation methodology** (≈4,000 input +
+≈200 output tokens/message, same as every other cost table in this document — the short live-test
+turns above used far fewer tokens, hence the much lower measured cost per call):
+
+| Model | $/message | Closed beta (~6k msg/mo) | 200 DAU (120k msg/mo) |
+|---|---|---|---|
+| `openai/gpt-5.6-terra` (now primary) | $0.0052 | $31 | $624 |
+| `deepseek/deepseek-v4-flash-0731` (now fallback) | $0.0004 | $2.40 | $48 |
+
+Still an order of magnitude cheaper than Sonnet 5 ($60/$1,200) even with Terra as primary, and —
+unchanged from every prior pass — **entirely theoretical until a premium or trial tier exists**;
+the roadmap #34 hard filter keeps this at zero real spend today regardless of chain order.
+
+**The tier hard filter was also re-verified with real credits present, closing 19.9's own
+remaining gap.** `tutor-live.test.ts`'s `never attempts the configured paid model for tier: "free"`
+test was run live (`LIVE_AI_TESTS=1`) with the account now genuinely funded — meaning if the
+filter had a real bug, a `'free'`-tier call could have actually reached and been served by a paid
+model this time, not just hit a `402` that happened to look like correct behavior. It passed
+(5/5 live tests in the file). This is a strictly stronger confirmation than anything possible
+before credits existed.
+
+**Full verification, 2026-08-07, after the reorder:** `npx vitest run` (full suite) — 480 passed,
+11 skipped, 0 failed; live suite (`LIVE_AI_TESTS=1`) — 5/5 passed; `npm run lint` — 0/0;
+`npx tsc --noEmit` — clean; `npm run build` — clean, all 79 routes.
+
+**Sample-size honesty, per §19.7's own standing rule.** 5 DeepSeek samples and 7 Terra samples is
+enough to act on — an 80% raw failure rate on the exact defect this project has spent the most
+engineering effort catching is not noise, and it is the same evidentiary bar §19.8/19.9 already
+used to disqualify `openai/gpt-oss-20b:free` and reconfirm `nemotron-3-super`'s defect. It is not
+enough to claim a precise long-run failure percentage for either model — re-run through the eval
+harness (roadmap #29) once it covers the paid chain, not just free-tier models.
+
+**Never revert:** do not restore `deepseek/deepseek-v4-flash-0731` to `AI_MODEL_DEFAULT` without
+first re-testing it live on the explanation-language rule and seeing the failure rate actually
+drop — this was directly observed, repeatedly, not inferred from a benchmark. Do not drop
+`reasoning: { effort: "none" }` from either paid model now that real credits make the full-cost
+reasoning-on path a real spend risk, not just a latency one.
 
 ---
 
