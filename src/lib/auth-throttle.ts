@@ -54,3 +54,47 @@ export async function allowRegistration(ip: string): Promise<boolean> {
   )
   return allowed
 }
+
+export const PASSWORD_RESET_REQUESTS_PER_EMAIL = 3
+export const PASSWORD_RESET_REQUESTS_PER_IP = 10
+export const PASSWORD_RESET_WINDOW_SECS = 3600
+
+/**
+ * Whether a "send me a reset link" request may proceed.
+ *
+ * Same email-then-address shape as allowLoginAttempt: the email key stops
+ * one inbox being spammed with reset links, the address key stops one
+ * client from probing many emails. A denial here must not change the
+ * response the caller sends — see forgot-password/route.ts.
+ */
+export async function allowPasswordResetRequest(email: string, ip: string): Promise<boolean> {
+  const perEmail = await checkRateLimit(
+    'password-reset-email',
+    hashSubject(email),
+    PASSWORD_RESET_REQUESTS_PER_EMAIL,
+    PASSWORD_RESET_WINDOW_SECS,
+  )
+  if (!perEmail.allowed) return false
+
+  const perIp = await checkRateLimit(
+    'password-reset-ip',
+    hashSubject(ip),
+    PASSWORD_RESET_REQUESTS_PER_IP,
+    PASSWORD_RESET_WINDOW_SECS,
+  )
+  return perIp.allowed
+}
+
+export const PASSWORD_RESET_ATTEMPTS_PER_IP = 20
+export const PASSWORD_RESET_ATTEMPT_WINDOW_SECS = 300
+
+/** Whether an address may submit another token+password reset attempt. */
+export async function allowPasswordResetAttempt(ip: string): Promise<boolean> {
+  const { allowed } = await checkRateLimit(
+    'password-reset-attempt-ip',
+    hashSubject(ip),
+    PASSWORD_RESET_ATTEMPTS_PER_IP,
+    PASSWORD_RESET_ATTEMPT_WINDOW_SECS,
+  )
+  return allowed
+}

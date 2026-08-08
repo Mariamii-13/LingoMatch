@@ -10,8 +10,15 @@ import {
   LOGIN_WINDOW_SECS,
   REGISTRATIONS_PER_IP,
   REGISTER_WINDOW_SECS,
+  PASSWORD_RESET_REQUESTS_PER_EMAIL,
+  PASSWORD_RESET_REQUESTS_PER_IP,
+  PASSWORD_RESET_WINDOW_SECS,
+  PASSWORD_RESET_ATTEMPTS_PER_IP,
+  PASSWORD_RESET_ATTEMPT_WINDOW_SECS,
   allowLoginAttempt,
   allowRegistration,
+  allowPasswordResetRequest,
+  allowPasswordResetAttempt,
 } from './auth-throttle'
 import { getClientIp, hashSubject } from './request-identity'
 
@@ -118,6 +125,63 @@ describe('allowRegistration', () => {
   it('blocks once an address has created too many accounts', async () => {
     denyOnly('register-ip')
     await expect(allowRegistration('1.2.3.4')).resolves.toBe(false)
+  })
+})
+
+describe('allowPasswordResetRequest', () => {
+  it('allows a request within both limits', async () => {
+    allowAll()
+    await expect(allowPasswordResetRequest('a@example.com', '1.2.3.4')).resolves.toBe(true)
+  })
+
+  it('applies the documented limits and window', async () => {
+    allowAll()
+    await allowPasswordResetRequest('a@example.com', '1.2.3.4')
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      'password-reset-email',
+      expect.any(String),
+      PASSWORD_RESET_REQUESTS_PER_EMAIL,
+      PASSWORD_RESET_WINDOW_SECS,
+    )
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      'password-reset-ip',
+      expect.any(String),
+      PASSWORD_RESET_REQUESTS_PER_IP,
+      PASSWORD_RESET_WINDOW_SECS,
+    )
+  })
+
+  it('blocks once the per-email limit is hit', async () => {
+    denyOnly('password-reset-email')
+    await expect(allowPasswordResetRequest('a@example.com', '1.2.3.4')).resolves.toBe(false)
+  })
+
+  it('blocks once the per-address limit is hit', async () => {
+    denyOnly('password-reset-ip')
+    await expect(allowPasswordResetRequest('a@example.com', '1.2.3.4')).resolves.toBe(false)
+  })
+})
+
+describe('allowPasswordResetAttempt', () => {
+  it('allows an attempt within the limit', async () => {
+    allowAll()
+    await expect(allowPasswordResetAttempt('1.2.3.4')).resolves.toBe(true)
+  })
+
+  it('applies the documented limit and window', async () => {
+    allowAll()
+    await allowPasswordResetAttempt('1.2.3.4')
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      'password-reset-attempt-ip',
+      expect.any(String),
+      PASSWORD_RESET_ATTEMPTS_PER_IP,
+      PASSWORD_RESET_ATTEMPT_WINDOW_SECS,
+    )
+  })
+
+  it('blocks once an address has attempted too many resets', async () => {
+    denyOnly('password-reset-attempt-ip')
+    await expect(allowPasswordResetAttempt('1.2.3.4')).resolves.toBe(false)
   })
 })
 
