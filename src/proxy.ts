@@ -11,7 +11,7 @@ export default auth((req) => {
   const languageProfileComplete =
     (req.auth?.user as { languageProfileComplete?: boolean })?.languageProfileComplete === true
 
-  const publicPaths = ['/', '/login', '/register', '/forgot-password']
+  const publicPaths = ['/', '/login', '/register', '/forgot-password', '/reset-password']
   const isPublic =
     publicPaths.includes(pathname) ||
     // Public SEO surface (§18.3) — indexable content pages, no auth required.
