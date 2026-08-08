@@ -68,6 +68,15 @@ const TIMEOUT_MS = 25_000
 const ERROR_BODY_LOG_LIMIT = 400
 
 /**
+ * OpenRouter's cross-provider reasoning control (§19.9). Sent on every
+ * request, not just paid ones — live-verified as a harmless no-op against a
+ * non-reasoning free model, and required to keep reasoning-by-default paid
+ * models (DeepSeek, GPT-5.6) out of the multi-second/multi-minute latency
+ * trap §19.3/§19.8 already found on models that reason unless told not to.
+ */
+export const REASONING_MINIMAL = { effort: 'none' } as const
+
+/**
  * Statuses that mean "this model can't serve the request" rather than "the
  * request is wrong". Only these advance to the next model in the chain: an
  * empty credit balance, a retired model id, or an upstream capacity problem is
@@ -196,6 +205,7 @@ async function openStream(req: TutorRequest): Promise<OpenStreamResult> {
           max_tokens: MAX_OUTPUT_TOKENS,
           stream: true,
           usage: { include: true },
+          reasoning: REASONING_MINIMAL,
         }),
         signal: controller.signal,
       })
@@ -379,6 +389,7 @@ export async function callTutor(req: TutorRequest): Promise<TutorResponse> {
           messages,
           max_tokens: MAX_OUTPUT_TOKENS,
           usage: { include: true },
+          reasoning: REASONING_MINIMAL,
         }),
         signal: controller.signal,
       })

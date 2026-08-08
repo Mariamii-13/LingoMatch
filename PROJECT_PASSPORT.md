@@ -111,6 +111,15 @@ consistent with July's ~1/3 finding), and two newly-disqualified free-tier candi
 evaluation only, per the owner's explicit instruction; the concrete env-var/array changes are
 queued for the next pass once credits are purchased.
 
+A thirteenth pass, 2026-08-07, actually applied §19.9's chain to the codebase and shipped it — see
+3.59. This pass also ran into, and recorded (§17), a genuine environment problem: ~39 orphaned
+`node.exe` processes from past sessions had degraded the sandbox enough that `vitest` and
+`npm run build` both hung indefinitely; killing them (owner-approved) helped but didn't fully
+resolve it, and only a full machine restart did. Once healthy, full verification ran clean:
+`vitest` 480 passed/11 skipped, lint 0/0, `tsc` clean, `build` clean across all 79 routes. Credits
+are still not purchased, so paid-model reply quality remains genuinely unverified — documented as
+an open item, not glossed over.
+
 A twelfth pass, same day, answered a direct owner follow-up (exactly which requests reach
 `claude-sonnet-5`, with confirmation free users never do — answered from code already read, no
 new research needed) and re-ran 19.8's paid-chain pick cost-first, per an explicit request for one
@@ -3091,6 +3100,65 @@ the same category as 3.43.
 the "makes it faster" framing — for as long as no premium plan exists, free-tier response speed is
 determined entirely by which zero-cost model is picked (§20.6), never by the credit balance.
 
+### 3.59 Production AI model configuration applied (roadmap #1, §19.9) — the cost-first chain is now live in code
+
+**What shipped, 2026-08-07.** §19.9's cost-first pick is now the actual configuration, not just a
+recommendation:
+
+- `src/lib/ai/models.ts` — `FREE_TUTOR_MODELS` trimmed from three entries to two:
+  `google/gemma-4-26b-a4b-it:free`, `google/gemma-4-31b-it:free`. The third,
+  `inclusionai/ling-3.0-flash:free`, is removed — confirmed permanently 404 (§19.8/19.9), not a
+  model worth carrying as dead weight in the chain.
+- `.env.local` — `AI_MODEL_DEFAULT=deepseek/deepseek-v4-flash-0731`,
+  `AI_MODEL_FALLBACKS=openai/gpt-5.6-terra`, replacing the two dead §19.3 picks.
+- `src/lib/ai/openrouter.ts` — a new exported `REASONING_MINIMAL = { effort: 'none' }` constant,
+  sent as the `reasoning` field on every `callTutor`/`streamTutor` request, to every model in the
+  chain (not conditionally applied only to the paid ones — simpler, and already live-verified
+  §19.9 as a harmless no-op on a non-reasoning free model). This is what keeps DeepSeek/GPT-5.6
+  out of the reasoning-by-default latency trap §19.3/§19.8 already found on other model families.
+- `src/lib/ai/structured-tutor-reply.ts` — the same `REASONING_MINIMAL` param added to the
+  separate repair-call request body, so a future `'trial'`/`'paid'` caller's repair attempt is
+  equally protected, not just the primary reply.
+- `src/lib/ai/tutor-live.test.ts` — the live "free tier never attempts the paid model" regression
+  test's hardcoded substring updated from the dead `gemini-3-flash-preview` to
+  `deepseek-v4-flash-0731`, so the assertion still means something.
+
+**The tier hard filter (roadmap #34) is untouched and still the actual safety mechanism** —
+nothing in this change modifies `resolveTier()` or `resolveChainForTier()`. Confirmed by re-running
+`model-registry.test.ts` and `openrouter.test.ts` clean (141/141 across the six directly-touched
+test files); the hard filter's own dedicated tests (`marks every FREE_TUTOR_MODELS entry eligible
+for all tiers`, `skips the paid model entirely for tier: "free"`) pass unchanged because they read
+`FREE_TUTOR_MODELS` dynamically from `models.ts` rather than hardcoding the old three-entry list.
+
+**Live re-verified against the real OpenRouter API immediately before this change was committed**
+(same account, same key, credits still not purchased):
+
+| Model | Result |
+|---|---|
+| `google/gemma-4-26b-a4b-it:free` (free primary) | `200` — healthy |
+| `google/gemma-4-31b-it:free` (free fallback) | `429` — temporarily rate-limited upstream. **This is now confirmed as a recurring, not one-off, characteristic** — the same result on every live check across three separate days (2026-08-06 twice, 2026-08-07). The chain's existing `isModelUnavailable()` rule already handles this correctly (advances past 429), but it is worth knowing this fallback saturates upstream fairly often, not rarely |
+| `deepseek/deepseek-v4-flash-0731` (paid primary) | `402 Insufficient credits` — correct, expected, confirms the id is real and routable |
+| `openai/gpt-5.6-terra` (paid fallback) | `402 Insufficient credits` — same |
+
+**Honest, explicit limitation — not glossed over:** the account has still never purchased
+OpenRouter credits as of this pass (`GET /api/v1/key` → `is_free_tier: true`). **Neither paid
+model has been tested with a real completion.** Only routability (`402`, not `404`) and
+parameter-acceptance (no `400` on the `reasoning` field) have been verified — the same limitation
+§19.9 already named. This is not fakeable without spending real money, and none was spent. Once
+credits exist, the recommended next check (per §19.9) is a few cents of real completions against
+both paid models through the exact explanation-language test §19.8/§20.6 used on the free tier —
+this has not happened yet and remains open.
+
+**Full verification, 2026-08-07** (after an unrelated same-day machine restart resolved a resource
+exhaustion issue that had blocked verification the day before — see 17 for the environment note):
+`npx vitest run` (full suite) — 480 passed, 11 skipped, 0 failed; `npm run lint` — 0 errors, 0
+warnings; `npx tsc --noEmit` — clean; `npm run build` — clean, all 79 routes generated.
+
+**Production readiness.** Configuration: **Production Ready** — live-verified routable, tier
+filter unchanged and re-tested, full suite green. Paid-model reply *quality*: **Not Yet
+Verified** — genuinely blocked on the owner purchasing credits, not on any remaining engineering
+work.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3575,7 +3643,7 @@ kind of compounding failure section 13 keeps finding.
 | Registration | **Production Ready** | Validated, throttled, verified 429 behaviour |
 | Onboarding | **Production Ready** | One required step, gated, unsaved-changes guard fixed |
 | AI tutor (code) | **Production Ready** | Chain, persistence, streaming, metering, all verified live |
-| AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker |
+| AI tutor (service) | **Needs Work** | Provider allows 50 req/day account-wide — commercial blocker. Production model config now applied and live-verified (3.59: `deepseek-v4-flash-0731` → `gpt-5.6-terra`, `reasoning:none`) — the remaining gap is purely the credit purchase itself, no more engineering work stands between here and roadmap #1 closing |
 | Explanation-language validation & repair | **Production Ready** | Structured output + detection verified live and correct (3.38); repair now targets a reachable free model for free-tier callers (roadmap #34) and was verified succeeding live 3/3 times triggered (3.43) — no longer blocked on roadmap #1 |
 | Model registry & tier hard filter | **Production Ready** | Registry + tier-eligibility filter verified live (3.39); circuit breaker and `lm-model-metric` production metrics (§21.4 Phase 1) also done, 2026-08-02 (3.45) — Phase 2 (score-based routing, #36) is technically possible but still gated on real production traffic accumulating |
 | Tier-1 language-pair quality | **Needs Work at the raw-model level, substantially mitigated in production** | Eval harness (3.40) confirmed live: 6/8 Tier-1 pairs clean, Portuguese(BR)↔Spanish fails in both directions on the raw free-tier model (2/2 samples) — still do not present this pair as reliably supported on model quality alone. **But** production's repair mechanism now actually works (3.43): 3/3 triggered mismatches on this exact pair were corrected before the learner saw them |
@@ -4119,7 +4187,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
-| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT`/`AI_MODEL_FALLBACKS` are **not** currently set to a live chain: §19.3's picks (`google/gemini-3-flash-preview`, `anthropic/claude-haiku-4.5`) were both confirmed **dead on OpenRouter as of 2026-08-06** (19.8), then re-evaluated cost-first per the owner's ask (19.9). Live-verified replacement: `AI_MODEL_DEFAULT=deepseek/deepseek-v4-flash-0731`, `AI_MODEL_FALLBACKS=openai/gpt-5.6-terra`, both requests carrying `reasoning:{effort:"none"}` (a real OpenRouter-documented, live-confirmed-safe cross-provider parameter). `FREE_TUTOR_MODELS` also needs `inclusionai/ling-3.0-flash:free` dropped (confirmed 404) | Critical | Trivial (credit purchase) + small (env vars + one request-body parameter, not yet applied) | **Real impact, corrected 2026-08-06 (see 3.58): raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter already keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money. ~~⚠️ Model routing must become plan-aware first~~ **Done — roadmap #34 already hard-filters `'free'` callers away from the paid chain; safe to buy credits now, no further engineering prerequisite (3.58)** |
+| 1 | **Buy ~$10 OpenRouter credits** — `AI_MODEL_DEFAULT=deepseek/deepseek-v4-flash-0731`, `AI_MODEL_FALLBACKS=openai/gpt-5.6-terra` **now applied and live-verified, 2026-08-07 (see 3.59)** — both requests carry `reasoning:{effort:"none"}`; `FREE_TUTOR_MODELS` trimmed to the two live-healthy free models. **Nothing engineering-side remains on this item** — full suite (480/11 skip), lint, tsc, build all clean against the new config | Critical | Trivial (credit purchase only — the rest is done) | **Raises the account's `:free`-model rate ceiling from ~50/day to 1,000/day, a permanent one-time unlock** — this, not paid-model speed, is what removes 9.1's "unusable at any real scale" blocker, since #34's tier hard filter keeps every real (`'free'`-tier) caller on `FREE_TUTOR_MODELS` regardless of credit balance | Owner spending money — the only remaining step. Once bought, recommended follow-up (not required to close this item): spend a few cents live-testing both paid models' actual reply quality (3.59's one open gap) |
 | 2 | ~~Add error tracking and forward `error.digest`~~ | — | — | **Done** in `0d8c90b` — see 3.34 and 11.27. **Remaining: point `ERROR_REPORT_WEBHOOK_URL` at a Slack or Discord webhook**, so somebody is actually told. Configuration only, no code | — |
 | 3 | **Promote one account to admin and click through every admin page** | High | Low | Removes the largest statically-verified-only gap | Owner grants access |
 | 4 | ~~Test live video with two real cameras~~ | High | Low | **Done, 2026-08-03 — see 3.53.** Found and fixed three real live-verified bugs: prejoin camera/mic choice was silently discarded by the real session, the video-match route's own broken partner-shaping crashed the Match Found modal for every real match, and a remote camera-off never fell back to the avatar placeholder | Two devices for true simultaneous two-way video — worked around with one real camera + one voice-only participant to still verify the full real path |
@@ -4888,6 +4956,21 @@ Everything here existed only in working memory and would otherwise be lost.
   is blocked in that environment. The database itself was fine. If DB-backed flows suddenly
   appear broken, **check this before concluding anything about the application** — and do not
   "fix" it by deleting `dns.setServers`, which may be load-bearing on the owner's network.
+- **This sandbox can accumulate orphaned `node.exe` processes across sessions until the machine
+  is nearly unusable.** Discovered 2026-08-06/07: ~39 stale `node.exe` processes (MCP helper
+  servers — `context7-mcp`, `chrome-devtools-mcp` — none newer than a few days old) were found
+  still running, none belonging to the active session. Their presence alone didn't explain
+  everything — after killing them (via `taskkill`, approved by the owner first; the auto-mode
+  classifier blocks unprompted mass process termination, and routing around it via a different
+  tool, e.g. PowerShell `Stop-Process`, would defeat the same safety intent and should not be
+  done either) — the machine kept degrading (free memory 3.4GB → 3.2GB, a bare `node -e` spawn
+  going from 2.3s to a full `npm run build`/`vitest` **hang with zero output even after a full 10
+  minutes**). **Only a full machine restart actually fixed it** (free memory back to 6.8GB, spawn
+  latency back to ~160ms, `vitest`/`build` both fast and clean immediately after). **Lesson: if
+  `npm run build` or `vitest` produce zero output for minutes with no error, don't assume a code
+  or config problem — check `os.freemem()`/spawn latency first** (`node -e "console.log(require('os').freemem())"` is fast and safe even when everything else is hanging), and if genuinely
+  exhausted, a restart may be the only real fix; killing individual orphaned processes helps but
+  is not guaranteed sufficient on its own.
 - **A `next dev` process can outlive the shell that started it.** Stopping the background job
   left the server listening on 3000 and silently serving stale environment variables, which
   invalidated one verification run before it was noticed. Check `netstat -ano | grep :3000` and

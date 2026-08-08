@@ -1,6 +1,6 @@
 import 'server-only'
 import { franc } from 'franc'
-import { streamTutor, type TutorRequest } from './openrouter'
+import { streamTutor, REASONING_MINIMAL, type TutorRequest } from './openrouter'
 import { logModelMetric } from './model-metrics'
 
 /**
@@ -239,6 +239,7 @@ export async function repairTranslation(
           { role: 'user', content: text },
         ],
         max_tokens: REPAIR_MAX_TOKENS,
+        reasoning: REASONING_MINIMAL,
       }),
       signal: controller.signal,
     })

@@ -15,7 +15,6 @@ export type ModelRole =
  */
 export const FREE_TUTOR_MODELS = [
   'google/gemma-4-26b-a4b-it:free',
-  'inclusionai/ling-3.0-flash:free',
   'google/gemma-4-31b-it:free',
 ] as const
 
