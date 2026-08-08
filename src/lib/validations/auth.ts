@@ -35,5 +35,23 @@ export const LoginSchema = z.object({
   password: z.string({ error: (i) => i.input === undefined ? 'Password is required' : 'Password must be a string' }).min(1),
 })
 
+export const ForgotPasswordSchema = z.object({
+  email: z
+    .string({ error: (i) => i.input === undefined ? 'Email is required' : 'Email must be a string' })
+    .email({ error: 'Please enter a valid email address' }),
+})
+
+export const ResetPasswordSchema = z.object({
+  token: z
+    .string({ error: (i) => i.input === undefined ? 'Reset token is required' : 'Token must be a string' })
+    .min(1, { error: 'Reset token is required' }),
+  password: z
+    .string({ error: (i) => i.input === undefined ? 'Password is required' : 'Password must be a string' })
+    .min(8, { error: 'Password must be at least 8 characters' })
+    .max(100, { error: 'Password must be at most 100 characters' }),
+})
+
 export type RegisterInput = z.infer<typeof RegisterSchema>
 export type LoginInput = z.infer<typeof LoginSchema>
+export type ForgotPasswordInput = z.infer<typeof ForgotPasswordSchema>
+export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>
