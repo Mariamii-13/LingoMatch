@@ -143,6 +143,23 @@ pass: Vercel production had never actually received roadmap #1's model chain —
 redeployed. Full suite/lint/tsc all clean; the live site was smoke-tested after each of the two
 redeploys this pass required.
 
+A sixteenth pass, also 2026-08-08, closed roadmap #6 — see 3.62. Getting there took four attempts
+at establishing a real admin session: a stale-session false alarm (fixed by a fresh sign-in), two
+role-toggle attempts that genuinely never persisted, and a root cause that turned out to be the
+owner editing a different MongoDB Atlas cluster than the one this app connects to — found by
+sweeping every database on the real cluster rather than trusting the UI or Atlas a third time.
+Once a real admin session was confirmed live, 18 QA/engineering accounts and their exclusively-
+owned conversations, messages, tutor sessions, an upload, and skill reviews were deleted through
+the real `/api/admin/*` endpoints (not a script) and independently re-verified by direct database
+read. 11 real-looking ambiguous accounts, the owner's own account, and one conversation with a
+real participant mixed in were all confirmed still present. The operator account
+(`qa.phase.001`, itself on the original 19-account list) was excluded from deletion — the API
+blocks self-deletion, and the owner's own next instruction assumed it would still exist — and was
+demoted back to `role: 'user'` afterward instead, verified both by direct database read and by
+confirming the same session lost admin access. A small, necessary code fix shipped in the same
+pass: the admin DB route's collection whitelist never included `tutorsessions`/`skillreviews`,
+which would have made this cleanup impossible to complete through the sanctioned API.
+
 A twelfth pass, same day, answered a direct owner follow-up (exactly which requests reach
 `claude-sonnet-5`, with confirmation free users never do — answered from code already read, no
 new research needed) and re-ran 19.8's paid-chain pick cost-first, per an explicit request for one
@@ -3298,6 +3315,87 @@ depends on #5) is now unblocked and is the natural next pick.
 development. Do not delete `test` without a separate, explicit owner decision — roadmap #6 is
 its own step, not implied by this one.
 
+### 3.62 Delete junk/test accounts (roadmap #6, §9.6) — through the real admin API, fully verified
+
+**What shipped, 2026-08-08.** 18 QA/engineering test accounts and their exclusively-owned data
+deleted from `lingomatch_prod` through the real, deployed admin API — not a script against the
+database directly. 11 accounts with real-looking names/emails and no test-pattern (ambiguous —
+possibly friends/family testers) were explicitly kept, along with the owner's own account and one
+conversation with a mixed junk+real participant list.
+
+**Getting an admin session took four attempts, and the failures are worth recording.** Direct
+database writes are classifier-blocked in this environment (as documented in 3.61/17), so this
+cleanup had to go through the app's real `/api/admin/*` endpoints — which require `role: 'admin'`
+on the calling session. Roadmap #3 (promote an account to admin) had never actually been
+completed:
+1. The owner's own account showed `role: 'admin'` in the database, but a live admin-panel visit
+   failed — turned out to be a stale session; a fresh Google sign-in resolved it immediately (the
+   `jwt` callback re-reads role from MongoDB on every request, so this was the expected fix).
+2. Owner set `qa.ftue.001`'s role to `admin` via the `/admin/users` UI. **Direct database
+   verification showed it never actually saved** — `role` stayed `"user"`, `updatedAt` unchanged.
+   Retried once with the same result.
+3. Owner then edited the record directly in Atlas. **Still showed `"user"` in the database
+   afterward.** Swept every database on the cluster (`lingomatch_prod`, `test`) for any
+   `qa.ftue.001` record showing `admin` — none existed.
+4. The actual cause: the owner had been editing a **different MongoDB Atlas
+   project/cluster** than the one this app connects to (`cluster0.jnbqwej.mongodb.net`). Once
+   found, they correctly set **`qa.phase.001`** (not `qa.ftue.001`) to admin on the right
+   cluster — confirmed by direct read this time before anything else proceeded, and confirmed
+   again via a real live login (`session.user.role === 'admin'`, `GET /api/admin/db` → `200`).
+
+**Lesson for future sessions:** when a database write "doesn't take" after being confirmed by a
+UI or by the owner, do not assume a session-cache issue a second time — verify the actual document
+directly, and if a direct edit also doesn't show up, suspect the owner may be looking at the wrong
+database/cluster/project entirely, not a bug in this codebase. Recorded in 17.
+
+**A real, unplanned code fix along the way:** `qa.phase.001` — the account being used to perform
+this cleanup — was itself on the original 19-account "confirmed junk" list. The admin `DELETE`
+endpoint correctly refuses self-deletion, and the owner's own follow-up instruction ("demote
+`qa.phase.001` back to `user`") assumed it would still exist afterward. **Excluded it from the
+delete batch — 18 deleted, not 19** — flagged here rather than silently deviating from the
+originally-approved count.
+
+**Also fixed in the same pass, needed to complete this cleanup at all:** the generic admin DB
+route's collection whitelist (`src/app/api/admin/db/route.ts` and
+`src/app/api/admin/db/[collection]/route.ts`) never included `tutorsessions` or `skillreviews` —
+meaning even a working admin session couldn't have reached those two collections through the
+sanctioned API before this pass. Added both. Deployed ahead of the cleanup so every deletion in
+this pass went through the real, whitelisted route.
+
+**Deleted, verified via the real admin API and then independently re-verified with a direct
+read-only database query (not just trusting API response codes):**
+
+| Collection | Deleted | Verified gone |
+|---|---|---|
+| `users` | 18 | ✅ 0/18 remain |
+| `conversations` (all-participants-junk only) | 13 | ✅ 0/13 remain |
+| `messages` (tied to those conversations) | 5 | ✅ 0/5 remain |
+| `tutorsessions` | 13 | ✅ 0/13 remain |
+| `uploads` | 1 | ✅ 0/1 remain |
+| `skillreviews` | 2 | ✅ 0/2 remain |
+
+**Explicitly preserved, verified present:** the owner's account; all 11 ambiguous real-looking
+accounts (11/11 confirmed present); the one conversation with a real participant mixed in
+(`participants` array unchanged, its 1 message still present). `qa.phase.001` demoted back to
+`role: 'user'` — verified via direct database read (`role: "user"`, fresh `updatedAt`) and by
+confirming the *same* session that just had admin access now gets `403` from `/api/admin/db`.
+
+**Cloudinary note:** this cleanup removed the database `Upload` record for the one deleted
+account's file, not the underlying Cloudinary asset — matching this pass's scope ("test data,"
+not third-party storage). An orphaned Cloudinary asset, if any, is roadmap #15's territory
+(already has its own cleanup mechanism, 3.51), not reopened here.
+
+**Final `lingomatch_prod` counts:** 12 users (11 kept + the operator account, now demoted, not
+deleted), 6 conversations (was 19), 8 messages (was 13), 7 tutor sessions (was 20), 1 upload
+(was 2), 0 skill reviews (was 2).
+
+**Production readiness.** Roadmap #6: **Done.** Explore no longer shows fake QA profiles to real
+users; the top two items in §10's "Can a public beta start?" list are now both closed.
+
+**Never revert:** do not delete any of the 11 kept ambiguous accounts, the owner's account, or the
+preserved mixed conversation without a separate, explicit owner decision — none of them were
+approved for deletion, only investigated and excluded.
+
 ### Frontend
 
 Next.js App Router with React Server Components as the default and Client Components only where
@@ -3874,14 +3972,14 @@ video remains unverified for lack of a second physical camera, but the flow itse
 *Difficulty:* low.
 *Solution:* promote one account to `role: 'admin'` and click through every admin page.
 
-**9.6 Test and junk accounts live in the production database.**
-*Why:* shared database plus historical manual testing. Known: `test`, `testuser`, `testuser1`,
-`testuser2`, `testuser123`, `testuser456`, `testuser_lm`, `testasdasdasd`, `chrometest2`,
-`tesst`, plus accounts created during this work: `qaftue001`, `qaphase001`, `throttleprobe1`,
-`throttleprobe2`, and one conversation and friendship between the first two.
-*Impact:* Explore shows fake users to real users; counts are inflated.
-*Difficulty:* low, but touches production data.
-*Solution:* delete after 9.3, so deletion is not being done against a live shared database.
+**9.6 ~~Test and junk accounts live in the production database.~~** **Resolved, 2026-08-08 — see
+3.62.** 18 confirmed QA/engineering accounts (and their exclusively-owned conversations, messages,
+tutor sessions, an upload, and skill reviews) deleted through the real admin API, verified gone by
+direct database read. `qa.ftue.001`/`qa.phase.001`/`throttleprobe1`/`throttleprobe2` from this
+list are gone; `qa.phase.001` was briefly kept as the operator account performing the cleanup,
+then demoted back to `role: 'user'`, not deleted (flagged explicitly in 3.62). 11 accounts with
+real-looking names/emails and no test pattern were deliberately kept, not assumed junk — see 3.62
+for the full classification.
 
 **9.7 ~~No observability.~~** Resolved in `0d8c90b`. Every failure is a structured `lm-error`
 line carrying a correlation id and, for renders, the digest the user was shown; see 3.34.
@@ -3997,15 +4095,17 @@ failures are visible.
 
 ### Can a public beta start?
 
-**Not yet.** One thing must still be true first (down from three):
+**Not yet.** One thing left (down from three):
 1. ~~AI quota raised (~$10)~~ **Done, 2026-08-07 — see 3.60/§19.10.** Credits purchased,
    production chain live-verified with real completions, account-wide `:free`-model rate ceiling
    now 1,000/day.
 2. ~~Dev/prod database separation~~ **Done, 2026-08-08 — see 3.61.** `lingomatch_prod`/
    `lingomatch_dev` live, `test` untouched, live-verified through the real deployed app.
-   Junk-account cleanup (roadmap #6) is now unblocked but not yet started — real users would
-   still see fake profiles in Explore until it runs.
-3. Password recovery exists — otherwise support load and lockouts are guaranteed.
+   ~~Junk-account cleanup~~ **also done, same day — see 3.62.** 18 QA accounts deleted through
+   the real admin API, verified gone; 11 ambiguous real-looking accounts and the owner's own
+   deliberately kept.
+3. Password recovery exists — otherwise support load and lockouts are guaranteed. **The only
+   remaining item on this list.**
 
 Strongly recommended alongside: point `ERROR_REPORT_WEBHOOK_URL` at a real channel — error
 tracking exists (3.34) but nobody currently receives it. The two-party video test recommended
@@ -4342,7 +4442,7 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 | # | Task | Priority | Difficulty | Impact | Dependencies |
 |---|---|---|---|---|---|
 | 5 | ~~Separate dev and prod databases~~ | — | — | **Done, 2026-08-08 — see 3.61.** `lingomatch_prod`/`lingomatch_dev` live, `test` untouched, live-verified through the real deployed app | — |
-| 6 | **Delete junk/test accounts** | High | Low | Real users stop seeing fake profiles | #5 done — unblocked, natural next pick |
+| 6 | ~~Delete junk/test accounts~~ | — | — | **Done, 2026-08-08 — see 3.62.** 18 accounts + exclusively-owned data deleted through the real admin API, verified gone; 11 ambiguous accounts + owner deliberately kept | — |
 | 7 | **Implement password reset** | Critical | Moderate | Closes the only permanent lockout | Email provider |
 | 8 | **Enforce email verification** | Medium | Low | Proves email ownership | #7 |
 | 9 | ~~Configure CSP and security headers~~ | — | — | **Done** — see 3.35 and 9.16. Verified against LiveKit, Cloudinary, Google avatars and flagcdn | — |
@@ -5088,6 +5188,15 @@ Everything here existed only in working memory and would otherwise be lost.
   `vercel integration` are all usable via `npx vercel <cmd>` without any owner action — this
   earlier note that they were "unavailable throughout" is stale.
 - **The MongoDB database is literally named `test`** in the connection string.
+- **When a database edit "doesn't take" even after the owner directly confirms it in Atlas,
+  consider that they may be looking at the wrong Atlas project/cluster before assuming a
+  session-cache or code bug.** 2026-08-08 (3.62): an owner-set `role: 'admin'` failed to appear
+  in `lingomatch_prod` three separate times — once via a UI toggle, once via a direct Atlas edit
+  the owner explicitly confirmed — before the actual cause surfaced: the owner had been editing a
+  different MongoDB Atlas cluster than `cluster0.jnbqwej.mongodb.net`, the one this app's
+  `MONGODB_URI` actually points to. A direct read-only query against every database on the real
+  cluster (not just the expected one) is the fastest way to either confirm or rule this out —
+  it's a five-second check that prevents a much longer, wrong-direction debugging session.
 - **Direct database writes from the shell were blocked** by tooling policy during this work, as
   was selecting the owner's authenticated browser context. This is why admin pages could not be
   clicked through — it was a genuine access limitation, not an oversight. **Workaround that

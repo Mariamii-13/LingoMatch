@@ -23,6 +23,8 @@ const ALLOWED_COLLECTIONS = new Set([
   'themesettings',
   'pagecontents',
   'pricingplans',
+  'tutorsessions',
+  'skillreviews',
 ])
 
 const PAGE_LIMIT = 20

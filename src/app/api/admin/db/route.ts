@@ -22,6 +22,8 @@ const ALLOWED_COLLECTIONS = [
   'themesettings',
   'pagecontents',
   'pricingplans',
+  'tutorsessions',
+  'skillreviews',
 ]
 
 export async function GET() {
