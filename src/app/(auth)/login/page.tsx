@@ -15,6 +15,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const registered = searchParams.get("registered") === "true"
+  const reset = searchParams.get("reset") === "true"
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -55,6 +56,12 @@ function LoginForm() {
       {registered && (
         <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
           Account created! Please sign in.
+        </div>
+      )}
+
+      {reset && (
+        <div className="mb-4 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-sm text-primary">
+          Password updated! Please sign in with your new password.
         </div>
       )}
 
