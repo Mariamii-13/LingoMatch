@@ -280,9 +280,9 @@ competitor's own users have publicly rejected.
 
 ### Current maturity
 
-The application is **feature-complete for a closed beta and structurally sound**, but it has
-one hard external blocker (AI provider quota) and one genuine user-facing gap (no self-service
-password recovery).
+The application is **feature-complete for a closed beta and structurally sound**, with one hard
+external blocker remaining (AI provider quota). Self-service password recovery shipped
+2026-08-08 (roadmap #7, see 3.26).
 
 Eighteen engineering phases were completed in a single intensive pass. The dominant theme was
 **replacing fiction with function**: when work started, the AI tutor — the core product — was
@@ -302,11 +302,11 @@ data as real. All of that is resolved.
 | Auth | Works (Google + credentials), rate-limited |
 | Fabricated data | None remaining anywhere |
 | **Blocker** | AI provider allows **50 requests/day account-wide** |
-| **Gap** | No self-service password reset (no email provider) |
+| **Gap** | None remaining from the original list — password reset shipped 2026-08-08 (roadmap #7, see 3.26) |
 
 **Verdict: ready for a closed beta with a handful of testers today (see §10). Not ready for a
-public beta until the AI quota is raised (~$10), password recovery exists, and dev/prod are
-separated with junk accounts cleaned up — see §10's "Can a public beta start?" for the full list.
+public beta until the AI quota is raised (~$10) — dev/prod separation, junk-account cleanup, and
+password recovery are now done — see §10's "Can a public beta start?" for the full list.
 Product-wise the biggest remaining lever isn't more building — every unblocked, evidence-justified
 roadmap item through #40 is shipped — it's product analytics (#13), still blocked on the owner
 approving a Vercel Marketplace install.**
@@ -538,11 +538,10 @@ individually so the error message can name the actual conflict.
 **Rate limiting.** Added in phase 14 (see 3.24). Sign-in is limited per email (10 / 5 min) and
 per IP (30 / 5 min); registration is limited per IP (5 / hour).
 
-**Production readiness.** Mostly Ready — blocked only by the absence of password recovery.
+**Production readiness.** Production Ready — self-service password reset shipped 2026-08-08
+(roadmap #7, see 3.26).
 
 **Limitations / edge cases.**
-- **No self-service password reset.** A user who forgets their password cannot recover without
-  an operator manually resetting it. This is the single largest user-facing gap. See 3.26.
 - Registration reveals whether an email or username is taken (409 with a specific message).
   This is an intentional usability trade-off, not an oversight — but it does permit account
   enumeration. Mitigated in practice by the per-IP registration limit.
@@ -1261,27 +1260,38 @@ with `Upload` records accumulating alongside.
 
 ### 3.26 Password reset and email verification
 
-**Not Implemented. This is the most important gap after the AI quota.**
+**Password reset: Production Ready, shipped 2026-08-08 (roadmap #7).** Email verification remains
+Not Implemented — see below.
 
-**The app has no email capability whatsoever** — no mail library, no provider, no configuration.
+**Provider.** Nodemailer over Gmail SMTP (`src/lib/mail.ts`), authenticated with a Gmail App
+Password. Credentials (`GMAIL_USER`, `GMAIL_APP_PASSWORD`) live only in the deployment
+environment — never in source, logs, or `.env.example` (which documents the variable names only).
+Live-verified: a real email was sent through the configured Gmail account and received.
 
-`/forgot-password` previously showed an email field and a "Send reset link" button that was a
-`<Link href="/login">`: no submit handler, no endpoint, nothing sent. A user was told a reset
-link was on its way and then silently returned to the sign-in screen.
+**Flow.** `src/lib/password-reset.server.ts` issues and verifies the token:
+- `POST /api/auth/forgot-password` — looks up the account, and if found, generates a
+  `crypto.randomBytes(32)` token, stores only its SHA-256 hash (`User.resetTokenHash`) plus a
+  1-hour expiry (`User.resetTokenExpiresAt`), and emails the raw token as a link. **Always
+  returns the same generic 200** regardless of whether the account exists or the request was
+  rate-limited, so the response itself leaks nothing about account existence.
+- `POST /api/auth/reset-password` — hashes the submitted token, matches it against a
+  non-expired `resetTokenHash`, and if valid, sets a new bcrypt password hash (cost 12) and
+  clears both token fields in the same save — making the token single-use.
+- Rate-limited via `allowPasswordResetRequest` (3/email/hr, 10/ip/hr) and
+  `allowPasswordResetAttempt` (20/ip/5min), following the same Mongo-backed fixed-window
+  limiter as sign-in and registration (`src/lib/auth-throttle.ts`).
+- Works for Google-only accounts too — completing a reset gives them their first password,
+  rather than being silently excluded.
 
-`/verify-email` stated "We sent a verification link to your inbox" and offered a "Resend
-verification email" button with no handler. Nothing had been sent, registration never gated on
-verification, and `isVerified` is set but never checked. **It was deleted** along with its entry
-in the middleware's public paths, and now 404s.
+`/forgot-password` is a real form now (previously a static notice explaining nothing could be
+sent). `/reset-password` is new, reads `?token=` from the link, and redirects to
+`/login?reset=true` on success.
 
-`/forgot-password` **was kept** because password recovery is a real need and that URL is where
-people will look — but it now says what is true: self-service reset is not available yet, and
-Google accounts do not need a password at all. Sign-in gained a "Forgot password?" link, because
-someone who cannot get in should learn their options rather than retrying forever.
+`/verify-email` remains deleted — email verification (roadmap #8) is a separate, lower-priority
+item; `isVerified` is still set but unenforced.
 
-**Consequence:** a user who registered with email/password and forgets it **cannot recover
-without an operator manually resetting the hash.** Fixing this requires an email provider —
-external credentials, possibly cost — which is an owner decision.
+**Consequence resolved:** a user who registered with email/password and forgets it can now
+recover without operator intervention.
 
 ### 3.27 Progress and practice history
 
@@ -3878,7 +3888,7 @@ kind of compounding failure section 13 keeps finding.
 | Subsystem | Status | Why |
 |---|---|---|
 | Google OAuth | **Production Ready** | Verified end to end, ban-checked, auto-provisions users |
-| Email/password sign-in | **Mostly Ready** | Works and is throttled, but no password recovery |
+| Email/password sign-in | **Production Ready** | Works, throttled, and password recovery now exists (roadmap #7, see 3.26) |
 | Registration | **Production Ready** | Validated, throttled, verified 429 behaviour |
 | Onboarding | **Production Ready** | One required step, gated, unsaved-changes guard fixed |
 | AI tutor (code) | **Production Ready** | Chain, persistence, streaming, metering, all verified live |
@@ -3918,7 +3928,7 @@ kind of compounding failure section 13 keeps finding.
 | Languages/CEFR | **Production Ready** | Single registry, plain-language levels, legacy migration |
 | Flags | **Production Ready** | Image-based, works on Windows |
 | Theme | **Mostly Ready** | Functional; not deeply tested in both themes |
-| Password reset | **Not Implemented** | No email provider; page is now honest about it |
+| Password reset | **Production Ready** | Shipped 2026-08-08 — Gmail SMTP, single-use 1-hour token, rate-limited, live-verified (roadmap #7, see 3.26) |
 | Email verification | **Not Implemented** | Deleted; `isVerified` unenforced |
 | Presence | **Mostly Ready** | Endpoint exists; no heartbeat |
 | Page content CMS | **Mostly Ready** | Works; landing page does not consume it |
@@ -3941,14 +3951,9 @@ each per day.
 *Solution:* buy credits; point `AI_MODEL_DEFAULT` at a paid model; raise
 `AI_DAILY_REQUEST_BUDGET`. **Owner decision — costs money.**
 
-**9.2 No password recovery.**
-*Why:* the app has no email provider; the original page was non-functional decoration.
-*Impact:* a credentials user who forgets their password is permanently locked out without
-operator intervention.
-*Difficulty:* moderate — needs a provider (Resend/Postmark/SES), a token model, two routes and
-two pages.
-*Solution:* choose a provider, then implement reset-request → tokened email → reset form.
-**Owner decision — external credentials, possibly cost.**
+**9.2 ~~No password recovery.~~** **Resolved, 2026-08-08 — see 3.26** (roadmap #7). Nodemailer +
+Gmail SMTP, single-use SHA-256-hashed 1-hour token on the `User` model, rate-limited, live-verified
+against a real Gmail account.
 
 **9.3 ~~Development and production share a database named `test`.~~** **Resolved, 2026-08-08 —
 see 3.61.** Production now runs on `lingomatch_prod`, local development on `lingomatch_dev`, both
@@ -4075,17 +4080,16 @@ boundary.
 
 ### Can real users use it?
 
-**Yes, with two caveats.** A user can register, onboard, practise with the AI tutor, be matched
+**Yes, with one caveat.** A user can register, onboard, practise with the AI tutor, be matched
 with a partner for live voice (the primary mode, 18.5/3.56), text, or video, exchange messages,
-add friends and see genuine progress. Declared-availability matching (#32/#40) means a match can
-even form while a user is offline. The caveats: the tutor runs out after ~50 requests/day
-platform-wide, and a credentials user who forgets their password needs an operator.
+add friends, see genuine progress, and recover a forgotten password by email (roadmap #7, see
+3.26). Declared-availability matching (#32/#40) means a match can even form while a user is
+offline. The caveat: the tutor runs out after ~50 requests/day platform-wide.
 
 ### Can friends test it?
 
 **Yes — today.** This is the right immediate step. A handful of testers fits inside the 50/day
-quota, and password resets can be done manually. Recommend Google sign-in for testers to avoid
-the recovery gap entirely.
+quota, and self-service password reset now works by email (roadmap #7).
 
 ### Can a closed beta start?
 
@@ -4104,8 +4108,9 @@ failures are visible.
    ~~Junk-account cleanup~~ **also done, same day — see 3.62.** 18 QA accounts deleted through
    the real admin API, verified gone; 11 ambiguous real-looking accounts and the owner's own
    deliberately kept.
-3. Password recovery exists — otherwise support load and lockouts are guaranteed. **The only
-   remaining item on this list.**
+3. ~~Password recovery exists~~ — otherwise support load and lockouts are guaranteed. **Done,
+   2026-08-08 — see 3.26.** Gmail SMTP via Nodemailer, single-use hashed 1-hour token,
+   rate-limited, live-verified real send/receive/reset/re-login.
 
 Strongly recommended alongside: point `ERROR_REPORT_WEBHOOK_URL` at a real channel — error
 tracking exists (3.34) but nobody currently receives it. The two-party video test recommended
@@ -4293,6 +4298,10 @@ useful. Email verification is not enforced anywhere, so its page was pure fictio
 behind it.
 *Never revert:* do not restore a reset form that cannot send email.
 
+**⚠️ Superseded, 2026-08-08 — see 3.26.** `/forgot-password` is no longer a placeholder: it is a
+real form backed by Gmail SMTP (roadmap #7). The "never revert" note above still applies in
+spirit — do not regress it back to a form with no working endpoint behind it.
+
 ### 11.16 Progress counts only what can be counted
 
 *Why:* the messages figure spells out its two halves because a tutor session stores both sides
@@ -4443,8 +4452,8 @@ items #1 and #24 below, and adds new unblocked items #28–#30.
 |---|---|---|---|---|---|
 | 5 | ~~Separate dev and prod databases~~ | — | — | **Done, 2026-08-08 — see 3.61.** `lingomatch_prod`/`lingomatch_dev` live, `test` untouched, live-verified through the real deployed app | — |
 | 6 | ~~Delete junk/test accounts~~ | — | — | **Done, 2026-08-08 — see 3.62.** 18 accounts + exclusively-owned data deleted through the real admin API, verified gone; 11 ambiguous accounts + owner deliberately kept | — |
-| 7 | **Implement password reset** | Critical | Moderate | Closes the only permanent lockout | Email provider |
-| 8 | **Enforce email verification** | Medium | Low | Proves email ownership | #7 |
+| 7 | ~~Implement password reset~~ | — | — | **Done, 2026-08-08 — see 3.26.** Gmail SMTP via Nodemailer, single-use hashed 1-hour token, rate-limited on both endpoints, live-verified real send/receive/reset/re-login | — |
+| 8 | **Enforce email verification** | Medium | Low | Proves email ownership | — |
 | 9 | ~~Configure CSP and security headers~~ | — | — | **Done** — see 3.35 and 9.16. Verified against LiveKit, Cloudinary, Google avatars and flagcdn | — |
 | 10 | ~~Cache `/api/theme`~~ | — | — | **Done** in `c9cee82` — server-rendered from a cached read instead | — |
 | 11 | ~~Convert `/friends` and `/settings` to Server Components~~ | — | — | **Done** in `7ff87da` | — |
@@ -4947,16 +4956,15 @@ before assuming it is harmless.
 ### Weaknesses
 
 1. **One commercial blocker gates the core feature** (50 AI requests/day).
-2. **No self-service password recovery** — a permanent lockout path for credentials users.
-3. **Dev and prod share a database**, with test accounts visible to real users.
-4. **Nobody is alerted.** Failures are now recorded and correlatable (3.34), but no one is
+2. **Dev and prod share a database**, with test accounts visible to real users.
+3. **Nobody is alerted.** Failures are now recorded and correlatable (3.34), but no one is
    watching the logs and no webhook is configured, so a production incident still waits for a
    user to report it.
-5. **Video is unverified** end to end.
-6. **Parts of admin are statically verified only.**
-7. **No integration or end-to-end test suite.** Confidence in I/O rests on manual verification
+4. **Video is unverified** end to end.
+5. **Parts of admin are statically verified only.**
+6. **No integration or end-to-end test suite.** Confidence in I/O rests on manual verification
    that will not re-run in CI.
-8. **Two pages still client-fetch** behind full-page spinners.
+7. **Two pages still client-fetch** behind full-page spinners.
 
 ### Maintainability — 8/10
 
@@ -5139,22 +5147,22 @@ before assuming the app is broken or giving up on live verification** — it wor
 
 In priority order, matching section 12: **set `ERROR_REPORT_WEBHOOK_URL`** so the reports added
 in `0d8c90b` reach a human (configuration, no code); then verify video and admin with real
-access; then the owner-gated items (credits, database split, password reset); then analytics.
-CSP and security headers are done (3.35).
+access; then the remaining owner-gated item (AI credits); then analytics. CSP and security
+headers are done (3.35); the database split (roadmap #5) and password reset (roadmap #7) are
+also done.
 
 ### What requires the owner's approval
 
-1. **Spending money** — OpenRouter credits, an email provider, a paid database tier.
+1. **Spending money** — OpenRouter credits, a paid database tier.
 2. **Any production data change** — deleting test accounts, resetting a password, editing user
    documents.
-3. **The database migration** to separate dev from prod.
-4. **Anything defining the paid tier** — what it includes is a business decision.
-5. **Visual identity changes** — the brand mark was deliberately unified on the existing glyph
+3. **Anything defining the paid tier** — what it includes is a business decision.
+4. **Visual identity changes** — the brand mark was deliberately unified on the existing glyph
    rather than rebranding.
-6. **Removing flags entirely** — considered and deferred, because language-to-nation mapping is
+5. **Removing flags entirely** — considered and deferred, because language-to-nation mapping is
    editorially loaded (the data already maps Basque to the Spanish flag, Cantonese to Hong
    Kong). Raise it; do not decide it.
-7. **Installing or changing any Vercel Marketplace integration** (`vercel integration add/remove
+6. **Installing or changing any Vercel Marketplace integration** (`vercel integration add/remove
    ...`) — provisioning one can attach billing to the linked Vercel project, and the auto-mode
    classifier blocks it for exactly that reason. Discovery (`vercel integration discover`) is
    read-only and fine to run without asking; installing is not.
